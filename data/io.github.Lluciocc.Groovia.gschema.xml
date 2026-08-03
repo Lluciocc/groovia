@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="groovia">
+	<schema id="io.github.Lluciocc.Groovia" path="/io/github/Lluciocc/Groovia/">
+		<key name="crossfade-index" type="i"><default>3</default><summary>Crossfade duration</summary><description>0 means disabled, followed by 1, 3, 5, 8 and 10 seconds.</description></key>
+		<key name="gapless" type="b"><default>true</default><summary>Gapless playback</summary></key>
+		<key name="replaygain" type="b"><default>false</default><summary>ReplayGain normalization</summary></key>
+		<key name="dynamic-background" type="b"><default>true</default><summary>Dynamic background</summary></key>
+		<key name="vinyl-rotation" type="b"><default>true</default><summary>Vinyl rotation</summary></key>
+		<key name="animations" type="b"><default>true</default><summary>Interface animations</summary></key>
+	</schema>
+</schemalist>

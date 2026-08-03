@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Groovia
+Exec=groovia
+Icon=io.github.Lluciocc.Groovia
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Player;GTK;
+Keywords=Music;Audio;Player;Vinyl;Library;
+StartupNotify=true
+DBusActivatable=true
+MimeType=audio/mpeg;audio/flac;audio/ogg;audio/opus;audio/wav;audio/aac;audio/mp4;audio/x-m4a;

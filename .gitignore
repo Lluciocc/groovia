@@ -1,0 +1,43 @@
+# Build artifacts
+/build/
+/build-flatpak/
+/build-flatpak-user/
+
+# Meson / Ninja generated files
+*.o
+*.a
+*.so
+*.pc
+*.stamp
+*.log
+*.cache
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Local environment / editors
+.venv/
+venv/
+.env
+.vscode/
+.idea/
+
+# Test / coverage outputs
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Translation / packaging artifacts
+po/*.gmo
+*.mo
+
+# Generated UI / resources
+src/*.gresource
+src/*.ui~
+
+# OS files
+.DS_Store
+Thumbs.db
