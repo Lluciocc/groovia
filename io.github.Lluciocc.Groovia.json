@@ -1,7 +1,7 @@
 {
     "id" : "io.github.Lluciocc.Groovia",
     "runtime" : "org.gnome.Platform",
-    "runtime-version" : "master",
+    "runtime-version" : "50",
     "sdk" : "org.gnome.Sdk",
     "command" : "groovia",
     "finish-args" : [

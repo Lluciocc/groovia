@@ -1,17 +1,19 @@
 import os
 import random
+import shutil
 import time
 import logging
+from html import escape
 from urllib.parse import unquote, urlparse
 from pathlib import Path
 
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from .audio import AudioPlayer
 from .downloads import DownloadManager
 from .library import LibraryDatabase, LibraryScanner
 from .library.scanner import FORMATS
-from .models import Track
+from .models import Playlist, Track
 from .visuals import css_rgb, mix, palette_for
 from .widgets import VinylView
 
@@ -50,6 +52,7 @@ CSS = """
 .now-title { font-size: 25px; font-weight: 800; }
 .track-row { padding: 9px 12px; border-radius: 10px; }
 .track-row:hover { background: @card_bg_color; }
+button.favorite-active { color: #f6d32d; }
 .player-bar { background: @headerbar_bg_color; border-top: 1px solid @window_fg_color; padding: 8px 18px; }
 .player-title { font-weight: 700; }
 .progress { min-width: 220px; }
@@ -96,11 +99,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.style_manager.connect("notify::accent-color", self._on_system_style_changed)
         self.style_manager.connect("notify::dark", self._on_system_style_changed)
         self.queue: list[Track] = self.database.load_queue()
+        self.repeat_mode = "all"
         self.repeat_all = True
         self.shuffle = False
         self._playback_source: list[Track] = []
         self._history: list[Track] = []
         self.current: Track | None = None
+        self._current_playlist_id: int | None = None
+        self._playlist_views: dict[int, dict] = {}
+        self.playlist_assets_dir = self.database.path.parent / "playlists"
+        self.playlist_assets_dir.mkdir(parents=True, exist_ok=True)
         self._settings = self._load_settings()
         self._apply_crossfade_setting()
         if self._settings:
@@ -112,6 +120,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._build_ui()
         self._connect_player()
         self._refresh_library()
+        self._refresh_playlist_sidebar()
         self._restore_playback()
 
     def _load_settings(self):
@@ -286,6 +295,20 @@ class GrooviaWindow(Adw.ApplicationWindow):
         label.add_css_class("nav-section")
         box.append(label)
         box.append(self.nav_list)
+        playlist_label = Gtk.Label(label="PLAYLISTS", xalign=0)
+        playlist_label.add_css_class("nav-section")
+        box.append(playlist_label)
+        self.playlist_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
+        self.playlist_list.add_css_class("navigation-sidebar")
+        self.playlist_list.connect("row-selected", self._on_playlist_selected)
+        box.append(self.playlist_list)
+        new_playlist = Gtk.Button(label="New Playlist", icon_name="list-add-symbolic")
+        new_playlist.add_css_class("flat")
+        new_playlist.set_margin_start(14)
+        new_playlist.set_margin_end(14)
+        new_playlist.set_margin_top(8)
+        new_playlist.connect("clicked", lambda *_: self._create_playlist_dialog())
+        box.append(new_playlist)
         spacer = Gtk.Box(vexpand=True)
         box.append(spacer)
         import_button = Gtk.Button(label="Import music folder", icon_name="folder-music-symbolic")
@@ -411,6 +434,356 @@ class GrooviaWindow(Adw.ApplicationWindow):
         root.set_child(box)
         return root
 
+    def _playlist_page(self, playlist_id: int):
+        root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content.set_margin_top(28)
+        content.set_margin_start(38)
+        content.set_margin_end(38)
+        content.set_margin_bottom(28)
+
+        hero = Gtk.Box(spacing=18)
+        cover_slot = Gtk.Box(width_request=180, height_request=180)
+        hero.append(cover_slot)
+        details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER, hexpand=True)
+        heading = Gtk.Label(xalign=0, css_classes=["hero-title"])
+        subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
+        details.append(heading)
+        details.append(subtitle)
+        controls = Gtk.Box(spacing=8)
+        play = Gtk.Button(label="Play", icon_name="media-playback-start-symbolic")
+        play.add_css_class("suggested-action")
+        play.connect("clicked", lambda *_: self._play_playlist(playlist_id))
+        shuffle = Gtk.Button(label="Shuffle", icon_name="media-playlist-shuffle-symbolic")
+        shuffle.connect("clicked", lambda *_: self._play_playlist(playlist_id, True))
+        more = Gtk.Button(label="More", icon_name="view-more-symbolic")
+        more.connect("clicked", lambda button: self._show_playlist_menu(button, playlist_id))
+        controls.append(play)
+        controls.append(shuffle)
+        controls.append(more)
+        details.append(controls)
+        hero.append(details)
+        content.append(hero)
+
+        tools = Gtk.Box(spacing=8)
+        search = Gtk.SearchEntry(placeholder_text="Search this playlist", hexpand=True)
+        sort = Gtk.DropDown.new_from_strings(["Custom order", "Title", "Artist", "Album", "Duration", "Date added"])
+        sort.set_tooltip_text("Sort playlist tracks")
+        tools.append(search)
+        tools.append(sort)
+        content.append(tools)
+
+        tracks_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        empty = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)
+        empty.append(Gtk.Label(label="This playlist is empty.", css_classes=["section-title"]))
+        add = Gtk.Button(label="Add music", icon_name="list-add-symbolic")
+        add.connect("clicked", lambda *_: self._show_page("library"))
+        empty.append(add)
+        content.append(tracks_box)
+        content.append(empty)
+        root.set_child(content)
+        self._playlist_views[playlist_id] = {
+            "root": root, "cover_slot": cover_slot, "heading": heading,
+            "subtitle": subtitle, "search": search, "sort": sort,
+            "tracks": tracks_box, "empty": empty,
+        }
+        search.connect("search-changed", lambda entry, pid=playlist_id: self._refresh_playlist_page(pid, entry.get_text()))
+        sort.connect("notify::selected", lambda _dropdown, pid=playlist_id: self._refresh_playlist_page(pid))
+        return root
+
+    def _refresh_playlist_sidebar(self):
+        for child in list(self.playlist_list):
+            self.playlist_list.remove(child)
+        for playlist in self.database.playlists():
+            row = Gtk.ListBoxRow()
+            row.set_name(f"playlist:{playlist.id}")
+            content = Gtk.Box(spacing=10)
+            content.add_css_class("nav-row")
+            icon = "starred-symbolic" if playlist.is_favorites else "view-list-symbolic"
+            content.append(Gtk.Image.new_from_icon_name(icon))
+            content.append(Gtk.Label(label=playlist.name, xalign=0, ellipsize=3, hexpand=True))
+            row.set_child(content)
+            context = Gtk.GestureClick()
+            context.set_button(Gdk.BUTTON_SECONDARY)
+            context.connect("pressed", lambda _gesture, _presses, x, y, pid=playlist.id, anchor=content:
+                            self._show_playlist_menu(anchor, pid, x, y))
+            content.add_controller(context)
+            self.playlist_list.append(row)
+
+    def _on_playlist_selected(self, _list, row):
+        if row:
+            try:
+                self._show_playlist_page(int(row.get_name().split(":", 1)[1]))
+            except (IndexError, ValueError):
+                pass
+
+    def _playlist_cover_path(self, playlist: Playlist) -> str:
+        if playlist.cover_path and Path(playlist.cover_path).exists():
+            return playlist.cover_path
+        destination = self.playlist_assets_dir / f"playlist-{playlist.id}-default.svg"
+        if not destination.exists():
+            initial = escape((playlist.name.strip() or "P")[0].upper())
+            title = escape(playlist.name[:24])
+            destination.write_text(
+                f'''<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff725e"/><stop offset="1" stop-color="#7e3f8f"/></linearGradient></defs>
+<rect width="512" height="512" rx="36" fill="url(#g)"/><text x="256" y="275" text-anchor="middle" font-family="sans-serif" font-size="190" font-weight="700" fill="white">{initial}</text>
+<text x="256" y="460" text-anchor="middle" font-family="sans-serif" font-size="26" fill="white" opacity=".85">{title}</text></svg>''',
+                encoding="utf-8",
+            )
+        return str(destination)
+
+    def _show_playlist_page(self, playlist_id: int):
+        playlist = self.database.playlist(playlist_id)
+        if not playlist:
+            return
+        page_name = f"playlist:{playlist_id}"
+        if self.stack.get_child_by_name(page_name) is None:
+            self.stack.add_named(self._playlist_page(playlist_id), page_name)
+        self._current_playlist_id = playlist_id
+        self._refresh_playlist_page(playlist_id)
+        self._show_page(page_name)
+
+    def _refresh_playlist_page(self, playlist_id: int, search: str | None = None):
+        playlist = self.database.playlist(playlist_id)
+        view = self._playlist_views.get(playlist_id)
+        if not playlist or not view:
+            return
+        if search is None:
+            search = view["search"].get_text()
+        sort_names = ["custom", "title", "artist", "album", "duration", "date"]
+        sort = sort_names[min(view["sort"].get_selected(), len(sort_names) - 1)]
+        tracks = self.database.playlist_tracks(playlist_id, search, sort)
+        for child in list(view["cover_slot"]):
+            view["cover_slot"].remove(child)
+        view["cover_slot"].append(cover_widget(self._playlist_cover_path(playlist), 180))
+        view["heading"].set_label(playlist.name)
+        total = sum(track.duration for track in tracks)
+        view["subtitle"].set_label(f"{len(tracks)} tracks · {self._time_label(total)}")
+        for child in list(view["tracks"]):
+            view["tracks"].remove(child)
+        for position, track in enumerate(tracks, 1):
+            view["tracks"].append(self._track_row(track, True, playlist, position))
+        view["empty"].set_visible(not tracks)
+
+    def _refresh_playlist_pages(self):
+        for playlist_id in list(self._playlist_views):
+            self._refresh_playlist_page(playlist_id)
+
+    def _show_playlist_menu(self, anchor, playlist_id, x=0, y=0):
+        playlist = self.database.playlist(playlist_id)
+        if not playlist:
+            return
+        if getattr(self, "_playlist_menu", None):
+            self._playlist_menu.popdown()
+        point = Gdk.Rectangle()
+        point.x = round(x); point.y = round(y); point.width = 1; point.height = 1
+        popover = Gtk.Popover()
+        popover.set_parent(anchor)
+        popover.set_pointing_to(point)
+        menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        menu_box.set_margin_top(6); menu_box.set_margin_bottom(6)
+        menu_box.set_margin_start(6); menu_box.set_margin_end(6)
+        popover.set_child(menu_box)
+
+        def add_button(label, callback, icon=None, sensitive=True):
+            button = Gtk.Button(label=label, halign=Gtk.Align.FILL)
+            if icon:
+                button.set_icon_name(icon)
+            button.add_css_class("flat")
+            button.set_sensitive(sensitive)
+            button.connect("clicked", lambda *_: (popover.popdown(), callback()))
+            menu_box.append(button)
+
+        add_button("Play", lambda: self._play_playlist(playlist.id), "media-playback-start-symbolic")
+        add_button("Shuffle", lambda: self._play_playlist(playlist.id, True), "media-playlist-shuffle-symbolic")
+        add_button("Play Next", lambda: self._play_playlist_next(playlist.id))
+        add_button("Add to Queue", lambda: self._add_playlist_to_queue(playlist.id))
+        menu_box.append(Gtk.Separator())
+        add_button("Rename", lambda: self._rename_playlist_dialog(playlist.id), sensitive=not playlist.is_favorites)
+        add_button("Change Cover", lambda: self._choose_playlist_cover(playlist.id))
+        add_button("Duplicate", lambda: self._duplicate_playlist(playlist.id))
+        if not playlist.is_favorites:
+            menu_box.append(Gtk.Separator())
+            add_button("Delete Playlist", lambda: self._confirm_delete_playlist(playlist.id))
+        popover.connect("closed", self._close_playlist_menu)
+        self._playlist_menu = popover
+        popover.popup()
+
+    def _close_playlist_menu(self, popover):
+        if popover.get_parent() is not None:
+            popover.unparent()
+        if getattr(self, "_playlist_menu", None) is popover:
+            self._playlist_menu = None
+
+    def _play_playlist(self, playlist_id, shuffle=False):
+        tracks = self.database.playlist_tracks(playlist_id)
+        if not tracks:
+            self._toast("This playlist is empty")
+            return
+        if shuffle:
+            random.shuffle(tracks)
+        self._current_playlist_id = playlist_id
+        self._history.clear()
+        self._playback_source = tracks
+        self.queue = tracks[1:]
+        self.shuffle = False
+        self._play_track(tracks[0])
+        self._refresh_queue()
+
+    def _play_playlist_next(self, playlist_id):
+        tracks = self.database.playlist_tracks(playlist_id)
+        if not tracks:
+            self._toast("This playlist is empty")
+            return
+        self.queue[0:0] = tracks
+        self._prepare_next_track()
+        self._refresh_queue()
+        self._toast(f"Added {len(tracks)} tracks to play next")
+
+    def _add_playlist_to_queue(self, playlist_id):
+        tracks = self.database.playlist_tracks(playlist_id)
+        self.queue.extend(tracks)
+        self._prepare_next_track()
+        self._refresh_queue()
+        self._toast(f"Added {len(tracks)} tracks to the queue")
+
+    def _copy_playlist_cover(self, path, playlist_id):
+        if not path or not Path(path).exists():
+            return None
+        suffix = Path(path).suffix.lower() or ".jpg"
+        destination = self.playlist_assets_dir / f"playlist-{playlist_id}{suffix}"
+        shutil.copy2(path, destination)
+        return str(destination)
+
+    def _create_playlist_dialog(self, track_to_add=None):
+        dialog = Gtk.Dialog(title="New Playlist", transient_for=self, modal=True)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Create", Gtk.ResponseType.OK)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        content.set_margin_top(18); content.set_margin_bottom(18)
+        content.set_margin_start(18); content.set_margin_end(18)
+        entry = Gtk.Entry(placeholder_text="Playlist name")
+        content.append(entry)
+        cover_label = Gtk.Label(label="No custom cover", xalign=0, css_classes=["muted"])
+        choose = Gtk.Button(label="Choose Cover", icon_name="image-x-generic-symbolic", halign=Gtk.Align.START)
+        choose.connect("clicked", lambda *_: self._choose_cover_for_dialog(dialog, cover_label))
+        content.append(choose); content.append(cover_label)
+        dialog.get_content_area().append(content)
+        self._pending_playlist_cover = None
+        dialog.connect("response", self._create_playlist_response, entry, track_to_add)
+        dialog.present()
+
+    def _choose_cover_for_dialog(self, dialog, label):
+        chooser = Gtk.FileDialog(title="Choose playlist cover")
+        chooser.open(dialog, None, lambda current, result: self._playlist_dialog_cover_selected(current, result, label))
+
+    def _playlist_dialog_cover_selected(self, dialog, result, label):
+        try:
+            file = dialog.open_finish(result)
+        except GLib.Error:
+            return
+        self._pending_playlist_cover = file.get_path()
+        label.set_label(Path(self._pending_playlist_cover).name)
+
+    def _create_playlist_response(self, dialog, response, entry, track_to_add):
+        if response != Gtk.ResponseType.OK:
+            dialog.close()
+            return
+        name = entry.get_text().strip()
+        if not name:
+            self._toast("Enter a playlist name")
+            return
+        try:
+            playlist = self.database.create_playlist(name)
+        except Exception:
+            self._toast("A playlist with that name already exists")
+            return
+        if self._pending_playlist_cover:
+            cover = self._copy_playlist_cover(self._pending_playlist_cover, playlist.id)
+            self.database.update_playlist_cover(playlist.id, cover)
+        if track_to_add:
+            self.database.add_tracks_to_playlist(playlist.id, [track_to_add])
+        self._pending_playlist_cover = None
+        dialog.close()
+        self._refresh_playlist_sidebar(); self._refresh_playlist_pages()
+        self._show_playlist_page(playlist.id)
+        self._toast(f"Created {playlist.name}")
+
+    def _rename_playlist_dialog(self, playlist_id):
+        playlist = self.database.playlist(playlist_id)
+        if not playlist or playlist.is_favorites:
+            return
+        dialog = Gtk.Dialog(title="Rename Playlist", transient_for=self, modal=True)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL); dialog.add_button("Rename", Gtk.ResponseType.OK)
+        entry = Gtk.Entry(text=playlist.name)
+        entry.set_margin_top(18); entry.set_margin_bottom(18); entry.set_margin_start(18); entry.set_margin_end(18)
+        dialog.get_content_area().append(entry)
+        dialog.connect("response", self._rename_playlist_response, playlist_id, entry)
+        dialog.present()
+
+    def _rename_playlist_response(self, dialog, response, playlist_id, entry):
+        if response == Gtk.ResponseType.OK and entry.get_text().strip():
+            try:
+                self.database.rename_playlist(playlist_id, entry.get_text().strip())
+                self._refresh_playlist_sidebar(); self._refresh_playlist_page(playlist_id)
+            except Exception:
+                self._toast("A playlist with that name already exists")
+        dialog.close()
+
+    def _choose_playlist_cover(self, playlist_id):
+        chooser = Gtk.FileDialog(title="Choose playlist cover")
+        chooser.open(self, None, lambda current, result: self._playlist_cover_selected(current, result, playlist_id))
+
+    def _playlist_cover_selected(self, dialog, result, playlist_id):
+        try:
+            file = dialog.open_finish(result)
+        except GLib.Error:
+            return
+        cover = self._copy_playlist_cover(file.get_path(), playlist_id)
+        if cover:
+            self.database.update_playlist_cover(playlist_id, cover)
+            self._refresh_playlist_sidebar(); self._refresh_playlist_page(playlist_id)
+
+    def _duplicate_playlist(self, playlist_id):
+        playlist = self.database.playlist(playlist_id)
+        if not playlist:
+            return
+        name = f"{playlist.name} Copy"
+        suffix = 2
+        existing = {item.name for item in self.database.playlists()}
+        while name in existing:
+            name = f"{playlist.name} Copy {suffix}"; suffix += 1
+        duplicate = self.database.create_playlist(name)
+        if playlist.cover_path and Path(playlist.cover_path).exists():
+            cover = self._copy_playlist_cover(playlist.cover_path, duplicate.id)
+            self.database.update_playlist_cover(duplicate.id, cover)
+        self.database.add_tracks_to_playlist(duplicate.id, self.database.playlist_tracks(playlist.id))
+        self._refresh_playlist_sidebar(); self._refresh_playlist_pages()
+        self._toast(f"Duplicated {playlist.name}")
+
+    def _confirm_delete_playlist(self, playlist_id):
+        playlist = self.database.playlist(playlist_id)
+        if not playlist or playlist.is_favorites:
+            return
+        dialog = Adw.AlertDialog(
+            heading="Delete Playlist?",
+            body=f'“{playlist.name}” and its playlist entries will be removed. Audio files stay in your library.',
+        )
+        dialog.add_response("cancel", "Cancel"); dialog.add_response("delete", "Delete")
+        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel"); dialog.set_close_response("cancel")
+        dialog.connect("response", self._delete_playlist_response, playlist_id)
+        dialog.present(self)
+
+    def _delete_playlist_response(self, dialog, response, playlist_id):
+        if response == "delete":
+            self.database.delete_playlist(playlist_id)
+            self._playlist_views.pop(playlist_id, None)
+            self._refresh_playlist_sidebar(); self._refresh_playlist_pages()
+            self._show_page("library")
+        dialog.close()
+
     def _player_bar(self):
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         bar.add_css_class("player-bar")
@@ -465,6 +838,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         for track in recent: self.recent_box.append(self._track_row(track, False))
         self.empty_home.set_visible(not tracks)
         self._refresh_queue()
+        self._refresh_playlist_sidebar()
+        self._refresh_playlist_pages()
 
     def _append_library_batch(self):
         if self._library_loading or self._library_cursor >= len(self._library_tracks):
@@ -495,7 +870,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         button.connect("clicked", lambda *_: self._play_album(album["album"], album["album_artist"]))
         return button
 
-    def _track_row(self, track, show_cover=True):
+    def _track_row(self, track, show_cover=True, playlist: Playlist | None = None, position: int | None = None):
         row = Gtk.Box(spacing=12)
         box = row
         box.set_hexpand(True)
@@ -507,44 +882,88 @@ class GrooviaWindow(Adw.ApplicationWindow):
             [f"Play {track.title} by {track.artist}"],
         )
         box.set_tooltip_text(f"Play {track.title} by {track.artist}")
+        if position is not None:
+            box.append(Gtk.Label(label=f"{position}.", width_chars=3, xalign=1, css_classes=["muted"]))
         if show_cover: box.append(cover_widget(track.cover_path, 38))
         meta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
         meta.append(Gtk.Label(label=track.title, xalign=0, ellipsize=3, css_classes=["player-title"]))
         meta.append(Gtk.Label(label=track.subtitle, xalign=0, ellipsize=3, css_classes=["muted"]))
         box.append(meta)
+        box.append(self._favorite_button(track))
         box.append(Gtk.Label(label=track.duration_label, css_classes=["muted"]))
-        box.append(icon_button("media-playback-start-symbolic", "Play", lambda *_: self._play_selected_track(track)))
+        box.append(icon_button("media-playback-start-symbolic", "Play", lambda *_: self._play_selected_track(track, playlist)))
         click = Gtk.GestureClick()
         click.set_button(0)
-        click.connect("pressed", self._on_track_row_pressed, box, box, track)
+        click.connect("pressed", self._on_track_row_pressed, box, box, track, playlist)
         box.add_controller(click)
         keys = Gtk.EventControllerKey()
-        keys.connect("key-pressed", self._track_context_key_pressed, box, box, track)
+        keys.connect("key-pressed", self._track_context_key_pressed, box, box, track, playlist)
         box.add_controller(keys)
+        if playlist and track.id is not None:
+            drag_source = Gtk.DragSource(actions=Gdk.DragAction.MOVE)
+            drag_source.connect(
+                "prepare",
+                lambda _source, _x, _y, track_id=track.id:
+                Gdk.ContentProvider.new_for_value(track_id),
+            )
+            box.add_controller(drag_source)
+            drop_target = Gtk.DropTarget.new(GObject.TYPE_INT, Gdk.DragAction.MOVE)
+            drop_target.set_preload(True)
+            drop_target.connect(
+                "drop",
+                lambda _target, value, _x, _y, playlist=playlist, position=position:
+                self._drop_playlist_track(playlist, value, position),
+            )
+            box.add_controller(drop_target)
         return row
 
-    def _on_track_row_pressed(self, gesture, n_press, x, y, row, box, track):
+    def _favorite_button(self, track):
+        favorite = self.database.is_favorite(track)
+        button = icon_button(
+            "starred-symbolic",
+            "Remove from Favorites" if favorite else "Add to Favorites",
+            lambda *_: self._toggle_favorite(track),
+        )
+        if favorite:
+            button.add_css_class("favorite-active")
+        return button
+
+    def _toggle_favorite(self, track):
+        favorite = not self.database.is_favorite(track)
+        self.database.set_favorite(track, favorite)
+        LOGGER.info("favorite changed track=%r favorite=%s", track.path, favorite)
+        self._toast(f"{'Added to' if favorite else 'Removed from'} Favorites")
+        self._refresh_library(self.search_entry.get_text())
+
+    def _on_track_row_pressed(self, gesture, n_press, x, y, row, box, track, playlist):
         button = gesture.get_current_button()
         LOGGER.info(
             "track row gesture button=%s presses=%s track=%r path=%r point=(%.1f, %.1f)",
             button, n_press, track.title, track.path, x, y,
         )
         if button == Gdk.BUTTON_PRIMARY and n_press == 1:
-            self._play_selected_track(track)
+            self._play_selected_track(track, playlist)
         elif button == Gdk.BUTTON_SECONDARY:
             gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-            self._show_track_menu(row, box, track, x, y)
+            self._show_track_menu(row, box, track, x, y, playlist)
 
-    def _track_context_key_pressed(self, _controller, keyval, _keycode, state, row, box, track):
+    def _track_context_key_pressed(self, _controller, keyval, _keycode, state, row, box, track, playlist):
         menu_key = keyval in (Gdk.KEY_Menu, getattr(Gdk, "KEY_KP_Menu", Gdk.KEY_Menu))
         shift_f10 = keyval == Gdk.KEY_F10 and state & Gdk.ModifierType.SHIFT_MASK
+        if playlist and state & Gdk.ModifierType.ALT_MASK:
+            if keyval == Gdk.KEY_Up:
+                self._move_playlist_track(playlist, track, -1)
+                return True
+            if keyval == Gdk.KEY_Down:
+                self._move_playlist_track(playlist, track, 1)
+                return True
         if menu_key or shift_f10:
             box.grab_focus()
-            self._show_track_menu(row, box, track, 0, 0)
+            self._show_track_menu(row, box, track, 0, 0, playlist)
             return True
         return False
 
-    def _show_track_menu(self, parent, source, track, x, y):
+    def _show_track_menu(self, parent, source, track, x, y, playlist: Playlist | None = None):
         if getattr(self, "_track_popover", None):
             self._track_popover.popdown()
 
@@ -567,9 +986,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         point.height = 1
 
         callbacks = {
-            "play": lambda: self._play_selected_track(track),
+            "play": lambda: self._play_selected_track(track, playlist),
             "play-next": lambda: self._play_next(track),
             "add-to-queue": lambda: self._add_to_queue(track),
+            "favorite": lambda: self._toggle_favorite(track),
             "go-to-album": lambda: self._go_to_album(track),
             "go-to-artist": lambda: self._go_to_artist(track),
             "show-in-file-manager": lambda: self._show_in_file_manager(track),
@@ -588,10 +1008,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
         menu_box.set_margin_end(6)
         popover.set_child(menu_box)
 
-        for index, (name, label) in enumerate((
+        items = [
             ("play", "Play"),
             ("play-next", "Play Next"),
             ("add-to-queue", "Add to Queue"),
+            (None, None),
+            ("add-to-playlist", "Add to Playlist"),
+            ("favorite", "Remove from Favorites" if self.database.is_favorite(track) else "Add to Favorites"),
             (None, None),
             ("go-to-album", "Go to Album"),
             ("go-to-artist", "Go to Artist"),
@@ -600,7 +1023,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
             ("song-information", "Song Information"),
             (None, None),
             ("remove-from-library", "Remove from Library"),
-        )):
+        ]
+        if playlist:
+            items.extend([
+                (None, None),
+                ("remove-from-playlist", "Remove from Playlist"),
+                ("move-up", "Move Up in Playlist"),
+                ("move-down", "Move Down in Playlist"),
+            ])
+        for name, label in items:
             if name is None:
                 menu_box.append(Gtk.Separator())
                 continue
@@ -608,14 +1039,106 @@ class GrooviaWindow(Adw.ApplicationWindow):
             button.add_css_class("flat")
             button.set_hexpand(True)
             button.set_halign(Gtk.Align.FILL)
-            button.connect("clicked", lambda _button, name=name:
-                           self._activate_track_action(name, track, callbacks[name]))
+            if name == "add-to-playlist":
+                button.connect("clicked", lambda button: self._show_add_to_playlist_menu(track, button))
+            elif name == "remove-from-playlist":
+                button.connect("clicked", lambda _button: self._activate_track_action(
+                    name, track, lambda: self._remove_track_from_playlist(track, playlist)))
+            elif name in ("move-up", "move-down"):
+                direction = -1 if name == "move-up" else 1
+                button.connect("clicked", lambda _button, direction=direction: self._activate_track_action(
+                    name, track, lambda: self._move_playlist_track(playlist, track, direction)))
+            else:
+                button.connect("clicked", lambda _button, name=name:
+                               self._activate_track_action(name, track, callbacks[name]))
             menu_box.append(button)
 
         popover.connect("closed", self._on_track_popover_closed)
         parent.connect("notify::root", self._on_track_popover_parent_root_changed, popover)
         self._track_popover = popover
         popover.popup()
+
+    def _show_add_to_playlist_menu(self, track, anchor):
+        parent = anchor.get_parent()
+        if parent is None:
+            return
+        if getattr(self, "_playlist_popover", None):
+            self._playlist_popover.popdown()
+        popover = Gtk.Popover()
+        popover.set_parent(anchor)
+        popover.set_has_arrow(True)
+        menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        menu_box.set_margin_top(6); menu_box.set_margin_bottom(6)
+        menu_box.set_margin_start(6); menu_box.set_margin_end(6)
+        popover.set_child(menu_box)
+        existing = {playlist.id for playlist in self.database.playlists() if not playlist.is_favorites}
+        for playlist in self.database.playlists():
+            if playlist.is_favorites:
+                continue
+            button = Gtk.Button(label=playlist.name, halign=Gtk.Align.FILL)
+            button.add_css_class("flat")
+            button.connect("clicked", lambda _button, pid=playlist.id: self._add_track_to_playlist(track, pid, popover))
+            menu_box.append(button)
+        if existing:
+            menu_box.append(Gtk.Separator())
+        create = Gtk.Button(label="Create New Playlist", icon_name="list-add-symbolic")
+        create.add_css_class("flat")
+        create.connect("clicked", lambda *_: (popover.popdown(), self._create_playlist_dialog(track)))
+        menu_box.append(create)
+        popover.connect("closed", lambda current: self._close_playlist_popover(current))
+        self._playlist_popover = popover
+        popover.popup()
+
+    def _close_playlist_popover(self, popover):
+        if popover.get_parent() is not None:
+            popover.unparent()
+        if getattr(self, "_playlist_popover", None) is popover:
+            self._playlist_popover = None
+
+    def _add_track_to_playlist(self, track, playlist_id, popover=None):
+        added = self.database.add_tracks_to_playlist(playlist_id, [track])
+        if popover:
+            popover.popdown()
+        playlist = self.database.playlist(playlist_id)
+        LOGGER.info("add to playlist track=%r playlist=%r added=%s", track.path, playlist_id, added)
+        self._toast(f"Added to {playlist.name}" if added and playlist else "Track already in playlist")
+        self._refresh_playlist_sidebar()
+        self._refresh_playlist_pages()
+
+    def _remove_track_from_playlist(self, track, playlist):
+        if not playlist or track.id is None:
+            return
+        self.database.remove_track_from_playlist(playlist.id, track.id)
+        self._toast(f"Removed from {playlist.name}")
+        self._refresh_playlist_page(playlist.id)
+
+    def _move_playlist_track(self, playlist, track, direction):
+        if not playlist or track.id is None:
+            return
+        ids = self.database.playlist_track_ids(playlist.id)
+        try:
+            index = ids.index(track.id)
+        except ValueError:
+            return
+        target = index + direction
+        if not 0 <= target < len(ids):
+            return
+        ids[index], ids[target] = ids[target], ids[index]
+        self.database.reorder_playlist(playlist.id, ids)
+        self._refresh_playlist_page(playlist.id)
+
+    def _drop_playlist_track(self, playlist, track_id, position):
+        if not playlist or playlist.is_favorites or not isinstance(track_id, int):
+            return False
+        ids = self.database.playlist_track_ids(playlist.id)
+        if track_id not in ids:
+            return False
+        ids.remove(track_id)
+        target = max(0, min(len(ids), int(position) - 1))
+        ids.insert(target, track_id)
+        self.database.reorder_playlist(playlist.id, ids)
+        self._refresh_playlist_page(playlist.id)
+        return True
 
     def _on_track_popover_closed(self, popover):
         parent = popover.get_parent()
@@ -711,7 +1234,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         candidate = None
         if self.queue:
             candidate = random.choice(self.queue) if self.shuffle else self.queue[0]
-        elif self.repeat_all and self._playback_source and self.current:
+        elif self.repeat_mode == "all" and self._playback_source and self.current:
             current_index = next((i for i, item in enumerate(self._playback_source)
                                   if item.path == self.current.path), -1)
             if self.shuffle:
@@ -723,7 +1246,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 candidate = self.current
         self.player.prepare_next(candidate)
 
-    def _play_selected_track(self, track):
+    def _play_selected_track(self, track, playlist: Playlist | None = None):
         """Start a track selected from the library while keeping Next useful.
 
         A direct library click used to leave an empty queue even though the
@@ -732,9 +1255,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         when possible.
         """
         LOGGER.info("play selected track=%r path=%r", track.title, track.path)
-        source = self._playback_source or self.database.all_tracks()
+        source = self.database.playlist_tracks(playlist.id) if playlist else (self._playback_source or self.database.all_tracks())
         if not any(item.path == track.path for item in source):
             source = self.database.all_tracks()
+        if playlist:
+            self._current_playlist_id = playlist.id
         self._playback_source = source
         selected_index = next((i for i, item in enumerate(source) if item.path == track.path), -1)
         self._history = source[:selected_index] if selected_index > 0 else []
@@ -897,6 +1422,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
             pass
 
     def _next(self):
+        if self.repeat_mode == "one" and self.current:
+            self._play_track(self.current)
+            self._refresh_queue()
+            return
         if self.queue:
             index = random.randrange(len(self.queue)) if self.shuffle else 0
             if self.current:
@@ -910,7 +1439,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 next_index = random.choice(candidates) if candidates else current_index
             elif current_index + 1 < len(self._playback_source):
                 next_index = current_index + 1
-            elif self.repeat_all:
+            elif self.repeat_mode == "all":
                 next_index = 0
             else:
                 self._toast("The queue is empty")
@@ -936,9 +1465,20 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._refresh_queue()
 
     def _toggle_repeat(self):
-        self.repeat_all = not self.repeat_all
-        self.repeat_button.set_opacity(1.0 if self.repeat_all else .45)
-        self.repeat_button.set_tooltip_text("Repeat all music" if self.repeat_all else "Repeat is off")
+        self.repeat_mode = {"all": "one", "one": "off", "off": "all"}[self.repeat_mode]
+        self.repeat_all = self.repeat_mode == "all"
+        if self.repeat_mode == "one":
+            self.repeat_button.set_icon_name("media-playlist-repeat-song-symbolic")
+            self.repeat_button.set_tooltip_text("Repeat one")
+            self.repeat_button.set_opacity(1.0)
+        elif self.repeat_mode == "all":
+            self.repeat_button.set_icon_name("media-playlist-repeat-symbolic")
+            self.repeat_button.set_tooltip_text("Repeat all music")
+            self.repeat_button.set_opacity(1.0)
+        else:
+            self.repeat_button.set_icon_name("media-playlist-repeat-symbolic")
+            self.repeat_button.set_tooltip_text("Repeat is off")
+            self.repeat_button.set_opacity(.45)
         self._prepare_next_track()
         self._sync_mpris()
 

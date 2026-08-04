@@ -25,3 +25,13 @@ class Track:
     def duration_label(self) -> str:
         seconds = max(0, int(self.duration))
         return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+@dataclass(slots=True)
+class Playlist:
+    id: int
+    name: str
+    cover_path: str | None
+    is_favorites: bool
+    created_at: str
+    modified_at: str
