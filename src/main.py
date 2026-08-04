@@ -1,3 +1,8 @@
+"""
+TODO: Add Playlist support
+TODO: Add download support from Spotify and YouTube (spotdl and yt-dlp)
+"""
+
 import sys
 import gi
 
