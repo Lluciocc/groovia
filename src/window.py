@@ -17,8 +17,8 @@ from .widgets import VinylView
 
 CSS = """
 .groovia-window { color: @window_fg_color; background: @window_bg_color; }
-.groovia-window .navigation-page, .groovia-window .navigation-view,
-.groovia-window .toolbar-view, .groovia-window .content-view { background: @window_bg_color; }
+.groovia-content, .groovia-content .navigation-page, .groovia-content .navigation-view,
+.groovia-content .toolbar-view, .groovia-content .content-view { background: @window_bg_color; }
 .sidebar { background: @headerbar_bg_color; }
 .brand { padding: 18px 18px 14px; }
 .brand-mark { color: #ff725e; font-size: 28px; }
@@ -145,8 +145,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         accent_css = css_rgb(accent)
         background_css = css_rgb(background)
         css = f"""
-        .groovia-window, .groovia-window .background, .groovia-window .view,
-        .groovia-window .toolbar-view {{ background: linear-gradient(135deg, {background_css}, @window_bg_color 78%); }}
+        .groovia-content, .groovia-content .toolbar-view {{ background: linear-gradient(135deg, {background_css}, @window_bg_color 78%); }}
         .brand-mark, .eyebrow {{ color: {accent_css}; }}
         .nav-row:selected {{ background: {accent_css}; color: white; }}
         button.suggested-action, .suggested-action {{ background-color: {accent_css}; color: white; }}
@@ -201,6 +200,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.split = split
 
         toolbar = Adw.ToolbarView()
+        toolbar.add_css_class("groovia-content")
         toolbar.add_top_bar(self._header())
         self.toast_overlay = Adw.ToastOverlay()
         self.toast_overlay.set_child(split)
@@ -484,8 +484,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         return button
 
     def _track_row(self, track, show_cover=True):
-        row = Gtk.ListBoxRow()
-        box = Gtk.Box(spacing=12)
+        row = Gtk.Box(spacing=12)
+        box = row
+        box.set_hexpand(True)
         box.add_css_class("track-row")
         box.set_focusable(True)
         box.set_accessible_role(Gtk.AccessibleRole.BUTTON)
@@ -501,13 +502,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
         box.append(meta)
         box.append(Gtk.Label(label=track.duration_label, css_classes=["muted"]))
         box.append(icon_button("media-playback-start-symbolic", "Play", lambda *_: self._play_selected_track(track)))
-        row.set_child(box)
         click = Gtk.GestureClick()
         click.set_button(0)
-        click.connect("pressed", self._on_track_row_pressed, row, box, track)
+        click.connect("pressed", self._on_track_row_pressed, box, box, track)
         box.add_controller(click)
         keys = Gtk.EventControllerKey()
-        keys.connect("key-pressed", self._track_context_key_pressed, row, box, track)
+        keys.connect("key-pressed", self._track_context_key_pressed, box, box, track)
         box.add_controller(keys)
         return row
 
