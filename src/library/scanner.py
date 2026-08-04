@@ -66,6 +66,39 @@ class LibraryScanner:
         """Read one file on demand, useful for libraries imported before artwork support."""
         return self._read_track(Path(path))
 
+    def inspect_track(self, path: str) -> dict[str, str]:
+        """Return presentation-friendly technical metadata for Song Information."""
+        details = {
+            "codec": "Unknown",
+            "bitrate": "Unknown",
+            "sample_rate": "Unknown",
+            "channels": "Unknown",
+        }
+        if not GstPbutils:
+            return details
+        try:
+            discoverer = GstPbutils.Discoverer.new(5 * Gst.SECOND)
+            info = discoverer.discover_uri(Path(path).resolve().as_uri())
+            streams = info.get_audio_streams()
+            if not streams:
+                return details
+            stream = streams[0]
+            caps = stream.get_caps()
+            if caps and caps.get_size():
+                details["codec"] = caps.get_structure(0).get_name()
+            sample_rate = stream.get_sample_rate()
+            bitrate = stream.get_bitrate()
+            channels = stream.get_channels()
+            if sample_rate:
+                details["sample_rate"] = f"{sample_rate:,} Hz"
+            if bitrate:
+                details["bitrate"] = f"{bitrate / 1000:.0f} kbps"
+            if channels:
+                details["channels"] = str(channels)
+        except Exception:
+            pass
+        return details
+
     def _extract_embedded_cover(self, tags, path: Path) -> str | None:
         """Persist GstTagList's image sample so GTK can display it like any other cover."""
         if not GstPbutils:

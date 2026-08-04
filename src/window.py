@@ -16,8 +16,9 @@ from .widgets import VinylView
 
 
 CSS = """
-window { background: @window_bg_color; color: @window_fg_color; }
-.navigation-page, .navigation-view, .toolbar-view, .content-view { background: @window_bg_color; }
+.groovia-window { color: @window_fg_color; background: @window_bg_color; }
+.groovia-window .navigation-page, .groovia-window .navigation-view,
+.groovia-window .toolbar-view, .groovia-window .content-view { background: @window_bg_color; }
 .sidebar { background: @headerbar_bg_color; }
 .brand { padding: 18px 18px 14px; }
 .brand-mark { color: #ff725e; font-size: 28px; }
@@ -74,6 +75,7 @@ def cover_widget(path: str | None, size: int = 72) -> Gtk.Widget:
 class GrooviaWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.add_css_class("groovia-window")
         self.set_title("Groovia")
         self.set_default_size(1180, 780)
         self.set_size_request(720, 520)
@@ -143,7 +145,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         accent_css = css_rgb(accent)
         background_css = css_rgb(background)
         css = f"""
-        window, .background, .view, .toolbar-view {{ background: linear-gradient(135deg, {background_css}, @window_bg_color 78%); }}
+        .groovia-window, .groovia-window .background, .groovia-window .view,
+        .groovia-window .toolbar-view {{ background: linear-gradient(135deg, {background_css}, @window_bg_color 78%); }}
         .brand-mark, .eyebrow {{ color: {accent_css}; }}
         .nav-row:selected {{ background: {accent_css}; color: white; }}
         button.suggested-action, .suggested-action {{ background-color: {accent_css}; color: white; }}
@@ -186,6 +189,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.stack.add_named(self._home_page(), "home")
         self.stack.add_named(self._library_page(), "library")
         self.stack.add_named(self._queue_page(), "queue")
+        self.stack.add_named(self._collection_page("album"), "album-detail")
+        self.stack.add_named(self._collection_page("artist"), "artist-detail")
 
         sidebar = self._sidebar()
         split = Adw.NavigationSplitView()
@@ -372,6 +377,28 @@ class GrooviaWindow(Adw.ApplicationWindow):
         root.set_child(box)
         return root
 
+    def _collection_page(self, kind: str):
+        root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(28)
+        box.set_margin_start(38)
+        box.set_margin_end(38)
+        box.set_margin_bottom(28)
+        back = Gtk.Button(label="Back to All Music", icon_name="go-previous-symbolic", halign=Gtk.Align.START)
+        back.connect("clicked", lambda *_: self._show_page("library"))
+        box.append(back)
+        heading = Gtk.Label(xalign=0, css_classes=["hero-title"])
+        subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
+        items = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.append(heading)
+        box.append(subtitle)
+        box.append(items)
+        setattr(self, f"{kind}_detail_heading", heading)
+        setattr(self, f"{kind}_detail_subtitle", subtitle)
+        setattr(self, f"{kind}_detail_items", items)
+        root.set_child(box)
+        return root
+
     def _player_bar(self):
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         bar.add_css_class("player-bar")
@@ -460,16 +487,130 @@ class GrooviaWindow(Adw.ApplicationWindow):
         row = Gtk.ListBoxRow()
         box = Gtk.Box(spacing=12)
         box.add_css_class("track-row")
+        box.set_focusable(True)
+        box.set_accessible_role(Gtk.AccessibleRole.BUTTON)
+        box.update_property(
+            [Gtk.AccessibleProperty.LABEL],
+            [f"Play {track.title} by {track.artist}"],
+        )
+        box.set_tooltip_text(f"Play {track.title} by {track.artist}")
         if show_cover: box.append(cover_widget(track.cover_path, 38))
         meta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
         meta.append(Gtk.Label(label=track.title, xalign=0, ellipsize=3, css_classes=["player-title"]))
         meta.append(Gtk.Label(label=track.subtitle, xalign=0, ellipsize=3, css_classes=["muted"]))
         box.append(meta)
         box.append(Gtk.Label(label=track.duration_label, css_classes=["muted"]))
-        button = icon_button("media-playback-start-symbolic", "Play", lambda *_: self._play_selected_track(track))
-        box.append(button)
+        box.append(icon_button("media-playback-start-symbolic", "Play", lambda *_: self._play_selected_track(track)))
         row.set_child(box)
+        click = Gtk.GestureClick()
+        click.set_button(0)
+        click.connect("pressed", self._on_track_row_pressed, row, box, track)
+        box.add_controller(click)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._track_context_key_pressed, row, box, track)
+        box.add_controller(keys)
         return row
+
+    def _on_track_row_pressed(self, gesture, n_press, x, y, row, box, track):
+        button = gesture.get_current_button()
+        if button == Gdk.BUTTON_PRIMARY and n_press == 1:
+            self._play_selected_track(track)
+        elif button == Gdk.BUTTON_SECONDARY:
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            self._show_track_menu(row, box, track, x, y)
+
+    def _track_context_key_pressed(self, _controller, keyval, _keycode, state, row, box, track):
+        menu_key = keyval in (Gdk.KEY_Menu, getattr(Gdk, "KEY_KP_Menu", Gdk.KEY_Menu))
+        shift_f10 = keyval == Gdk.KEY_F10 and state & Gdk.ModifierType.SHIFT_MASK
+        if menu_key or shift_f10:
+            box.grab_focus()
+            self._show_track_menu(row, box, track, 0, 0)
+            return True
+        return False
+
+    def _show_track_menu(self, parent, source, track, x, y):
+        if getattr(self, "_track_popover", None):
+            self._track_popover.popdown()
+
+        translated = source.translate_coordinates(parent, x, y)
+        if translated:
+            if len(translated) == 3:
+                success, translated_x, translated_y = translated
+                if success:
+                    x, y = translated_x, translated_y
+            else:
+                x, y = translated
+        point = Gdk.Rectangle()
+        point.x = round(x)
+        point.y = round(y)
+        point.width = 1
+        point.height = 1
+
+        model = Gio.Menu()
+        model.append("Play", "track.play")
+        model.append("Play Next", "track.play-next")
+        model.append("Add to Queue", "track.add-to-queue")
+
+        navigation = Gio.Menu()
+        navigation.append("Go to Album", "track.go-to-album")
+        navigation.append("Go to Artist", "track.go-to-artist")
+        model.append_section(None, navigation)
+
+        details = Gio.Menu()
+        details.append("Show in File Manager", "track.show-in-file-manager")
+        details.append("Song Information", "track.song-information")
+        model.append_section(None, details)
+
+        library = Gio.Menu()
+        library.append("Remove from Library", "track.remove-from-library")
+        model.append_section(None, library)
+
+        actions = Gio.SimpleActionGroup()
+        callbacks = {
+            "play": lambda: self._play_selected_track(track),
+            "play-next": lambda: self._play_next(track),
+            "add-to-queue": lambda: self._add_to_queue(track),
+            "go-to-album": lambda: self._go_to_album(track),
+            "go-to-artist": lambda: self._go_to_artist(track),
+            "show-in-file-manager": lambda: self._show_in_file_manager(track),
+            "song-information": lambda: self._show_song_information(track),
+            "remove-from-library": lambda: self._confirm_remove_from_library(track),
+        }
+        for name, callback in callbacks.items():
+            action = Gio.SimpleAction.new(name, None)
+            action.connect(
+                "activate",
+                lambda _action, _parameter, callback=callback: self._activate_track_action(callback),
+            )
+            actions.add_action(action)
+
+        popover = Gtk.PopoverMenu.new_from_model(model)
+        popover.insert_action_group("track", actions)
+        popover.set_has_arrow(True)
+        popover.set_parent(parent)
+        popover.set_pointing_to(point)
+        popover.connect("closed", self._on_track_popover_closed)
+        parent.connect("notify::root", self._on_track_popover_parent_root_changed, popover)
+        self._track_popover = popover
+        popover.popup()
+
+    def _on_track_popover_closed(self, popover):
+        if popover.get_parent() is not None:
+            popover.unparent()
+        if getattr(self, "_track_popover", None) is popover:
+            self._track_popover = None
+
+    def _activate_track_action(self, callback):
+        popover = getattr(self, "_track_popover", None)
+        if popover is not None:
+            popover.popdown()
+        callback()
+
+    @staticmethod
+    def _on_track_popover_parent_root_changed(parent, _pspec, popover):
+        if parent.get_root() is None and popover.get_parent() is not None:
+            popover.popdown()
+            popover.unparent()
 
     def _refresh_queue(self):
         for child in list(self.queue_box): self.queue_box.remove(child)
@@ -559,6 +700,129 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._play_track(track)
         self._refresh_queue()
 
+    def _play_next(self, track):
+        """Put a track immediately after the currently playing track."""
+        self.queue.insert(0, track)
+        self._prepare_next_track()
+        self._refresh_queue()
+
+    def _add_to_queue(self, track):
+        """Append a track, retaining duplicate queue entries."""
+        self.queue.append(track)
+        self._prepare_next_track()
+        self._refresh_queue()
+
+    def _go_to_album(self, track):
+        album = track.album or "Unknown Album"
+        tracks = [item for item in self.database.all_tracks()
+                  if item.album == track.album and item.album_artist == track.album_artist]
+        self._populate_collection("album", album, track.album_artist or "Unknown Artist", tracks)
+
+    def _go_to_artist(self, track):
+        artist = track.artist or track.album_artist or "Unknown Artist"
+        tracks = [item for item in self.database.all_tracks()
+                  if item.artist == track.artist or item.album_artist == track.album_artist]
+        self._populate_collection("artist", artist, f"{len(tracks)} tracks", tracks)
+
+    def _populate_collection(self, kind, title, subtitle, tracks):
+        getattr(self, f"{kind}_detail_heading").set_label(title)
+        getattr(self, f"{kind}_detail_subtitle").set_label(subtitle)
+        items = getattr(self, f"{kind}_detail_items")
+        for child in list(items):
+            items.remove(child)
+        for item in tracks:
+            items.append(self._track_row(item, True))
+        self._show_page(f"{kind}-detail")
+
+    def _show_in_file_manager(self, track):
+        if not track.path or not Path(track.path).exists():
+            self._toast("The audio file is no longer available")
+            return
+        file = Gio.File.new_for_path(str(Path(track.path).resolve()))
+        try:
+            proxy = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SESSION,
+                Gio.DBusProxyFlags.DO_NOT_AUTO_START,
+                None,
+                "org.freedesktop.FileManager1",
+                "/org/freedesktop/FileManager1",
+                "org.freedesktop.FileManager1",
+                None,
+            )
+            proxy.call_sync(
+                "ShowItems",
+                GLib.Variant("(ass)", ([file.get_uri()], "")),
+                Gio.DBusCallFlags.NONE,
+                1000,
+                None,
+            )
+            return
+        except (GLib.Error, TypeError):
+            pass
+
+        parent = file.get_parent()
+        if parent:
+            try:
+                Gio.AppInfo.launch_default_for_uri(parent.get_uri(), None)
+            except GLib.Error as error:
+                self._toast(f"Could not open the file manager: {error.message}")
+
+    def _show_song_information(self, track):
+        dialog = Gtk.Dialog(title="Song Information", transient_for=self, modal=True)
+        dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+        dialog.set_default_size(520, 480)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        content.set_margin_top(18)
+        content.set_margin_bottom(18)
+        content.set_margin_start(18)
+        content.set_margin_end(18)
+        technical = self.scanner.inspect_track(track.path) if not track.path.startswith(("http://", "https://")) else {}
+        for label, value in (
+            ("Title", track.title),
+            ("Artist", track.artist),
+            ("Album", track.album),
+            ("Album artist", track.album_artist),
+            ("Year", track.year),
+            ("Genre", track.genre),
+            ("Track", str(track.track_number)),
+            ("Duration", track.duration_label),
+            ("Codec", technical.get("codec", "Unknown")),
+            ("Bitrate", technical.get("bitrate", "Unknown")),
+            ("Sample rate", technical.get("sample_rate", "Unknown")),
+            ("Channels", technical.get("channels", "Unknown")),
+            ("File", track.path),
+        ):
+            line = Gtk.Box(spacing=12)
+            line.append(Gtk.Label(label=f"{label}:", xalign=0, css_classes=["muted"]))
+            line.append(Gtk.Label(label=value or "—", xalign=0, wrap=True, selectable=True, hexpand=True))
+            content.append(line)
+        dialog.get_content_area().append(content)
+        dialog.connect("response", lambda current, *_: current.close())
+        dialog.present()
+
+    def _confirm_remove_from_library(self, track):
+        dialog = Adw.AlertDialog(
+            heading="Remove from Library?",
+            body=f'“{track.title}” will be removed from Groovia, but its audio file will not be deleted.',
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("remove", "Remove from Library")
+        dialog.set_response_appearance("remove", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+        dialog.connect("response", self._remove_from_library_response, track)
+        dialog.present(self)
+
+    def _remove_from_library_response(self, dialog, response, track):
+        if response != "remove":
+            return
+        self.database.remove_track(track.path)
+        self.queue = [queued for queued in self.queue if queued.path != track.path]
+        self._playback_source = [item for item in self._playback_source if item.path != track.path]
+        self._prepare_next_track()
+        self._refresh_library(self.search_entry.get_text())
+        self._toast(f"Removed {track.title} from the library")
+
     def _resolve_cover(self, track):
         """Backfill artwork for tracks imported before embedded-cover support."""
         if track.cover_path and Path(track.cover_path).exists():
@@ -603,7 +867,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         """Commit an automatic crossfade as a normal queue transition."""
         if previous_track:
             self._history.append(previous_track)
-        self.queue = [track for track in self.queue if track.path != next_track.path]
+        for index, track in enumerate(self.queue):
+            if track.path == next_track.path:
+                self.queue.pop(index)
+                break
         self._prepare_next_track()
         self._refresh_queue()
 
@@ -812,6 +1079,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.toast_overlay.add_toast(Adw.Toast(title=message, timeout=3))
 
     def close(self):
+        popover = getattr(self, "_track_popover", None)
+        if popover is not None:
+            popover.popdown()
         self.database.save_queue(self.queue)
         self.database.save_playback(self.current, self.player.position if self.current else 0.0)
         self.player.close(); self.database.close(); super().close()

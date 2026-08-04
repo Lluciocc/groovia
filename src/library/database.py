@@ -127,6 +127,11 @@ class LibraryDatabase:
         row = self.connection.execute("SELECT * FROM tracks WHERE path = ?", (path,)).fetchone()
         return self._track(row) if row else None
 
+    def remove_track(self, path: str) -> None:
+        """Remove a track record without touching the audio file."""
+        self.connection.execute("DELETE FROM tracks WHERE path = ?", (path,))
+        self.connection.commit()
+
     def load_queue(self) -> list[Track]:
         row = self.connection.execute("SELECT value FROM settings WHERE key='queue'").fetchone()
         if not row:
