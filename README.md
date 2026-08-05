@@ -43,3 +43,10 @@ providers and generates local `.lrc` files when the installed version supports
 `--generate-lrc`. Groovia keeps lyrics mappings in SQLite and stores manually
 imported lyrics under `$XDG_DATA_HOME/groovia/lyrics`; edited lyrics are
 preserved during later downloads and synchronization.
+
+Auto DJ is an opt-in playback enhancement. It analyzes the current and next
+track in a background worker, caches the result under
+`$XDG_DATA_HOME/groovia/autodj/analysis.json`, preloads one next stream and
+uses the existing queue as its only source of tracks. With Auto DJ disabled,
+the original crossfade path is retained unchanged. Auto DJ never reorders or
+duplicates queue entries.

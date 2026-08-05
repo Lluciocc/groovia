@@ -14,6 +14,45 @@ class PreferencesWindow(Adw.PreferencesWindow):
         transitions = Adw.PreferencesGroup(title="Transitions")
         transitions.add(fade)
         playback.add(transitions)
+        auto_dj_group = Adw.PreferencesGroup(
+            title="Auto DJ",
+            description="Analyze the next track in the background and create musical, queue-safe transitions.",
+        )
+        auto_dj = Adw.SwitchRow(
+            title="Enable Auto DJ",
+            subtitle="Use intelligent transitions while keeping the existing queue unchanged",
+        )
+        settings.bind("auto-dj-enabled", auto_dj, "active", Gio.SettingsBindFlags.DEFAULT)
+        auto_dj_group.add(auto_dj)
+        style = Adw.ComboRow(title="Transition style", subtitle="Choose how expressive the mix should feel")
+        style_values = ["subtle", "balanced", "energetic"]
+        style.set_model(Gtk.StringList.new(["Subtle", "Balanced", "Energetic"]))
+        style.set_selected(max(0, min(2, style_values.index(settings.get_string("auto-dj-style")))))
+        style.connect("notify::selected", lambda row, *_: settings.set_string("auto-dj-style", style_values[row.get_selected()]))
+        auto_dj_group.add(style)
+        length = Adw.ComboRow(title="Transition length", subtitle="Automatic chooses a musical duration from the analysis")
+        length_values = ["automatic", "2", "4", "8", "12", "15"]
+        length.set_model(Gtk.StringList.new(["Automatic", "2 seconds", "4 seconds", "8 seconds", "12 seconds", "15 seconds"]))
+        stored_length = settings.get_string("auto-dj-length")
+        length.set_selected(length_values.index(stored_length) if stored_length in length_values else 0)
+        length.connect("notify::selected", lambda row, *_: settings.set_string("auto-dj-length", length_values[row.get_selected()]))
+        auto_dj_group.add(length)
+        beat = Adw.SwitchRow(title="Beat matching", subtitle="Use BPM data only when confidence is high")
+        phrase = Adw.SwitchRow(title="Phrase matching", subtitle="Avoid switching in the middle of musical phrases")
+        tempo = Adw.SwitchRow(title="Tempo matching", subtitle="Never exceed the conservative tempo range")
+        smart_eq = Adw.SwitchRow(title="Smart EQ", subtitle="Reduce bass buildup during overlap")
+        silence = Adw.SwitchRow(title="Silence detection", subtitle="Use intro and outro silence in the plan")
+        artwork = Adw.SwitchRow(title="Artwork animation", subtitle="Animate the player artwork during a transition")
+        badge = Adw.SwitchRow(title="Show Auto DJ badge", subtitle="Display a small indicator while tracks are mixed")
+        for key, row in (
+            ("auto-dj-beat-matching", beat), ("auto-dj-phrase-matching", phrase),
+            ("auto-dj-tempo-matching", tempo), ("auto-dj-smart-eq", smart_eq),
+            ("auto-dj-silence-detection", silence), ("auto-dj-artwork-animation", artwork),
+            ("auto-dj-show-badge", badge),
+        ):
+            settings.bind(key, row, "active", Gio.SettingsBindFlags.DEFAULT)
+            auto_dj_group.add(row)
+        playback.add(auto_dj_group)
         options = Adw.PreferencesGroup(title="Options")
         gapless = Adw.SwitchRow(title="Gapless playback", subtitle="Avoid silence between compatible tracks")
         settings.bind("gapless", gapless, "active", Gio.SettingsBindFlags.DEFAULT)

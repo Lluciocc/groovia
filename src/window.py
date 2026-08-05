@@ -11,6 +11,7 @@ from pathlib import Path
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from .audio import AudioPlayer
+from .autodj import AutoDJService
 from .downloads import SpotDLService, classify_input
 from .library import LibraryDatabase, LibraryScanner
 from .library.scanner import FORMATS
@@ -61,6 +62,7 @@ button.favorite-active { color: #f6d32d; }
 .player-title { font-weight: 700; }
 .progress { min-width: 220px; }
 .queue-badge { background: #ff725e; color: white; border-radius: 99px; padding: 2px 7px; }
+.auto-dj-badge { background: alpha(@accent_color, .18); color: @accent_color; border-radius: 99px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
 .empty-state { padding: 80px 24px; }
 .lyrics-line { min-height: 42px; padding: 8px 18px; color: alpha(@window_fg_color, .58); font-size: 20px; }
 .lyrics-line:hover { color: @window_fg_color; background: alpha(@window_fg_color, .08); }
@@ -104,6 +106,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.scanner = LibraryScanner(self.database)
         self.download_service = SpotDLService(self.database, self.scanner, callback=self._download_event)
         self.player = AudioPlayer()
+        self.auto_dj = AutoDJService(self._on_auto_dj_plan)
         self.style_manager = Adw.StyleManager.get_default()
         self.style_manager.connect("notify::accent-color", self._on_system_style_changed)
         self.style_manager.connect("notify::dark", self._on_system_style_changed)
@@ -120,8 +123,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.playlist_assets_dir.mkdir(parents=True, exist_ok=True)
         self._settings = self._load_settings()
         self._apply_crossfade_setting()
+        self._apply_auto_dj_setting()
         if self._settings:
             self._settings.connect("changed::crossfade-index", self._on_crossfade_setting_changed)
+            self._settings.connect("changed::auto-dj-enabled", self._on_auto_dj_setting_changed)
+            for key in ("auto-dj-style", "auto-dj-beat-matching", "auto-dj-phrase-matching",
+                        "auto-dj-tempo-matching", "auto-dj-smart-eq", "auto-dj-silence-detection",
+                        "auto-dj-length"):
+                self._settings.connect(f"changed::{key}", self._on_auto_dj_setting_changed)
         self._palette_cache = {}
         self._palette = self._system_palette()
         self._palette_animation = 0
@@ -148,6 +157,44 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _on_crossfade_setting_changed(self, *_args):
         self._apply_crossfade_setting()
         self._prepare_next_track()
+
+    def _apply_auto_dj_setting(self):
+        enabled = bool(self._settings and self._settings.get_boolean("auto-dj-enabled"))
+        enabled = enabled and self.repeat_mode != "one"
+        self._auto_dj_enabled = enabled
+        self.player.set_auto_dj_enabled(enabled)
+        if not enabled:
+            self.auto_dj.cancel()
+            self.player.set_auto_dj_plan(None)
+
+    def _on_auto_dj_setting_changed(self, *_args):
+        self._apply_auto_dj_setting()
+        self._prepare_next_track()
+
+    def _auto_dj_options(self):
+        settings = self._settings
+        if not settings:
+            return {
+                "style": "balanced", "length": "automatic", "beat_matching": True,
+                "phrase_matching": True, "tempo_matching": True,
+                "smart_eq": True, "silence_detection": True,
+            }
+        return {
+            "style": settings.get_string("auto-dj-style"),
+            "length": settings.get_string("auto-dj-length"),
+            "beat_matching": settings.get_boolean("auto-dj-beat-matching"),
+            "phrase_matching": settings.get_boolean("auto-dj-phrase-matching"),
+            "tempo_matching": settings.get_boolean("auto-dj-tempo-matching"),
+            "smart_eq": settings.get_boolean("auto-dj-smart-eq"),
+            "silence_detection": settings.get_boolean("auto-dj-silence-detection"),
+        }
+
+    def _on_auto_dj_plan(self, plan):
+        if not self._auto_dj_enabled or not self.current or not self.player.next_track:
+            return
+        if plan.current_path != self.current.path or plan.next_path != self.player.next_track.path:
+            return
+        self.player.set_auto_dj_plan(plan)
 
     def _system_palette(self):
         rgba = self.style_manager.get_accent_color_rgba()
@@ -1190,7 +1237,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         bar.add_css_class("player-bar")
         self.player_bar = bar
-        self.mini_cover = cover_widget(None, 50); bar.append(self.mini_cover)
+        self.mini_cover = cover_widget(None, 50)
+        self.player_cover_slot = Gtk.Overlay()
+        self.player_cover_slot.set_child(self.mini_cover)
+        bar.append(self.player_cover_slot)
         meta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, width_request=190)
         self.bar_title = Gtk.Label(label="Nothing playing", xalign=0, ellipsize=3, css_classes=["player-title"])
         self.bar_artist = Gtk.Label(label="Groovia", xalign=0, ellipsize=3, css_classes=["muted"])
@@ -1205,6 +1255,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.lyrics_button = icon_button("text-x-generic-symbolic", "Show Lyrics", lambda *_: self._show_lyrics())
         self.lyrics_button.set_sensitive(False)
         bar.append(self.lyrics_button)
+        self.auto_dj_badge = Gtk.Label(label="Auto DJ", css_classes=["auto-dj-badge"])
+        self.auto_dj_badge.set_visible(False)
+        bar.append(self.auto_dj_badge)
         progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
         self.position_label = Gtk.Label(label="0:00", xalign=0, css_classes=["muted"])
         self.progress = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, .1)
@@ -1223,8 +1276,27 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.player.connect("position-changed", self._on_position)
         self.player.connect("state-changed", self._on_state)
         self.player.connect("track-transitioned", self._on_track_transitioned)
+        self.player.connect("auto-dj-transition-started", self._on_auto_dj_transition_started)
+        self.player.connect("auto-dj-transition-finished", self._on_auto_dj_transition_finished)
         self.player.connect("finished", lambda *_: self._next())
         self.player.connect("error", lambda _p, message: self._toast(message))
+
+    def _on_auto_dj_transition_started(self, _player, _plan):
+        if self._settings and not self._settings.get_boolean("auto-dj-show-badge"):
+            return
+        if hasattr(self, "auto_dj_badge"):
+            self.auto_dj_badge.set_opacity(0.0)
+            self.auto_dj_badge.set_visible(True)
+            self.auto_dj_badge.set_opacity(1.0)
+
+    def _on_auto_dj_transition_finished(self, _player, _previous, _next):
+        if hasattr(self, "auto_dj_badge"):
+            GLib.timeout_add(700, self._hide_auto_dj_badge)
+
+    def _hide_auto_dj_badge(self):
+        if hasattr(self, "auto_dj_badge"):
+            self.auto_dj_badge.set_visible(False)
+        return GLib.SOURCE_REMOVE
 
     def _refresh_library(self, search=""):
         tracks = self.database.all_tracks(search)
@@ -1595,7 +1667,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             popover.unparent()
 
     def _refresh_queue(self):
-        LOGGER.info("queue refresh size=%s paths=%r", len(self.queue), [track.path for track in self.queue])
+        LOGGER.info("queue refresh size=%s", len(self.queue))
         for child in list(self.queue_box): self.queue_box.remove(child)
         self.queue_empty.set_visible(not self.queue)
         for track in self.queue:
@@ -1663,6 +1735,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
             elif len(self._playback_source) == 1:
                 candidate = self.current
         self.player.prepare_next(candidate)
+        if self._auto_dj_enabled and self.current and candidate and candidate.path != self.current.path:
+            self.auto_dj.prepare(self.current, candidate, self._auto_dj_options())
+        else:
+            self.auto_dj.cancel()
+            self.player.set_auto_dj_plan(None)
 
     def _play_selected_track(self, track, playlist: Playlist | None = None):
         """Start a track selected from the library while keeping Next useful.
@@ -1907,6 +1984,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._play_track(self.current)
             self._refresh_queue()
             return
+        if self._auto_dj_enabled and self.current and self.queue and not self.shuffle:
+            if (self.player.next_track and self.player.next_track.path == self.queue[0].path and
+                    self.player.start_prepared_transition(duration=1.8)):
+                self._history.append(self.current)
+                self._refresh_queue()
+                return
         if self.queue:
             index = random.randrange(len(self.queue)) if self.shuffle else 0
             if self.current:
@@ -1960,6 +2043,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self.repeat_button.set_icon_name("media-playlist-repeat-symbolic")
             self.repeat_button.set_tooltip_text("Repeat is off")
             self.repeat_button.set_opacity(.45)
+        self._apply_auto_dj_setting()
         self._prepare_next_track()
         self._sync_mpris()
 
@@ -2007,10 +2091,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.now_title.set_label(track.title); self.now_artist.set_label(track.artist); self.now_album.set_label(track.album)
         self.bar_title.set_label(track.title); self.bar_artist.set_label(track.artist)
         # Replace only the artwork widget; the rest of the player bar remains stable.
-        if self.mini_cover.get_parent():
-            self.player_bar.remove(self.mini_cover)
-        self.mini_cover = cover_widget(cover_path, 50)
-        self.player_bar.insert_child_after(self.mini_cover, None)
+        self._replace_player_cover(cover_path)
         self.vinyl.set_cover(cover_path); self.vinyl.set_progress(0)
         self.now_play.set_label("Pause")
         if hasattr(self, "lyrics_button"):
@@ -2034,6 +2115,52 @@ class GrooviaWindow(Adw.ApplicationWindow):
             notification.set_icon(Gio.FileIcon.new(Gio.File.new_for_path(cover_path)))
         notification.set_default_action("app.activate")
         application.send_notification("now-playing", notification)
+
+    def _replace_player_cover(self, cover_path):
+        """Crossfade the small player artwork only for an Auto DJ handoff."""
+        slot = getattr(self, "player_cover_slot", None)
+        if slot is None:
+            self.mini_cover = cover_widget(cover_path, 50)
+            self.player_bar.append(self.mini_cover)
+            return
+        old_cover = self.mini_cover
+        new_cover = cover_widget(cover_path, 50)
+        animate = bool(
+            self._auto_dj_enabled and self._settings and
+            self._settings.get_boolean("auto-dj-artwork-animation")
+        )
+        gtk_settings = Gtk.Settings.get_default()
+        animate = animate and bool(
+            gtk_settings is None or gtk_settings.get_property("gtk-enable-animations")
+        ) and (not self._settings or self._settings.get_boolean("animations"))
+        if not animate or old_cover is None or old_cover.get_parent() is not slot:
+            slot.set_child(new_cover)
+            self.mini_cover = new_cover
+            return
+
+        if getattr(self, "_cover_transition_animation", None):
+            self._cover_transition_animation.skip()
+        new_cover.set_opacity(0.0)
+        slot.add_overlay(new_cover)
+        settled = {"done": False}
+
+        def update(value):
+            progress = float(value)
+            old_cover.set_opacity(1.0 - progress)
+            new_cover.set_opacity(progress)
+            if progress >= .999 and not settled["done"]:
+                settled["done"] = True
+                slot.remove_overlay(new_cover)
+                slot.set_child(new_cover)
+                self._cover_transition_animation = None
+
+        animation = Adw.TimedAnimation.new(
+            self, 0.0, 1.0, 420, Adw.CallbackAnimationTarget.new(update)
+        )
+        animation.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
+        self._cover_transition_animation = animation
+        self.mini_cover = new_cover
+        animation.play()
 
     def _on_position(self, _player, position, duration):
         self.position_label.set_label(self._time_label(position)); self.duration_label.set_label(self._time_label(duration))
@@ -2576,4 +2703,5 @@ class GrooviaWindow(Adw.ApplicationWindow):
             popover.popdown()
         self.database.save_queue(self.queue)
         self.database.save_playback(self.current, self.player.position if self.current else 0.0)
+        self.auto_dj.close()
         self.player.close(); self.database.close(); super().close()

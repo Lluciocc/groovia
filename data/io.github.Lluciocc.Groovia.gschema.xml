@@ -2,6 +2,16 @@
 <schemalist gettext-domain="groovia">
 	<schema id="io.github.Lluciocc.Groovia" path="/io/github/Lluciocc/Groovia/">
 		<key name="crossfade-index" type="i"><default>3</default><summary>Crossfade duration</summary><description>0 means disabled, followed by 1, 3, 5, 8 and 10 seconds.</description></key>
+		<key name="auto-dj-enabled" type="b"><default>false</default><summary>Enable Auto DJ</summary></key>
+		<key name="auto-dj-style" type="s"><default>'balanced'</default><summary>Auto DJ transition style</summary></key>
+		<key name="auto-dj-length" type="s"><default>'automatic'</default><summary>Auto DJ transition length</summary></key>
+		<key name="auto-dj-beat-matching" type="b"><default>true</default><summary>Use beat matching when analysis is confident</summary></key>
+		<key name="auto-dj-phrase-matching" type="b"><default>true</default><summary>Prefer phrase-safe transitions</summary></key>
+		<key name="auto-dj-tempo-matching" type="b"><default>true</default><summary>Allow conservative tempo matching</summary></key>
+		<key name="auto-dj-smart-eq" type="b"><default>true</default><summary>Use bass-aware Auto DJ mixing</summary></key>
+		<key name="auto-dj-silence-detection" type="b"><default>true</default><summary>Use silence analysis for transition planning</summary></key>
+		<key name="auto-dj-artwork-animation" type="b"><default>true</default><summary>Animate artwork during Auto DJ transitions</summary></key>
+		<key name="auto-dj-show-badge" type="b"><default>true</default><summary>Show the Auto DJ badge</summary></key>
 		<key name="gapless" type="b"><default>true</default><summary>Gapless playback</summary></key>
 		<key name="replaygain" type="b"><default>false</default><summary>ReplayGain normalization</summary></key>
 		<key name="dynamic-background" type="b"><default>true</default><summary>Dynamic background</summary></key>
