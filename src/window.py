@@ -123,6 +123,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._palette_animation = 0
         self._apply_css()
         self._build_ui()
+        self._install_global_key_controller()
         self._connect_player()
         self._refresh_library()
         self._refresh_playlist_sidebar()
@@ -1725,7 +1726,36 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._show_page("library")
         self.search_entry.grab_focus()
 
+    def _install_global_key_controller(self):
+        controller = Gtk.EventControllerKey()
+        controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        controller.connect("key-pressed", self._global_key_pressed)
+        self.add_controller(controller)
+
+    def _global_key_pressed(self, _controller, keyval, _keycode, state):
+        modifiers = (
+            Gdk.ModifierType.CONTROL_MASK
+            | Gdk.ModifierType.ALT_MASK
+            | Gdk.ModifierType.SHIFT_MASK
+            | Gdk.ModifierType.SUPER_MASK
+        )
+        if keyval == Gdk.KEY_space and not state & modifiers and not self._search_has_focus():
+            self._toggle_play()
+            return True
+        return False
+
+    def _search_has_focus(self) -> bool:
+        """Keep the global Space shortcut from consuming search input."""
+        focused = self.get_focus()
+        while focused is not None:
+            if focused is self.search_entry:
+                return True
+            focused = focused.get_parent()
+        return False
+
     def _toggle_play(self):
+        if self._search_has_focus():
+            return
         if self.player.track:
             self.player.toggle()
         else:

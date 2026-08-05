@@ -9,6 +9,8 @@ gi.require_version("Gst", "1.0")
 gi.require_version("GstPbutils", "1.0")
 from gi.repository import GLib, Gst
 
+Gst.init(None)
+
 from ..models import Track
 
 
@@ -110,9 +112,21 @@ class LibraryScanner:
                 # GStreamer exposes artwork as a GstSample. get_sample() is
                 # required for ID3/MP4 images; get_value_index() can return a
                 # boxed value that cannot be painted by GTK.
-                sample = tags.get_sample(tag_name)
+                result = tags.get_sample(tag_name)
+                if isinstance(result, tuple):
+                    found, sample = result
+                    if not found:
+                        sample = None
+                else:
+                    sample = result
                 if sample is None:
-                    sample = tags.get_sample_index(tag_name, 0)
+                    result = tags.get_sample_index(tag_name, 0)
+                    if isinstance(result, tuple):
+                        found, sample = result
+                        if not found:
+                            sample = None
+                    else:
+                        sample = result
                 if sample is None:
                     continue
                 buffer = sample.get_buffer()
