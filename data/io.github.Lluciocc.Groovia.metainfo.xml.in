@@ -8,7 +8,7 @@
   <summary>A calm local music player for GNOME</summary>
   <description>
     <p>Groovia turns your local music collection into an album-first listening space with an animated vinyl deck, a responsive queue, and smooth GStreamer playback.</p>
-    <p>Import folders, browse recently added albums, control playback from GNOME, and download direct audio files when you have permission to do so.</p>
+    <p>Import folders, browse recently added albums, control playback from GNOME, and import Spotify tracks and playlists through spotDL.</p>
   </description>
 
   <developer id="tld.vendor">

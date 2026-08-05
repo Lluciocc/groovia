@@ -40,4 +40,7 @@ install_data(groovia_sources, install_dir: moduledir)
 install_data(['audio/__init__.py', 'audio/player.py'], install_dir: moduledir / 'audio')
 install_data(['library/__init__.py', 'library/database.py', 'library/scanner.py'], install_dir: moduledir / 'library')
 install_data(['widgets/__init__.py', 'widgets/vinyl_view.py'], install_dir: moduledir / 'widgets')
-install_data(['downloads/__init__.py', 'downloads/manager.py'], install_dir: moduledir / 'downloads')
+install_data([
+  'downloads/__init__.py', 'downloads/manager.py', 'downloads/spotdl.py',
+  'downloads/importer.py', 'downloads/service.py',
+], install_dir: moduledir / 'downloads')

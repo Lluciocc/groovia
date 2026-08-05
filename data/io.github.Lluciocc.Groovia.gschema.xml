@@ -7,5 +7,12 @@
 		<key name="dynamic-background" type="b"><default>true</default><summary>Dynamic background</summary></key>
 		<key name="vinyl-rotation" type="b"><default>true</default><summary>Vinyl rotation</summary></key>
 		<key name="animations" type="b"><default>true</default><summary>Interface animations</summary></key>
+		<key name="spotdl-legal-acknowledged" type="b"><default>false</default><summary>spotDL legal notice acknowledged</summary></key>
+		<key name="download-format" type="s"><default>'mp3'</default><summary>Download format</summary></key>
+		<key name="download-bitrate" type="s"><default>'auto'</default><summary>Download bitrate</summary></key>
+		<key name="sync-mode" type="s"><default>'safe'</default><summary>Playlist synchronization mode</summary></key>
+		<key name="auto-sync-policy" type="s"><default>'manual'</default><summary>Automatic synchronization policy</summary></key>
+		<key name="playlist-cover-policy" type="s"><default>'follow'</default><summary>Playlist cover policy</summary></key>
+		<key name="playlist-order-policy" type="s"><default>'spotify'</default><summary>Playlist order policy</summary></key>
 	</schema>
 </schemalist>

@@ -3,6 +3,7 @@ import random
 import shutil
 import time
 import logging
+from datetime import datetime, timezone
 from html import escape
 from urllib.parse import unquote, urlparse
 from pathlib import Path
@@ -10,7 +11,7 @@ from pathlib import Path
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from .audio import AudioPlayer
-from .downloads import DownloadManager
+from .downloads import SpotDLService, classify_input
 from .library import LibraryDatabase, LibraryScanner
 from .library.scanner import FORMATS
 from .models import Playlist, Track
@@ -53,6 +54,9 @@ CSS = """
 .track-row { padding: 9px 12px; border-radius: 10px; }
 .track-row:hover { background: @card_bg_color; }
 button.favorite-active { color: #f6d32d; }
+.playlist-create-content { padding: 24px; }
+.playlist-create-cover { border-radius: 14px; background: @card_bg_color; }
+.playlist-create-hint { margin-top: 2px; }
 .player-bar { background: @headerbar_bg_color; border-top: 1px solid @window_fg_color; padding: 8px 18px; }
 .player-title { font-weight: 700; }
 .progress { min-width: 220px; }
@@ -94,6 +98,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.set_size_request(720, 520)
         self.database = LibraryDatabase()
         self.scanner = LibraryScanner(self.database)
+        self.download_service = SpotDLService(self.database, self.scanner, callback=self._download_event)
         self.player = AudioPlayer()
         self.style_manager = Adw.StyleManager.get_default()
         self.style_manager.connect("notify::accent-color", self._on_system_style_changed)
@@ -122,6 +127,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._refresh_library()
         self._refresh_playlist_sidebar()
         self._restore_playback()
+        GLib.idle_add(self._automatic_playlist_sync)
 
     def _load_settings(self):
         try:
@@ -458,9 +464,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
         shuffle.connect("clicked", lambda *_: self._play_playlist(playlist_id, True))
         more = Gtk.Button(label="More", icon_name="view-more-symbolic")
         more.connect("clicked", lambda button: self._show_playlist_menu(button, playlist_id))
+        sync_button = Gtk.Button(label="Sync Now", icon_name="view-refresh-symbolic")
+        sync_button.connect("clicked", lambda *_: self._synchronize_playlist(playlist_id))
         controls.append(play)
         controls.append(shuffle)
         controls.append(more)
+        controls.append(sync_button)
         details.append(controls)
         hero.append(details)
         content.append(hero)
@@ -485,7 +494,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._playlist_views[playlist_id] = {
             "root": root, "cover_slot": cover_slot, "heading": heading,
             "subtitle": subtitle, "search": search, "sort": sort,
-            "tracks": tracks_box, "empty": empty,
+            "tracks": tracks_box, "empty": empty, "sync_button": sync_button,
         }
         search.connect("search-changed", lambda entry, pid=playlist_id: self._refresh_playlist_page(pid, entry.get_text()))
         sort.connect("notify::selected", lambda _dropdown, pid=playlist_id: self._refresh_playlist_page(pid))
@@ -559,7 +568,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
         view["cover_slot"].append(cover_widget(self._playlist_cover_path(playlist), 180))
         view["heading"].set_label(playlist.name)
         total = sum(track.duration for track in tracks)
-        view["subtitle"].set_label(f"{len(tracks)} tracks · {self._time_label(total)}")
+        status = ""
+        if playlist.source_url:
+            status = f" · {playlist.sync_status.replace('_', ' ').title()}"
+            if playlist.last_sync_at:
+                status += f" · Last sync {playlist.last_sync_at[:16].replace('T', ' ')}"
+        view["subtitle"].set_label(f"{len(tracks)} tracks · {self._time_label(total)}{status}")
+        view["sync_button"].set_visible(bool(playlist.source_url or playlist.sync_file))
         for child in list(view["tracks"]):
             view["tracks"].remove(child)
         for position, track in enumerate(tracks, 1):
@@ -603,12 +618,99 @@ class GrooviaWindow(Adw.ApplicationWindow):
         add_button("Rename", lambda: self._rename_playlist_dialog(playlist.id), sensitive=not playlist.is_favorites)
         add_button("Change Cover", lambda: self._choose_playlist_cover(playlist.id))
         add_button("Duplicate", lambda: self._duplicate_playlist(playlist.id))
+        if playlist.source_url or playlist.sync_file:
+            menu_box.append(Gtk.Separator())
+            add_button("Synchronize Now", lambda: self._synchronize_playlist(playlist.id), "view-refresh-symbolic")
+            add_button(
+                "Disable Automatic Synchronization" if playlist.auto_sync != "manual" else "Enable Automatic Synchronization",
+                lambda: self._toggle_playlist_auto_sync(playlist.id),
+            )
+            add_button("View Source Playlist", lambda: self._open_playlist_source(playlist.id))
+            add_button("View Last Synchronization", lambda: self._show_sync_details(playlist.id))
+            add_button("Repair Synchronization", lambda: self._repair_playlist_sync(playlist.id))
+            add_button("Disconnect from Spotify Source", lambda: self._disconnect_playlist(playlist.id))
         if not playlist.is_favorites:
             menu_box.append(Gtk.Separator())
             add_button("Delete Playlist", lambda: self._confirm_delete_playlist(playlist.id))
         popover.connect("closed", self._close_playlist_menu)
         self._playlist_menu = popover
         popover.popup()
+
+    def _synchronize_playlist(self, playlist_id):
+        settings = self._settings
+        job = self.download_service.synchronize(
+            playlist_id,
+            settings.get_string("sync-mode") if settings else None,
+            settings.get_string("download-format") if settings else "mp3",
+            settings.get_string("download-bitrate") if settings else "auto",
+        )
+        if job:
+            self._toast("Playlist synchronization started")
+
+    def _toggle_playlist_auto_sync(self, playlist_id):
+        playlist = self.database.playlist(playlist_id)
+        if not playlist:
+            return
+        policy = "manual" if playlist.auto_sync != "manual" else "daily"
+        self.database.update_playlist_source(playlist_id, auto_sync=policy)
+        self._refresh_playlist_sidebar(); self._refresh_playlist_page(playlist_id)
+        self._toast("Automatic synchronization enabled" if policy != "manual" else "Automatic synchronization disabled")
+
+    def _open_playlist_source(self, playlist_id):
+        playlist = self.database.playlist(playlist_id)
+        if playlist and playlist.source_url:
+            try:
+                Gio.AppInfo.launch_default_for_uri(playlist.source_url, None)
+            except GLib.Error as error:
+                self._toast(f"Could not open Spotify: {error.message}")
+
+    def _show_sync_details(self, playlist_id):
+        playlist = self.database.playlist(playlist_id)
+        if not playlist:
+            return
+        dialog = Adw.AlertDialog(
+            heading="Synchronization details",
+            body=(f"Status: {playlist.sync_status.replace('_', ' ').title()}\n"
+                   f"Last result: {playlist.last_sync_result or 'Never synchronized'}\n"
+                   f"Sync file: {playlist.sync_file or 'Missing'}"),
+        )
+        dialog.add_response("close", "Close")
+        dialog.present(self)
+
+    def _repair_playlist_sync(self, playlist_id):
+        playlist = self.database.playlist(playlist_id)
+        if not playlist:
+            return
+        if playlist.source_url:
+            self._start_download(playlist.source_url, True, "sync")
+        else:
+            self._toast("The original Spotify URL is missing")
+
+    def _disconnect_playlist(self, playlist_id):
+        self.download_service.disconnect(playlist_id)
+        self._refresh_playlist_sidebar(); self._refresh_playlist_page(playlist_id)
+        self._toast("Spotify synchronization disconnected")
+
+    def _automatic_playlist_sync(self):
+        monitor = Gio.NetworkMonitor.get_default()
+        if monitor and not monitor.get_network_available():
+            return GLib.SOURCE_REMOVE
+        now = datetime.now(timezone.utc)
+        for playlist in self.database.playlists():
+            if not playlist.source_url or playlist.auto_sync == "manual":
+                continue
+            due = playlist.last_sync_at is None or playlist.auto_sync == "startup"
+            if not due and playlist.last_sync_at:
+                try:
+                    last = datetime.fromisoformat(playlist.last_sync_at.replace("Z", "+00:00"))
+                    interval = 7 if playlist.auto_sync == "weekly" else 1
+                    due = (now - last).total_seconds() >= interval * 86400
+                except ValueError:
+                    due = True
+            if due and self.download_service.manager.active is None:
+                self._synchronize_playlist(playlist.id)
+                break
+        return GLib.SOURCE_REMOVE
 
     def _close_playlist_menu(self, popover):
         if popover.get_parent() is not None:
@@ -658,33 +760,75 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _create_playlist_dialog(self, track_to_add=None):
         dialog = Gtk.Dialog(title="New Playlist", transient_for=self, modal=True)
+        dialog.set_default_size(500, 360)
+        dialog.set_resizable(False)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         dialog.add_button("Create", Gtk.ResponseType.OK)
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        content.set_margin_top(18); content.set_margin_bottom(18)
-        content.set_margin_start(18); content.set_margin_end(18)
-        entry = Gtk.Entry(placeholder_text="Playlist name")
+        create_button = dialog.get_widget_for_response(Gtk.ResponseType.OK)
+        if create_button:
+            create_button.add_css_class("suggested-action")
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        content.add_css_class("playlist-create-content")
+
+        intro = Gtk.Box(spacing=14)
+        intro_icon = Gtk.Image.new_from_icon_name("view-list-symbolic")
+        intro_icon.set_pixel_size(34)
+        intro_icon.add_css_class("accent")
+        intro.append(intro_icon)
+        intro_text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, hexpand=True)
+        intro_text.append(Gtk.Label(label="Create a playlist", xalign=0, css_classes=["title-2"]))
+        intro_text.append(Gtk.Label(
+            label="Collect your favorite tracks in one place.",
+            xalign=0,
+            wrap=True,
+            css_classes=["dim-label", "playlist-create-hint"],
+        ))
+        intro.append(intro_text)
+        content.append(intro)
+
+        entry = Gtk.Entry(placeholder_text="Playlist name", hexpand=True)
+        entry.set_activates_default(True)
+        entry.set_icon_from_icon_name(Gtk.EntryIconPosition.PRIMARY, "view-list-symbolic")
         content.append(entry)
-        cover_label = Gtk.Label(label="No custom cover", xalign=0, css_classes=["muted"])
-        choose = Gtk.Button(label="Choose Cover", icon_name="image-x-generic-symbolic", halign=Gtk.Align.START)
-        choose.connect("clicked", lambda *_: self._choose_cover_for_dialog(dialog, cover_label))
-        content.append(choose); content.append(cover_label)
+
+        cover_card = Gtk.Box(spacing=14)
+        cover_card.add_css_class("card")
+        cover_card.set_margin_top(2)
+        preview = Gtk.Image.new_from_icon_name("image-x-generic-symbolic")
+        preview.set_pixel_size(72)
+        preview.set_size_request(96, 96)
+        preview.add_css_class("playlist-create-cover")
+        cover_card.append(preview)
+        cover_details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5, valign=Gtk.Align.CENTER, hexpand=True)
+        cover_details.append(Gtk.Label(label="Playlist cover", xalign=0, css_classes=["heading"]))
+        cover_label = Gtk.Label(label="Use the generated cover", xalign=0, ellipsize=3, css_classes=["dim-label"])
+        cover_details.append(cover_label)
+        choose = Gtk.Button(label="Choose an image", icon_name="image-x-generic-symbolic", halign=Gtk.Align.START)
+        choose.add_css_class("flat")
+        choose.connect("clicked", lambda *_: self._choose_cover_for_dialog(dialog, cover_label, preview))
+        cover_details.append(choose)
+        cover_card.append(cover_details)
+        content.append(cover_card)
+
         dialog.get_content_area().append(content)
         self._pending_playlist_cover = None
         dialog.connect("response", self._create_playlist_response, entry, track_to_add)
         dialog.present()
 
-    def _choose_cover_for_dialog(self, dialog, label):
+    def _choose_cover_for_dialog(self, dialog, label, preview=None):
         chooser = Gtk.FileDialog(title="Choose playlist cover")
-        chooser.open(dialog, None, lambda current, result: self._playlist_dialog_cover_selected(current, result, label))
+        chooser.open(dialog, None, lambda current, result: self._playlist_dialog_cover_selected(current, result, label, preview))
 
-    def _playlist_dialog_cover_selected(self, dialog, result, label):
+    def _playlist_dialog_cover_selected(self, dialog, result, label, preview=None):
         try:
             file = dialog.open_finish(result)
         except GLib.Error:
             return
         self._pending_playlist_cover = file.get_path()
         label.set_label(Path(self._pending_playlist_cover).name)
+        if preview:
+            preview.set_from_file(self._pending_playlist_cover)
+            preview.set_pixel_size(72)
 
     def _create_playlist_response(self, dialog, response, entry, track_to_add):
         if response != Gtk.ResponseType.OK:
@@ -1635,33 +1779,352 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._play_track(track)
 
     def _download_url(self, *_args):
-        dialog = Gtk.Dialog(title="Download audio", transient_for=self, modal=True)
+        dialog = Gtk.Dialog(title="Import from Spotify", transient_for=self, modal=True)
+        dialog.set_default_size(620, 600)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Download", Gtk.ResponseType.ACCEPT)
+        download_button = dialog.add_button("Download", Gtk.ResponseType.ACCEPT)
+        download_button.add_css_class("suggested-action")
         body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        body.set_margin_top(18); body.set_margin_bottom(18); body.set_margin_start(18); body.set_margin_end(18)
-        body.append(Gtk.Label(label="Paste a direct audio URL from a source that permits downloading.", wrap=True, xalign=0))
-        entry = Gtk.Entry(placeholder_text="https://example.org/track.flac")
-        body.append(entry)
-        permission = Gtk.CheckButton(label="I have permission to download this content")
+        body.set_margin_top(22); body.set_margin_bottom(18); body.set_margin_start(22); body.set_margin_end(22)
+        title = Gtk.Label(label="Import Spotify music", xalign=0, css_classes=["title-2"])
+        body.append(title)
+        body.append(Gtk.Label(
+            label="Groovia uses spotDL to find matching audio and import Spotify metadata and artwork."
+            " Audio is not downloaded directly from Spotify; you are responsible for respecting copyright and service terms.",
+            wrap=True, xalign=0, css_classes=["dim-label"],
+        ))
+        source_row = Gtk.Box(spacing=8)
+        entry = Gtk.Entry(placeholder_text="Paste a Spotify track, playlist or .spotdl file", hexpand=True)
+        paste = Gtk.Button(label="Paste", icon_name="edit-paste-symbolic")
+        paste.connect("clicked", lambda *_: self._paste_download_source(entry))
+        source_row.append(entry); source_row.append(paste)
+        body.append(source_row)
+        detected = Gtk.Label(label="Paste a source to detect its type", xalign=0, css_classes=["dim-label"])
+        body.append(detected)
+        destination = Gtk.Label(xalign=0, wrap=True, css_classes=["dim-label"])
+        body.append(destination)
+        sync = Gtk.CheckButton(label="Keep this Spotify playlist synchronized in the future")
+        sync.set_active(True)
+        sync.set_visible(False)
+        body.append(sync)
+        permission = Gtk.CheckButton(label="I understand and accept responsibility for this download")
+        if self._settings:
+            permission.set_active(self._settings.get_boolean("spotdl-legal-acknowledged"))
         body.append(permission)
+        progress = Gtk.ProgressBar(show_text=True)
+        progress.set_text("Waiting for a source")
+        body.append(progress)
+        current = Gtk.Label(label="", xalign=0, ellipsize=3, css_classes=["dim-label"])
+        body.append(current)
+        log_view = Gtk.TextView(editable=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        log_view.set_vexpand(True)
+        log_view.add_css_class("card")
+        log_scroll = Gtk.ScrolledWindow(vexpand=True, min_content_height=130)
+        log_scroll.set_child(log_view)
+        body.append(log_scroll)
         dialog.get_content_area().append(body)
-        dialog.connect("response", self._download_response, entry, permission)
+        self._download_dialog = dialog
+        self._download_progress = progress
+        self._download_current = current
+        self._download_log = log_view.get_buffer()
+        self._download_sync = sync
+        self._download_source_entry = entry
+        self._download_destination = destination
+        entry.connect("changed", lambda current_entry: self._update_download_detection(
+            current_entry, detected, destination, sync, download_button, permission,
+        ))
+        permission.connect("toggled", lambda check: self._update_download_button(entry, check, download_button))
+        dialog.connect("response", self._download_response, entry, permission, sync)
         dialog.present()
 
-    def _download_response(self, dialog, response, entry, permission):
-        if response == Gtk.ResponseType.ACCEPT and permission.get_active() and entry.get_text().startswith(("http://", "https://")):
-            self._toast("Downloading audio…")
-            DownloadManager(self._download_update).download(entry.get_text().strip())
-        dialog.close()
+    def _paste_download_source(self, entry):
+        clipboard = self.get_display().get_clipboard()
+        clipboard.read_text_async(None, lambda current, result: self._paste_download_finished(current, result, entry))
 
-    def _download_update(self, state, value, total):
-        if state == "finished":
-            self._toast("Download finished — scan the file into your library")
-            self.scanner.scan_async([str(Path(value).parent)], self._scan_update)
-        elif state == "error":
-            self._toast(f"Download failed: {value}")
-        return GLib.SOURCE_REMOVE if state != "progress" else GLib.SOURCE_CONTINUE
+    @staticmethod
+    def _paste_download_finished(clipboard, result, entry):
+        try:
+            text = clipboard.read_text_finish(result)
+        except GLib.Error:
+            return
+        if text:
+            entry.set_text(text.strip())
+
+    def _update_download_detection(self, entry, detected, destination, sync, button, permission):
+        info = classify_input(entry.get_text())
+        labels = {
+            "track": "Spotify track detected",
+            "playlist": "Spotify playlist detected",
+            "sync": "spotDL synchronization file detected",
+            "invalid": "Waiting for a valid Spotify source",
+        }
+        detected.set_label(labels[info.kind])
+        sync.set_visible(info.kind in {"playlist", "sync"})
+        if info.kind == "track":
+            destination.set_label(f"Destination: {self.download_service.music_dir}")
+        elif info.kind in {"playlist", "sync"}:
+            destination.set_label(f"Managed synchronization directory: {self.download_service.sync_root}")
+        else:
+            destination.set_label("")
+        button.set_sensitive(info.kind != "invalid" and permission.get_active())
+
+    def _update_download_button(self, entry, permission, button):
+        button.set_sensitive(classify_input(entry.get_text()).kind != "invalid" and permission.get_active())
+
+    def _download_response(self, dialog, response, entry, permission, sync):
+        if response == Gtk.ResponseType.CANCEL:
+            if getattr(self, "_download_job", None):
+                self.download_service.manager.cancel(self._download_job.id)
+            dialog.close()
+            return
+        if response != Gtk.ResponseType.ACCEPT:
+            return
+        info = classify_input(entry.get_text())
+        if info.kind == "invalid":
+            self._download_error("Enter a valid Spotify track, playlist or .spotdl file.")
+            return
+        if not permission.get_active():
+            self._download_error("Please acknowledge the legal notice before downloading.")
+            return
+        if self._settings:
+            self._settings.set_boolean("spotdl-legal-acknowledged", True)
+        status = self.download_service.manager.resolver.dependency_status()
+        missing = [name for name, present in (("spotDL", status.spotdl), ("FFmpeg", status.ffmpeg)) if not present]
+        if not status.deno:
+            self._append_download_log("Deno was not found; spotDL recommends it for reliable YouTube matching.")
+        if missing:
+            self._show_dependency_dialog(missing, lambda: self._start_download(entry.get_text(), sync.get_active()))
+            return
+        self._start_download(entry.get_text(), sync.get_active())
+
+    def _start_download(self, value, sync_enabled=True, existing_action=None):
+        self._append_download_log(f"Starting: {value}")
+        progress = getattr(self, "_download_progress", None)
+        if progress:
+            progress.set_fraction(0)
+            progress.set_text("Starting spotDL…")
+        settings = self._settings
+        job = self.download_service.submit(
+            value,
+            sync_enabled=sync_enabled,
+            sync_mode=settings.get_string("sync-mode") if settings else "safe",
+            existing_action=existing_action,
+            output_format=settings.get_string("download-format") if settings else "mp3",
+            bitrate=settings.get_string("download-bitrate") if settings else "auto",
+            cover_policy=settings.get_string("playlist-cover-policy") if settings else "follow",
+            order_policy=settings.get_string("playlist-order-policy") if settings else "spotify",
+        )
+        if job:
+            self._download_job = job
+            self._toast("Import started")
+
+    def _download_event(self, event, job, payload):
+        if event == "output":
+            data = payload
+            if data.get("progress") is not None and getattr(self, "_download_progress", None):
+                self._download_progress.set_fraction(data["progress"] / 100)
+                self._download_progress.set_text(f"{data['progress']:.0f}%")
+            if data.get("current") and getattr(self, "_download_current", None):
+                self._download_current.set_label(data["current"])
+            self._append_download_log(data.get("line", ""))
+        elif event == "started":
+            self._append_download_log("spotDL process started")
+        elif event == "import-started":
+            if getattr(self, "_download_progress", None):
+                self._download_progress.set_text("Importing into library…")
+        elif event == "completed":
+            if getattr(self, "_download_progress", None):
+                self._download_progress.set_fraction(1)
+                self._download_progress.set_text("Completed")
+            self._refresh_library(self.search_entry.get_text())
+            tracks = payload.get("tracks", [])
+            if payload.get("playlist"):
+                self._toast(f"Playlist imported: {len(tracks)} tracks")
+            else:
+                self._toast("Track downloaded and added to your library")
+            self._append_download_log(f"Completed: {len(tracks)} track(s) imported")
+        elif event in {"failed", "cancelled"}:
+            message = payload.get("error") or (job.error if job else event)
+            if payload.get("tracks"):
+                self._refresh_library(self.search_entry.get_text())
+                message = f"Import partially completed: {len(payload['tracks'])} track(s); {message}"
+            self._download_error("Download cancelled" if event == "cancelled" else f"Download failed: {message}")
+        elif event == "input-error":
+            self._download_error(payload.get("message", "Invalid source"))
+        elif event == "sync-error":
+            self._download_error(payload.get("message", "Synchronization could not start"))
+        elif event == "conflict":
+            self._show_playlist_conflict(payload)
+        elif event == "dependency-installed":
+            self._toast("Dependencies installed")
+            self._append_download_log("Dependencies installed successfully")
+            dependency_dialog = getattr(self, "_dependency_dialog", None)
+            if dependency_dialog:
+                dependency_dialog.close()
+                self._dependency_dialog = None
+            resume = getattr(self, "_download_resume", None)
+            self._download_resume = None
+            if resume:
+                resume()
+        elif event == "dependency-started":
+            status = payload.get("status")
+            self._set_dependency_feedback("Preparing dependency installation…")
+            if status:
+                self._append_download_log(
+                    f"Dependencies: spotDL={'yes' if status.spotdl else 'no'}, "
+                    f"FFmpeg={'yes' if status.ffmpeg else 'no'}, "
+                    f"Deno={'yes' if status.deno else 'no'}"
+                )
+        elif event == "dependency-command":
+            self._set_dependency_feedback(payload.get("label", "Installing dependency…"))
+        elif event == "dependency-output":
+            self._set_dependency_feedback(payload.get("label", "Installing dependency…"), pulse=True)
+            self._append_dependency_log(payload.get("line", ""))
+        elif event == "dependency-cancelled":
+            self._set_dependency_feedback("Dependency installation cancelled")
+            self._append_dependency_log("Installation cancelled. No system packages were changed.")
+        elif event == "dependency-failed":
+            self._set_dependency_feedback("Dependency installation failed")
+            self._append_dependency_log(payload.get("error", "Unknown installation error"))
+            install_button = getattr(self, "_dependency_install_button", None)
+            if install_button:
+                install_button.set_sensitive(True)
+            self._download_error(payload.get("error", "Dependency installation failed"))
+        return GLib.SOURCE_REMOVE
+
+    def _append_download_log(self, line):
+        buffer = getattr(self, "_download_log", None)
+        if buffer is None:
+            return
+        end = buffer.get_end_iter()
+        buffer.insert(end, f"{line}\n")
+
+    def _download_error(self, message):
+        self._append_download_log(f"ERROR: {message}")
+        if getattr(self, "_download_progress", None):
+            self._download_progress.set_text(message)
+        self._toast(message)
+
+    def _show_playlist_conflict(self, payload):
+        playlist = payload["playlist"]
+        dialog = Adw.AlertDialog(
+            heading="Playlist already imported",
+            body=f"{playlist.name} is already connected to this Spotify source.",
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("sync", "Synchronize existing")
+        dialog.add_response("duplicate", "Import as new")
+        dialog.add_response("replace", "Replace local playlist")
+        dialog.set_default_response("sync")
+        dialog.set_close_response("cancel")
+        dialog.connect("response", lambda current, response: self._conflict_response(current, response, payload))
+        dialog.present(self)
+
+    def _conflict_response(self, dialog, response, payload):
+        dialog.close()
+        if response in {"sync", "duplicate", "replace"}:
+            self._start_download(payload["value"], self._download_sync.get_active(), response)
+
+    def _show_dependency_dialog(self, missing, resume):
+        dialog = Gtk.Dialog(title="Install download dependencies", transient_for=self, modal=True)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        install_button = dialog.add_button("Install", Gtk.ResponseType.ACCEPT)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content.set_margin_top(20); content.set_margin_bottom(20); content.set_margin_start(20); content.set_margin_end(20)
+        content.append(Gtk.Label(label="Groovia needs a few tools to import Spotify music.", xalign=0, css_classes=["title-3"]))
+        content.append(Gtk.Label(
+            label="spotDL will be installed in Groovia's private environment. FFmpeg is required; Deno is recommended for reliable YouTube matching.",
+            wrap=True, xalign=0, css_classes=["dim-label"],
+        ))
+        checks = {}
+        for name in ("spotDL", "FFmpeg", "Deno"):
+            check = Gtk.CheckButton(label=f"Install or repair {name}")
+            check.set_active(name in missing)
+            check.set_sensitive(name in missing or name != "spotDL")
+            content.append(check)
+            checks[name] = check
+        feedback = Gtk.Label(label="Waiting for confirmation", xalign=0, css_classes=["dim-label"])
+        progress = Gtk.ProgressBar(show_text=True)
+        progress.set_text("Waiting")
+        log_view = Gtk.TextView(editable=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        log_scroll = Gtk.ScrolledWindow(min_content_height=110, vexpand=True)
+        log_scroll.set_child(log_view)
+        content.append(feedback)
+        content.append(progress)
+        content.append(log_scroll)
+        dialog.get_content_area().append(content)
+        self._dependency_dialog = dialog
+        self._dependency_install_button = install_button
+        self._dependency_feedback = feedback
+        self._dependency_progress = progress
+        self._dependency_log = log_view.get_buffer()
+        self._dependency_resume = resume
+        dialog.connect("response", self._dependency_response, checks, resume)
+        dialog.present()
+
+    def _dependency_response(self, dialog, response, checks, resume):
+        if response == Gtk.ResponseType.ACCEPT:
+            self._download_resume = resume
+            install_button = getattr(self, "_dependency_install_button", None)
+            if install_button:
+                install_button.set_sensitive(False)
+            self._set_dependency_feedback("Starting installation…")
+            self.download_service.manager.install_dependencies(
+                checks["FFmpeg"].get_active(), checks["Deno"].get_active(), self._download_event,
+                install_spotdl=checks["spotDL"].get_active(),
+            )
+            self._append_dependency_log("Installing selected dependencies…")
+        else:
+            if self.download_service.manager.cancel_dependency_installation():
+                self._append_dependency_log("Stopping dependency installation…")
+            self._download_resume = None
+            self._dependency_dialog = None
+            dialog.close()
+
+    def _set_dependency_feedback(self, message, pulse=False):
+        feedback = getattr(self, "_dependency_feedback", None)
+        if feedback:
+            feedback.set_label(message)
+        progress = getattr(self, "_dependency_progress", None)
+        if progress:
+            if pulse:
+                progress.pulse()
+            progress.set_text(message)
+
+    def _append_dependency_log(self, line):
+        buffer = getattr(self, "_dependency_log", None)
+        if buffer is None:
+            return
+        end = buffer.get_end_iter()
+        buffer.insert(end, f"{line}\n")
+
+    def _remove_managed_dependencies(self):
+        if self.download_service.manager.active or self.download_service.manager._dependency_process:
+            self._toast("Stop active downloads before removing managed tools")
+            return
+        dialog = Adw.AlertDialog(
+            heading="Remove Groovia-managed download tools?",
+            body=(
+                "This removes only Groovia's private spotDL environment and its locally "
+                "downloaded FFmpeg/Deno copies. System installations and your music files "
+                "will not be touched."
+            ),
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("remove", "Remove")
+        dialog.set_response_appearance("remove", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+
+        def response(current, choice):
+            current.close()
+            if choice != "remove":
+                return
+            removed = self.download_service.manager.remove_managed_dependencies()
+            self._toast("Managed download tools removed" if removed else "No managed tools to remove")
+
+        dialog.connect("response", response)
+        dialog.present(self)
 
     def _folder_selected(self, dialog, result):
         try:

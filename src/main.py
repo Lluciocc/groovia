@@ -1,7 +1,4 @@
-"""
-TODO: Add 
-TODO: Add download support from Spotify and YouTube (spotdl and yt-dlp)
-"""
+"""Groovia application entry point."""
 
 import sys
 import gi

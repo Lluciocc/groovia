@@ -49,6 +49,7 @@ class LibraryDatabase:
             CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             """
         )
+        self._migrate_download_schema()
         self.connection.execute(
             "INSERT OR IGNORE INTO playlists(name, is_favorites) VALUES('Favorites', 1)"
         )
@@ -57,12 +58,57 @@ class LibraryDatabase:
     def _track(self, row: sqlite3.Row) -> Track:
         return Track(**{key: row[key] for key in Track.__dataclass_fields__})
 
+    def _migrate_download_schema(self) -> None:
+        """Add download/synchronization data without recreating user data."""
+        columns = {
+            "tracks": {"spotify_id": "TEXT", "isrc": "TEXT"},
+            "playlists": {
+                "source_url": "TEXT", "source_id": "TEXT", "sync_file": "TEXT",
+                "managed_dir": "TEXT", "sync_mode": "TEXT NOT NULL DEFAULT 'safe'",
+                "auto_sync": "TEXT NOT NULL DEFAULT 'manual'",
+                "cover_policy": "TEXT NOT NULL DEFAULT 'follow'",
+                "order_policy": "TEXT NOT NULL DEFAULT 'spotify'",
+                "sync_status": "TEXT NOT NULL DEFAULT 'disconnected'",
+                "last_sync_at": "TEXT", "last_sync_result": "TEXT",
+            },
+        }
+        for table, wanted in columns.items():
+            existing = {row[1] for row in self.connection.execute(f"PRAGMA table_info({table})")}
+            for name, definition in wanted.items():
+                if name not in existing:
+                    self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+        self.connection.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS tracks_spotify_id ON tracks(spotify_id);
+            CREATE INDEX IF NOT EXISTS playlists_source_id ON playlists(source_id);
+            CREATE TABLE IF NOT EXISTS download_jobs (
+              id TEXT PRIMARY KEY, job_type TEXT NOT NULL, source TEXT NOT NULL,
+              state TEXT NOT NULL, progress REAL NOT NULL DEFAULT 0,
+              destination TEXT, error TEXT,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, completed_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS track_sources (
+              spotify_id TEXT PRIMARY KEY, isrc TEXT,
+              track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL,
+              local_path TEXT, source_type TEXT NOT NULL DEFAULT 'spotdl',
+              downloaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS track_sources_track_id ON track_sources(track_id);
+            """
+        )
+
     @staticmethod
     def _playlist(row: sqlite3.Row) -> Playlist:
         return Playlist(
             id=row["id"], name=row["name"], cover_path=row["cover_path"],
             is_favorites=bool(row["is_favorites"]), created_at=row["created_at"],
             modified_at=row["modified_at"],
+            source_url=row["source_url"], source_id=row["source_id"],
+            sync_file=row["sync_file"], managed_dir=row["managed_dir"],
+            sync_mode=row["sync_mode"], auto_sync=row["auto_sync"],
+            cover_policy=row["cover_policy"], order_policy=row["order_policy"],
+            sync_status=row["sync_status"], last_sync_at=row["last_sync_at"],
+            last_sync_result=row["last_sync_result"],
         )
 
     def all_tracks(self, search: str = "") -> list[Track]:
@@ -96,14 +142,17 @@ class LibraryDatabase:
         for track in tracks:
             self.connection.execute(
                 """INSERT INTO tracks(title, artist, album, album_artist, year, genre,
-                    track_number, disc_number, duration, path, cover_path)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                    track_number, disc_number, duration, path, cover_path, spotify_id, isrc)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(path) DO UPDATE SET title=excluded.title, artist=excluded.artist,
                     album=excluded.album, album_artist=excluded.album_artist, year=excluded.year,
                     genre=excluded.genre, track_number=excluded.track_number, disc_number=excluded.disc_number,
-                    duration=excluded.duration, cover_path=excluded.cover_path""",
+                    duration=excluded.duration, cover_path=excluded.cover_path,
+                    spotify_id=COALESCE(excluded.spotify_id, tracks.spotify_id),
+                    isrc=COALESCE(excluded.isrc, tracks.isrc)""",
                 (track.title, track.artist, track.album, track.album_artist, track.year, track.genre,
-                 track.track_number, track.disc_number, track.duration, track.path, track.cover_path),
+                 track.track_number, track.disc_number, track.duration, track.path, track.cover_path,
+                 track.spotify_id, track.isrc),
             )
             count += 1
         self.connection.commit()
@@ -183,12 +232,111 @@ class LibraryDatabase:
         self.connection.commit()
         return self.favorites()
 
-    def create_playlist(self, name: str, cover_path: str | None = None) -> Playlist:
+    def create_playlist(self, name: str, cover_path: str | None = None, **source) -> Playlist:
         cursor = self.connection.execute(
-            "INSERT INTO playlists(name, cover_path) VALUES(?, ?)", (name.strip(), cover_path)
+            """INSERT INTO playlists(
+                name, cover_path, source_url, source_id, sync_file, managed_dir,
+                sync_mode, auto_sync, cover_policy, order_policy, sync_status
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                name.strip(), cover_path, source.get("source_url"), source.get("source_id"),
+                source.get("sync_file"), source.get("managed_dir"), source.get("sync_mode", "safe"),
+                source.get("auto_sync", "manual"), source.get("cover_policy", "follow"),
+                source.get("order_policy", "spotify"), source.get("sync_status", "disconnected"),
+            ),
         )
         self.connection.commit()
         return self.playlist(cursor.lastrowid)
+
+    def playlist_by_source(self, source_id: str | None = None, source_url: str | None = None) -> Playlist | None:
+        if source_id:
+            row = self.connection.execute(
+                "SELECT * FROM playlists WHERE source_id = ? LIMIT 1", (source_id,)
+            ).fetchone()
+        elif source_url:
+            row = self.connection.execute(
+                "SELECT * FROM playlists WHERE source_url = ? LIMIT 1", (source_url,)
+            ).fetchone()
+        else:
+            return None
+        return self._playlist(row) if row else None
+
+    def update_playlist_source(self, playlist_id: int, **values) -> None:
+        allowed = {
+            "source_url", "source_id", "sync_file", "managed_dir", "sync_mode",
+            "auto_sync", "cover_policy", "order_policy", "sync_status",
+            "last_sync_at", "last_sync_result",
+        }
+        values = {key: value for key, value in values.items() if key in allowed}
+        if not values:
+            return
+        assignments = ", ".join(f"{key} = ?" for key in values)
+        self.connection.execute(
+            f"UPDATE playlists SET {assignments}, modified_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (*values.values(), playlist_id),
+        )
+        self.connection.commit()
+
+    def track_by_spotify_id(self, spotify_id: str) -> Track | None:
+        row = self.connection.execute(
+            "SELECT * FROM tracks WHERE spotify_id = ? LIMIT 1", (spotify_id,)
+        ).fetchone()
+        if row:
+            return self._track(row)
+        row = self.connection.execute(
+            "SELECT t.* FROM track_sources s JOIN tracks t ON t.id = s.track_id "
+            "WHERE s.spotify_id = ? LIMIT 1", (spotify_id,)
+        ).fetchone()
+        return self._track(row) if row else None
+
+    def track_by_isrc(self, isrc: str) -> Track | None:
+        row = self.connection.execute(
+            "SELECT * FROM tracks WHERE isrc = ? LIMIT 1", (isrc,)
+        ).fetchone()
+        return self._track(row) if row else None
+
+    def track_by_metadata(self, track: Track) -> Track | None:
+        row = self.connection.execute(
+            """SELECT * FROM tracks WHERE title = ? AND artist = ? AND album = ?
+               AND ABS(duration - ?) < 2 LIMIT 1""",
+            (track.title, track.artist, track.album, track.duration),
+        ).fetchone()
+        return self._track(row) if row else None
+
+    def save_track_source(self, spotify_id: str, track: Track, isrc: str | None = None) -> None:
+        stored = self.track_by_path(track.path)
+        if stored and stored.id is not None:
+            self.connection.execute(
+                "UPDATE tracks SET spotify_id = COALESCE(?, spotify_id), isrc = COALESCE(?, isrc) WHERE id = ?",
+                (spotify_id, isrc, stored.id),
+            )
+            track.id = stored.id
+        self.connection.execute(
+            """INSERT INTO track_sources(spotify_id, isrc, track_id, local_path)
+               VALUES(?,?,?,?)
+               ON CONFLICT(spotify_id) DO UPDATE SET isrc=excluded.isrc,
+               track_id=excluded.track_id, local_path=excluded.local_path""",
+            (spotify_id, isrc, stored.id if stored else track.id, track.path),
+        )
+        self.connection.commit()
+
+    def save_download_job(self, job_id: str, job_type: str, source: str, state: str,
+                          progress: float = 0.0, destination: str | None = None,
+                          error: str | None = None, completed_at: str | None = None) -> None:
+        self.connection.execute(
+            """INSERT INTO download_jobs(id, job_type, source, state, progress, destination, error, completed_at)
+               VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,
+               progress=excluded.progress, destination=excluded.destination, error=excluded.error,
+               completed_at=excluded.completed_at""",
+            (job_id, job_type, source, state, progress, destination, error, completed_at),
+        )
+        self.connection.commit()
+
+    def download_jobs(self, limit: int = 50) -> list[dict]:
+        rows = self.connection.execute(
+            "SELECT * FROM download_jobs ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def rename_playlist(self, playlist_id: int, name: str) -> None:
         self.connection.execute(

@@ -11,7 +11,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
         fade.set_model(Gtk.StringList.new(["Off", "1 second", "3 seconds", "5 seconds", "8 seconds", "10 seconds"]))
         fade.set_selected(settings.get_int("crossfade-index"))
         fade.connect("notify::selected", lambda row, *_: settings.set_int("crossfade-index", row.get_selected()))
-        playback.add(Adw.PreferencesGroup(title="Transitions", children=[fade]))
+        transitions = Adw.PreferencesGroup(title="Transitions")
+        transitions.add(fade)
+        playback.add(transitions)
         options = Adw.PreferencesGroup(title="Options")
         gapless = Adw.SwitchRow(title="Gapless playback", subtitle="Avoid silence between compatible tracks")
         settings.bind("gapless", gapless, "active", Gio.SettingsBindFlags.DEFAULT)
@@ -33,4 +35,76 @@ class PreferencesWindow(Adw.PreferencesWindow):
         group = Adw.PreferencesGroup(title="Music folders")
         group.add(Adw.ActionRow(title="Folders are scanned in the background", subtitle="Use Import music folder from the sidebar to add a location"))
         library.add(group)
-        self.add(playback); self.add(interface); self.add(library)
+
+        downloads = Adw.PreferencesPage(title="Downloads", icon_name="document-save-symbolic")
+        spotdl_group = Adw.PreferencesGroup(
+            title="Spotify imports",
+            description="Groovia uses spotDL to find matching audio and preserve Spotify metadata.",
+        )
+        dependency = Adw.ActionRow(
+            title="spotDL dependencies",
+            subtitle="spotDL, FFmpeg and Deno are managed separately from playback.",
+        )
+        repair = Gtk.Button(label="Install or repair", valign=Gtk.Align.CENTER)
+        repair.add_css_class("suggested-action")
+        repair.connect("clicked", lambda *_: parent._show_dependency_dialog(
+            ["spotDL", "FFmpeg", "Deno"], lambda: None,
+        ))
+        dependency.add_suffix(repair)
+        spotdl_group.add(dependency)
+        remove_row = Adw.ActionRow(
+            title="Remove Groovia-managed tools",
+            subtitle="Remove the private spotDL environment, FFmpeg and Deno copies.",
+        )
+        remove = Gtk.Button(label="Remove", valign=Gtk.Align.CENTER)
+        remove.add_css_class("destructive-action")
+        remove.connect("clicked", lambda *_: parent._remove_managed_dependencies())
+        remove_row.add_suffix(remove)
+        spotdl_group.add(remove_row)
+        downloads.add(spotdl_group)
+
+        locations = Adw.PreferencesGroup(title="Locations")
+        music_location = Adw.ActionRow(title="Music download directory", subtitle=str(parent.download_service.music_dir))
+        sync_location = Adw.ActionRow(title="Synchronized playlists", subtitle=str(parent.download_service.sync_root))
+        locations.add(music_location); locations.add(sync_location)
+        downloads.add(locations)
+
+        options = Adw.PreferencesGroup(title="Download options")
+        format_row = Adw.ComboRow(title="Audio format")
+        format_row.set_model(Gtk.StringList.new(["MP3", "FLAC", "M4A", "OPUS", "OGG"]))
+        format_values = ["mp3", "flac", "m4a", "opus", "ogg"]
+        format_row.set_selected(max(0, format_values.index(settings.get_string("download-format"))))
+        format_row.connect("notify::selected", lambda row, *_: settings.set_string("download-format", format_values[row.get_selected()]))
+        bitrate_row = Adw.ComboRow(title="Audio bitrate")
+        bitrate_row.set_model(Gtk.StringList.new(["Automatic", "96 kbps", "128 kbps", "192 kbps", "320 kbps"]))
+        bitrate_values = ["auto", "96k", "128k", "192k", "320k"]
+        bitrate_row.set_selected(max(0, bitrate_values.index(settings.get_string("download-bitrate"))))
+        bitrate_row.connect("notify::selected", lambda row, *_: settings.set_string("download-bitrate", bitrate_values[row.get_selected()]))
+        options.add(format_row); options.add(bitrate_row)
+        downloads.add(options)
+
+        sync_options = Adw.PreferencesGroup(title="Synchronization")
+        mode = Adw.ComboRow(title="Synchronization mode", subtitle="Safe mode never deletes local audio files.")
+        mode.set_model(Gtk.StringList.new(["Safe", "Mirror"]))
+        mode_values = ["safe", "mirror"]
+        mode.set_selected(max(0, mode_values.index(settings.get_string("sync-mode"))))
+        mode.connect("notify::selected", lambda row, *_: settings.set_string("sync-mode", mode_values[row.get_selected()]))
+        policy = Adw.ComboRow(title="Automatic synchronization")
+        policy.set_model(Gtk.StringList.new(["Manually only", "On startup", "Once per day", "Once per week"]))
+        policy_values = ["manual", "startup", "daily", "weekly"]
+        policy.set_selected(max(0, policy_values.index(settings.get_string("auto-sync-policy"))))
+        policy.connect("notify::selected", lambda row, *_: settings.set_string("auto-sync-policy", policy_values[row.get_selected()]))
+        cover_policy = Adw.ComboRow(title="Playlist cover")
+        cover_policy.set_model(Gtk.StringList.new(["Follow Spotify", "Keep custom local cover"]))
+        cover_values = ["follow", "custom"]
+        cover_policy.set_selected(max(0, cover_values.index(settings.get_string("playlist-cover-policy"))))
+        cover_policy.connect("notify::selected", lambda row, *_: settings.set_string("playlist-cover-policy", cover_values[row.get_selected()]))
+        order_policy = Adw.ComboRow(title="Playlist order")
+        order_policy.set_model(Gtk.StringList.new(["Follow Spotify order", "Keep local order"]))
+        order_values = ["spotify", "local"]
+        order_policy.set_selected(max(0, order_values.index(settings.get_string("playlist-order-policy"))))
+        order_policy.connect("notify::selected", lambda row, *_: settings.set_string("playlist-order-policy", order_values[row.get_selected()]))
+        sync_options.add(mode); sync_options.add(policy); sync_options.add(cover_policy); sync_options.add(order_policy)
+        downloads.add(sync_options)
+
+        self.add(playback); self.add(interface); self.add(library); self.add(downloads)

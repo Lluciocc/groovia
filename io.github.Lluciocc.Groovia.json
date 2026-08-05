@@ -11,7 +11,7 @@
         "--device=dri",
         "--socket=wayland"
         ,"--socket=pulseaudio",
-        "--filesystem=xdg-music:ro",
+        "--filesystem=xdg-music",
         "--filesystem=xdg-download"
         ,"--own-name=org.mpris.MediaPlayer2.groovia",
         "--talk-name=org.freedesktop.Notifications"

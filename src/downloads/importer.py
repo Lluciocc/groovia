@@ -1,0 +1,156 @@
+"""Import spotDL output into Groovia's existing library and playlist tables."""
+
+from __future__ import annotations
+
+import re
+import threading
+import urllib.error
+import urllib.parse
+import urllib.request
+import json
+from pathlib import Path
+from typing import Callable
+
+from ..models import Track
+from .spotdl import AUDIO_SUFFIXES, read_sync_metadata
+
+
+def _key(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (value or "").lower())
+
+
+class DownloadedTrackImporter:
+    def __init__(self, database, scanner):
+        self.database = database
+        self.scanner = scanner
+
+    def import_files(self, files: set[str], metadata: list[dict] | None = None) -> list[Track]:
+        metadata = metadata or []
+        unused = list(metadata)
+        imported: list[Track] = []
+        for raw_path in sorted(files):
+            path = Path(raw_path)
+            if not path.is_file() or path.suffix.lower() not in AUDIO_SUFFIXES:
+                continue
+            try:
+                scanned = self.scanner.read_track(str(path))
+            except Exception:
+                continue
+            match = self._match_metadata(scanned, unused)
+            if match:
+                scanned.spotify_id = match.get("spotify_id")
+                scanned.isrc = match.get("isrc")
+                unused.remove(match)
+            existing = None
+            if scanned.spotify_id:
+                existing = self.database.track_by_spotify_id(scanned.spotify_id)
+            if existing is None and scanned.isrc:
+                existing = self.database.track_by_isrc(scanned.isrc)
+            if existing is None:
+                existing = self.database.track_by_metadata(scanned)
+            if existing and Path(existing.path).exists():
+                imported.append(existing)
+                if scanned.spotify_id:
+                    self.database.save_track_source(scanned.spotify_id, existing, scanned.isrc)
+                if Path(scanned.path).resolve() != Path(existing.path).resolve():
+                    try:
+                        Path(scanned.path).unlink()
+                    except OSError:
+                        pass
+                continue
+            self.database.upsert_tracks([scanned])
+            stored = self.database.track_by_path(scanned.path) or scanned
+            imported.append(stored)
+            if scanned.spotify_id:
+                self.database.save_track_source(scanned.spotify_id, stored, scanned.isrc)
+        # A safe sync often has no new files at all. Reuse the existing library
+        # entries described by the refreshed .spotdl file so playlist removals
+        # and order changes can still be applied without reimporting audio.
+        known_ids = {track.spotify_id for track in imported if track.spotify_id}
+        for item in metadata:
+            spotify_id = item.get("spotify_id")
+            if spotify_id and spotify_id not in known_ids:
+                existing = self.database.track_by_spotify_id(spotify_id)
+                if existing:
+                    imported.append(existing)
+                    known_ids.add(spotify_id)
+        return imported
+
+    @staticmethod
+    def _match_metadata(track: Track, metadata: list[dict]) -> dict | None:
+        if not metadata:
+            return None
+        target = (_key(track.title), _key(track.artist), _key(track.album))
+        for item in metadata:
+            title = _key(item.get("title"))
+            artist = _key(item.get("artist"))
+            album = _key(item.get("album"))
+            if title and title == target[0] and (not artist or artist in target[1] or target[1] in artist):
+                return item
+            if title and title == target[0] and album and album == target[2]:
+                return item
+        return metadata[0] if len(metadata) == 1 else None
+
+
+class SpotDLImportService:
+    """Connect subprocess completion to the database without blocking GTK."""
+
+    def __init__(self, database, scanner, callback: Callable | None = None):
+        self.database = database
+        self.scanner = scanner
+        self.callback = callback
+        self.importer = DownloadedTrackImporter(database, scanner)
+
+    def import_async(self, job, payload: dict):
+        thread = threading.Thread(
+            target=self._worker, args=(job, payload), daemon=True,
+            name=f"groovia-import-{job.id[:8]}",
+        )
+        thread.start()
+
+    def _worker(self, job, payload):
+        self._emit("import-started", job, {})
+        sync_file = job.sync_file if job.sync_file and job.sync_file.exists() else None
+        metadata = read_sync_metadata(sync_file) if sync_file else []
+        tracks = self.importer.import_files(payload.get("files", set()), metadata)
+        playlist_name, cover_url = self._playlist_oembed(job.source) if job.job_type in {"sync", "playlist"} else (None, None)
+        cover_path = self._download_cover(job, metadata, cover_url)
+        self._emit("import-finished", job, {
+            "tracks": tracks, "metadata": metadata, "sync_file": str(sync_file) if sync_file else None,
+            "cover_path": cover_path, "playlist_name": playlist_name,
+        })
+
+    @staticmethod
+    def _playlist_oembed(source):
+        if not source.startswith("http") or "open.spotify.com/playlist/" not in source:
+            return None, None
+        endpoint = "https://open.spotify.com/oembed?url=" + urllib.parse.quote(source, safe="")
+        try:
+            request = urllib.request.Request(endpoint, headers={"User-Agent": "Groovia/0.1"})
+            with urllib.request.urlopen(request, timeout=15) as response:
+                payload = json.loads(response.read(512 * 1024).decode("utf-8"))
+            return payload.get("title"), payload.get("thumbnail_url")
+        except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError):
+            return None, None
+
+    @staticmethod
+    def _download_cover(job, metadata, playlist_cover_url=None):
+        cover_url = playlist_cover_url or next((item.get("cover_url") for item in metadata if item.get("cover_url")), None)
+        if not cover_url or not job.playlist_id:
+            return None
+        destination = job.destination.parent / f".groovia-playlist-cover-{job.playlist_id}.jpg"
+        try:
+            request = urllib.request.Request(cover_url, headers={"User-Agent": "Groovia/0.1"})
+            with urllib.request.urlopen(request, timeout=20) as response:
+                data = response.read(8 * 1024 * 1024 + 1)
+            if len(data) > 8 * 1024 * 1024:
+                return None
+            destination.write_bytes(data)
+            return str(destination)
+        except (OSError, ValueError, urllib.error.URLError):
+            return None
+
+    def _emit(self, event, job, payload):
+        if self.callback:
+            from gi.repository import GLib
+            GLib.idle_add(self.callback, event, job, payload)

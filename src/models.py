@@ -16,6 +16,8 @@ class Track:
     path: str
     cover_path: str | None = None
     play_count: int = 0
+    spotify_id: str | None = None
+    isrc: str | None = None
 
     @property
     def subtitle(self) -> str:
@@ -35,3 +37,14 @@ class Playlist:
     is_favorites: bool
     created_at: str
     modified_at: str
+    source_url: str | None = None
+    source_id: str | None = None
+    sync_file: str | None = None
+    managed_dir: str | None = None
+    sync_mode: str = "safe"
+    auto_sync: str = "manual"
+    cover_policy: str = "follow"
+    order_policy: str = "spotify"
+    sync_status: str = "disconnected"
+    last_sync_at: str | None = None
+    last_sync_result: str | None = None
