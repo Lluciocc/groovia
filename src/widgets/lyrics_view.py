@@ -18,6 +18,7 @@ class LyricsView(Gtk.ScrolledWindow):
         self._buttons = []
         self._active_index = -1
         self._upcoming_index = -1
+        self._music_icon_size = 20
         self._auto_follow = True
         self._programmatic_scroll = False
         self._animations = {}
@@ -76,10 +77,16 @@ class LyricsView(Gtk.ScrolledWindow):
     def _set_scale(self, index, scale):
         if not 0 <= index < len(self._buttons):
             return
-        label = self._label_for(self._buttons[index])
-        attrs = Pango.AttrList()
-        attrs.insert(Pango.attr_scale_new(float(scale)))
-        label.set_attributes(attrs)
+
+        child = self._buttons[index].get_child()
+
+        if isinstance(child, Gtk.Label):
+            attrs = Pango.AttrList()
+            attrs.insert(Pango.attr_scale_new(float(scale)))
+            child.set_attributes(attrs)
+
+        elif isinstance(child, Gtk.Image):
+            child.set_pixel_size(round(self._music_icon_size * float(scale)))
 
     def _set_line_visuals(self, index, scale, opacity):
         if not 0 <= index < len(self._buttons):
@@ -188,19 +195,45 @@ class LyricsView(Gtk.ScrolledWindow):
             return
         for index, line in enumerate(document.lines):
             if document.synchronized:
-                label = Gtk.Label(label=line.text or " ", wrap=True, justify=Gtk.Justification.CENTER)
                 button = Gtk.Button(has_frame=False, focusable=True)
-                button.set_child(label)
+
+                text = line.text or ""
+
+                if text.strip():
+                    content = Gtk.Label(
+                        label=text,
+                        wrap=True,
+                        justify=Gtk.Justification.CENTER,
+                    )
+                else:
+                    content = Gtk.Image.new_from_icon_name(
+                        "audio-x-generic-symbolic"
+                    )
+                    content.set_pixel_size(self._music_icon_size)
+                    content.add_css_class("lyrics-music-icon")
+
+                button.set_child(content)
                 button.add_css_class("lyrics-line")
                 button.set_tooltip_text("Seek to this lyric line")
-                button.connect("clicked", lambda _button, line=line: self.emit(
-                    "seek-requested", (line.start_time_ms + document.offset_ms) / 1000.0
-                ))
+
+                button.connect(
+                    "clicked",
+                    lambda _button, line=line: self.emit(
+                        "seek-requested",
+                        (line.start_time_ms + document.offset_ms) / 1000.0,
+                    ),
+                )
+
                 self._buttons.append(button)
                 self._set_line_visuals(index, 1.0, .58)
                 self._content.append(button)
+
             else:
-                label = Gtk.Label(label=line.text, wrap=True, justify=Gtk.Justification.CENTER)
+                label = Gtk.Label(
+                    label=line.text,
+                    wrap=True,
+                    justify=Gtk.Justification.CENTER,
+                )
                 label.add_css_class("lyrics-line")
                 self._buttons.append(label)
                 self._set_line_visuals(index, 1.0, 1.0)
