@@ -326,7 +326,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         intro = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         intro.append(Gtk.Label(label="YOUR MUSIC, YOUR SPACE", xalign=0, css_classes=["eyebrow"]))
         intro.append(Gtk.Label(label="Good evening", xalign=0, css_classes=["hero-title"]))
-        intro.append(Gtk.Label(label="Put on a record and let the room change.", xalign=0, css_classes=["muted"]))
+        #intro.append(Gtk.Label(label="Put on a record and let the room change.", xalign=0, css_classes=["muted"]))
         actions = Gtk.Box(spacing=8, margin_top=18)
         imp = Gtk.Button(label="Import music", icon_name="folder-music-symbolic")
         imp.add_css_class("suggested-action"); imp.connect("clicked", self._choose_folder)
@@ -1227,7 +1227,6 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._prepare_next_track()
         self.database.mark_played(track)
         self.database.save_playback(track, 0.0)
-        self._show_page("home")
 
     def _prepare_next_track(self):
         """Keep the transition engine one track ahead of the visible queue."""

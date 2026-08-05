@@ -1,5 +1,5 @@
 """
-TODO: Add Playlist support
+TODO: Add 
 TODO: Add download support from Spotify and YouTube (spotdl and yt-dlp)
 """
 
