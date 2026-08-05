@@ -16,7 +16,7 @@ from .library import LibraryDatabase, LibraryScanner
 from .library.scanner import FORMATS
 from .models import Playlist, Track
 from .visuals import css_rgb, mix, palette_for
-from .widgets import VinylView
+from .widgets import LyricsView, VinylView
 
 
 LOGGER = logging.getLogger("groovia.window")
@@ -62,6 +62,10 @@ button.favorite-active { color: #f6d32d; }
 .progress { min-width: 220px; }
 .queue-badge { background: #ff725e; color: white; border-radius: 99px; padding: 2px 7px; }
 .empty-state { padding: 80px 24px; }
+.lyrics-line { min-height: 42px; padding: 8px 18px; color: alpha(@window_fg_color, .58); font-size: 20px; }
+.lyrics-line:hover { color: @window_fg_color; background: alpha(@window_fg_color, .08); }
+.lyrics-line:focus-visible { outline: 2px solid @accent_color; outline-offset: 2px; }
+.lyrics-current { color: @window_fg_color; font-size: 20px; font-weight: 800; }
 """
 
 
@@ -216,6 +220,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.stack.add_named(self._queue_page(), "queue")
         self.stack.add_named(self._collection_page("album"), "album-detail")
         self.stack.add_named(self._collection_page("artist"), "artist-detail")
+        self.stack.add_named(self._lyrics_page(), "lyrics")
 
         sidebar = self._sidebar()
         split = Adw.NavigationSplitView()
@@ -441,6 +446,200 @@ class GrooviaWindow(Adw.ApplicationWindow):
         root.set_child(box)
         return root
 
+    def _lyrics_page(self):
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        header = Gtk.Box(spacing=10)
+        header.set_margin_top(18); header.set_margin_start(24); header.set_margin_end(24)
+        back = Gtk.Button(label="Back", icon_name="go-previous-symbolic")
+        back.connect("clicked", lambda *_: self._show_page("library"))
+        header.append(back)
+        title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
+        title = Gtk.Label(label="Lyrics", xalign=0, css_classes=["title-2"])
+        subtitle = Gtk.Label(label="", xalign=0, css_classes=["muted"])
+        title_box.append(title); title_box.append(subtitle); header.append(title_box)
+        return_current = Gtk.Button(label="Return to current lyric", icon_name="find-location-symbolic")
+        return_current.set_visible(False)
+        header.append(return_current)
+        fullscreen = Gtk.Button(icon_name="view-fullscreen-symbolic", tooltip_text="Fullscreen lyrics")
+        fullscreen.connect("clicked", lambda *_: self._open_lyrics_fullscreen())
+        header.append(fullscreen)
+        root.append(header)
+
+        content = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE)
+        empty = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+        empty.append(Gtk.Image.new_from_icon_name("text-x-generic-symbolic"))
+        empty.append(Gtk.Label(label="No lyrics available", css_classes=["title-2"]))
+        empty.append(Gtk.Label(label="Import an LRC file or search for lyrics later.", css_classes=["muted"]))
+        empty_actions = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
+        find = Gtk.Button(label="Find Lyrics", icon_name="system-search-symbolic")
+        import_button = Gtk.Button(label="Import LRC File", icon_name="document-open-symbolic")
+        manual_button = Gtk.Button(label="Add Lyrics Manually", icon_name="list-add-symbolic")
+        empty_actions.append(find); empty_actions.append(import_button); empty_actions.append(manual_button); empty.append(empty_actions)
+        view = LyricsView()
+        content.add_named(empty, "empty"); content.add_named(view, "lyrics")
+        overlay = Gtk.Overlay()
+        background = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, opacity=0.12)
+        background.set_can_shrink(True)
+        overlay.set_child(background)
+        overlay.add_overlay(content)
+        root.append(overlay)
+        footer = Gtk.Box(spacing=8)
+        footer.set_margin_top(8); footer.set_margin_bottom(14); footer.set_margin_start(24); footer.set_margin_end(24)
+        status = Gtk.Label(label="", xalign=0, hexpand=True, css_classes=["muted"])
+        minus = Gtk.Button(label="− 0.5 s", tooltip_text="Advance lyrics")
+        plus = Gtk.Button(label="+ 0.5 s", tooltip_text="Delay lyrics")
+        footer.append(status); footer.append(minus); footer.append(plus)
+        root.append(footer)
+        find.connect("clicked", lambda *_: self._find_current_lyrics())
+        import_button.connect("clicked", lambda *_: self._import_current_lyrics())
+        manual_button.connect("clicked", lambda *_: self._add_manual_lyrics())
+        view.connect("seek-requested", lambda _view, seconds: self.player.seek(seconds))
+        view.connect("manual-scroll", lambda *_: return_current.set_visible(True))
+        return_current.connect("clicked", lambda *_: (view.return_to_current(), return_current.set_visible(False)))
+        minus.connect("clicked", lambda *_: self._adjust_lyrics_offset(-500))
+        plus.connect("clicked", lambda *_: self._adjust_lyrics_offset(500))
+        self._lyrics_widgets = {
+            "root": root, "content": content, "empty": empty, "view": view,
+            "title": title, "subtitle": subtitle, "status": status,
+            "return": return_current, "find": find, "import": import_button,
+            "manual": manual_button,
+            "background": background,
+        }
+        return root
+
+    def _show_lyrics(self, track=None):
+        track = track or self.current
+        if not track:
+            self._toast("Nothing is playing")
+            return
+        self._resolve_cover(track)
+        timeline, row = self.download_service.lyrics.find(track)
+        widgets = self._lyrics_widgets
+        if track.cover_path and Path(track.cover_path).is_file():
+            widgets["background"].set_filename(track.cover_path)
+        else:
+            widgets["background"].set_filename(None)
+        widgets["title"].set_label(track.title)
+        widgets["subtitle"].set_label(f"{track.artist} · {track.album}")
+        widgets["view"].set_document(timeline)
+        widgets["content"].set_visible_child_name("lyrics" if timeline else "empty")
+        if timeline:
+            widgets["status"].set_label("Synchronized lyrics" if timeline.synchronized else "Unsynchronized lyrics")
+            widgets["find"].set_visible(False)
+        else:
+            widgets["status"].set_label("No lyrics found")
+            widgets["find"].set_visible(True)
+        self._lyrics_track = track
+        self._lyrics_row = row
+        self._show_page("lyrics")
+        if timeline and self.current is track:
+            widgets["view"].update_position(int(self.player.position * 1000))
+        if getattr(self, "_lyrics_fullscreen_view", None):
+            self._lyrics_fullscreen_view.set_document(timeline)
+
+    def _update_lyrics_for_current(self):
+        if not hasattr(self, "_lyrics_widgets"):
+            return
+        if self.stack.get_visible_child_name() == "lyrics":
+            self._show_lyrics(self.current)
+
+    def _find_current_lyrics(self):
+        if not self.current:
+            return
+        settings = self._settings
+        providers = tuple(item.strip() for item in (settings.get_string("lyrics-providers") if settings else "synced,genius,musixmatch,azlyrics").split(",") if item.strip())
+        self.download_service.find_lyrics(self.current, providers=providers, fallback=True)
+        self._toast("Searching for lyrics…")
+
+    def _add_manual_lyrics(self):
+        if not self.current:
+            return
+        dialog = Gtk.Dialog(title="Add Lyrics", transient_for=self, modal=True)
+        dialog.set_default_size(620, 500)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        save = dialog.add_button("Save", Gtk.ResponseType.OK)
+        save.add_css_class("suggested-action")
+        editor = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        scroll = Gtk.ScrolledWindow(vexpand=True, hexpand=True, min_content_height=350)
+        scroll.set_margin_top(18); scroll.set_margin_bottom(18); scroll.set_margin_start(18); scroll.set_margin_end(18)
+        scroll.set_child(editor)
+        dialog.get_content_area().append(scroll)
+
+        def response(current, response_id):
+            if response_id == Gtk.ResponseType.OK:
+                buffer = editor.get_buffer()
+                text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
+                if text.strip() and self.download_service.lyrics.save_text(self.current, text, synchronized=False):
+                    self._show_lyrics(self.current)
+                    self._toast("Lyrics saved")
+            current.close()
+
+        dialog.connect("response", response)
+        dialog.present()
+
+    def _import_current_lyrics(self):
+        if not self.current:
+            return
+        chooser = Gtk.FileDialog(title="Import lyrics")
+        chooser.open(self, None, lambda dialog, result: self._lyrics_file_selected(dialog, result, self.current))
+
+    def _lyrics_file_selected(self, dialog, result, track):
+        try:
+            file = dialog.open_finish(result)
+        except GLib.Error:
+            return
+        path = file.get_path()
+        if Path(path).suffix.lower() not in {".lrc", ".txt"}:
+            self._toast("Choose an .lrc or .txt file")
+            return
+        if self.download_service.lyrics.import_file(track, path):
+            self._show_lyrics(track)
+            self._toast("Lyrics imported")
+        else:
+            self._toast("Could not import lyrics")
+
+    def _adjust_lyrics_offset(self, amount):
+        if not getattr(self, "_lyrics_row", None) or self._lyrics_row.get("id") is None:
+            return
+        row = self._lyrics_row
+        offset = int(row.get("timing_offset_ms") or 0) + amount
+        self.database.update_lyrics_offset(row["id"], offset)
+        self._show_lyrics(self._lyrics_track)
+
+    def _open_lyrics_fullscreen(self):
+        if not self.current:
+            return
+        if getattr(self, "_lyrics_fullscreen_window", None):
+            self._lyrics_fullscreen_window.present()
+            return
+        timeline, _row = self.download_service.lyrics.find(self.current)
+        window = Gtk.Window(title=f"Lyrics — {self.current.title}", transient_for=self)
+        window.set_default_size(1000, 720)
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        top = Gtk.Box(spacing=10, margin_top=16, margin_start=20, margin_end=20)
+        top.append(Gtk.Label(label=self.current.title, xalign=0, css_classes=["title-2"], hexpand=True))
+        close = Gtk.Button(icon_name="view-restore-symbolic", tooltip_text="Exit fullscreen")
+        close.connect("clicked", lambda *_: window.close())
+        top.append(close); root.append(top)
+        view = LyricsView()
+        view.set_document(timeline)
+        view.connect("seek-requested", lambda _view, seconds: self.player.seek(seconds))
+        root.append(view)
+        window.set_child(root)
+        self._lyrics_fullscreen_window = window
+        self._lyrics_fullscreen_view = view
+        window.connect("close-request", lambda current: self._close_lyrics_fullscreen(current))
+        window.present()
+        try:
+            window.fullscreen()
+        except AttributeError:
+            pass
+
+    def _close_lyrics_fullscreen(self, window):
+        self._lyrics_fullscreen_window = None
+        self._lyrics_fullscreen_view = None
+        return False
+
     def _playlist_page(self, playlist_id: int):
         root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -574,7 +773,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
             status = f" · {playlist.sync_status.replace('_', ' ').title()}"
             if playlist.last_sync_at:
                 status += f" · Last sync {playlist.last_sync_at[:16].replace('T', ' ')}"
-        view["subtitle"].set_label(f"{len(tracks)} tracks · {self._time_label(total)}{status}")
+        subtitle_text = f"{len(tracks)} tracks · {self._time_label(total)}{status}"
+        if self._settings and self._settings.get_boolean("lyrics-show-availability"):
+            coverage = self.database.lyrics_coverage([track.id for track in tracks if track.id is not None])
+            subtitle_text += f" · Lyrics {coverage.get('synced', 0)} synced / {coverage.get('plain', 0)} plain"
+        view["subtitle"].set_label(subtitle_text)
         view["sync_button"].set_visible(bool(playlist.source_url or playlist.sync_file))
         for child in list(view["tracks"]):
             view["tracks"].remove(child)
@@ -630,6 +833,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
             add_button("View Last Synchronization", lambda: self._show_sync_details(playlist.id))
             add_button("Repair Synchronization", lambda: self._repair_playlist_sync(playlist.id))
             add_button("Disconnect from Spotify Source", lambda: self._disconnect_playlist(playlist.id))
+        menu_box.append(Gtk.Separator())
+        add_button("Download Missing Lyrics", lambda: self._find_missing_playlist_lyrics(playlist.id))
+        add_button("Refresh Lyrics", lambda: self._find_missing_playlist_lyrics(playlist.id, refresh=True))
+        add_button("Show Lyrics Coverage", lambda: self._show_playlist_lyrics_coverage(playlist.id))
         if not playlist.is_favorites:
             menu_box.append(Gtk.Separator())
             add_button("Delete Playlist", lambda: self._confirm_delete_playlist(playlist.id))
@@ -639,14 +846,44 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _synchronize_playlist(self, playlist_id):
         settings = self._settings
+        providers = tuple(item.strip() for item in (settings.get_string("lyrics-providers") if settings else "synced,genius,musixmatch,azlyrics").split(",") if item.strip())
         job = self.download_service.synchronize(
             playlist_id,
             settings.get_string("sync-mode") if settings else None,
             settings.get_string("download-format") if settings else "mp3",
             settings.get_string("download-bitrate") if settings else "auto",
+            lyrics_mode="synced" if settings and settings.get_boolean("lyrics-synced") else ("plain" if settings and settings.get_boolean("lyrics-fallback") else "none"),
+            lyrics_fallback=settings.get_boolean("lyrics-fallback") if settings else True,
+            generate_lrc=settings.get_boolean("lyrics-generate-lrc") if settings else True,
+            lyrics_providers=providers,
+            sync_remove_lrc=settings.get_boolean("lyrics-remove-sync") if settings else False,
         )
         if job:
             self._toast("Playlist synchronization started")
+
+    def _find_missing_playlist_lyrics(self, playlist_id, refresh=False):
+        tracks = self.database.playlist_tracks(playlist_id)
+        settings = self._settings
+        providers = tuple(item.strip() for item in (settings.get_string("lyrics-providers") if settings else "synced,genius,musixmatch,azlyrics").split(",") if item.strip())
+        count = 0
+        for track in tracks:
+            if refresh or not self.download_service.lyrics.find(track)[0]:
+                if self.download_service.find_lyrics(track, providers=providers, fallback=True):
+                    count += 1
+        self._toast(f"Searching lyrics for {count} track(s)…" if count else "No tracks need lyrics")
+
+    def _show_playlist_lyrics_coverage(self, playlist_id):
+        tracks = self.database.playlist_tracks(playlist_id)
+        coverage = self.database.lyrics_coverage([track.id for track in tracks if track.id is not None])
+        synced = coverage.get("synced", 0)
+        plain = coverage.get("plain", 0)
+        total = len(tracks)
+        dialog = Adw.AlertDialog(
+            heading="Lyrics coverage",
+            body=f"{synced} of {total} tracks have synchronized lyrics\n{plain} have plain lyrics\n{max(0, total - synced - plain)} have no lyrics",
+        )
+        dialog.add_response("close", "Close")
+        dialog.present(self)
 
     def _toggle_playlist_auto_sync(self, playlist_id):
         playlist = self.database.playlist(playlist_id)
@@ -945,6 +1182,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.repeat_button = icon_button("media-playlist-repeat-symbolic", "Repeat all music", lambda *_: self._toggle_repeat())
         self.repeat_button.add_css_class("accent-button")
         bar.append(self.repeat_button)
+        self.lyrics_button = icon_button("text-x-generic-symbolic", "Show Lyrics", lambda *_: self._show_lyrics())
+        self.lyrics_button.set_sensitive(False)
+        bar.append(self.lyrics_button)
         progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
         self.position_label = Gtk.Label(label="0:00", xalign=0, css_classes=["muted"])
         self.progress = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, .1)
@@ -1139,8 +1379,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
             "go-to-artist": lambda: self._go_to_artist(track),
             "show-in-file-manager": lambda: self._show_in_file_manager(track),
             "song-information": lambda: self._show_song_information(track),
+            "show-lyrics": lambda: self._show_lyrics(track),
+            "find-lyrics": lambda: self._find_lyrics_for_track(track),
+            "import-lyrics": lambda: self._import_lyrics_for_track(track),
+            "edit-lyrics": lambda: self._edit_lyrics(track),
+            "remove-lyrics": lambda: self._confirm_remove_lyrics(track),
             "remove-from-library": lambda: self._confirm_remove_from_library(track),
         }
+        lyrics_available = bool(self.download_service.lyrics.find(track)[0])
 
         popover = Gtk.Popover()
         popover.set_has_arrow(True)
@@ -1167,6 +1413,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
             ("show-in-file-manager", "Show in File Manager"),
             ("song-information", "Song Information"),
             (None, None),
+            ("show-lyrics", "Show Lyrics"),
+            ("find-lyrics", "Find Lyrics"),
+            ("import-lyrics", "Import Lyrics"),
+            ("edit-lyrics", "Edit Lyrics"),
+            ("remove-lyrics", "Remove Downloaded Lyrics"),
+            (None, None),
             ("remove-from-library", "Remove from Library"),
         ]
         if playlist:
@@ -1184,6 +1436,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
             button.add_css_class("flat")
             button.set_hexpand(True)
             button.set_halign(Gtk.Align.FILL)
+            if name == "show-lyrics":
+                button.set_sensitive(lyrics_available)
             if name == "add-to-playlist":
                 button.connect("clicked", lambda button: self._show_add_to_playlist_menu(track, button))
             elif name == "remove-from-playlist":
@@ -1527,6 +1781,69 @@ class GrooviaWindow(Adw.ApplicationWindow):
         dialog.connect("response", lambda current, *_: current.close())
         dialog.present()
 
+    def _find_lyrics_for_track(self, track):
+        settings = self._settings
+        providers = tuple(item.strip() for item in (settings.get_string("lyrics-providers") if settings else "synced,genius,musixmatch,azlyrics").split(",") if item.strip())
+        self.download_service.find_lyrics(track, providers=providers, fallback=True)
+        self._toast("Searching for lyrics…")
+
+    def _import_lyrics_for_track(self, track):
+        chooser = Gtk.FileDialog(title="Import lyrics")
+        chooser.open(self, None, lambda dialog, result: self._lyrics_file_selected(dialog, result, track))
+
+    def _edit_lyrics(self, track):
+        timeline, row = self.download_service.lyrics.find(track)
+        if not timeline:
+            self._toast("No lyrics available to edit")
+            return
+        content = "\n".join(line.text for line in timeline.lines)
+        if row and row.get("file_path"):
+            try:
+                content = Path(row["file_path"]).read_text(encoding="utf-8-sig")
+            except OSError:
+                pass
+        dialog = Gtk.Dialog(title="Edit Lyrics", transient_for=self, modal=True)
+        dialog.set_default_size(620, 520)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        save = dialog.add_button("Save", Gtk.ResponseType.OK)
+        save.add_css_class("suggested-action")
+        editor = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, monospace=timeline.synchronized)
+        editor.get_buffer().set_text(content)
+        scroll = Gtk.ScrolledWindow(vexpand=True, hexpand=True, min_content_height=360)
+        scroll.set_margin_top(18); scroll.set_margin_bottom(18); scroll.set_margin_start(18); scroll.set_margin_end(18)
+        scroll.set_child(editor)
+        dialog.get_content_area().append(scroll)
+
+        def response(current, response_id):
+            if response_id == Gtk.ResponseType.OK:
+                buffer = editor.get_buffer()
+                text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
+                if self.download_service.lyrics.save_text(track, text, synchronized=timeline.synchronized):
+                    self._show_lyrics(track)
+                    self._toast("Lyrics saved")
+            current.close()
+
+        dialog.connect("response", response)
+        dialog.present()
+
+    def _confirm_remove_lyrics(self, track):
+        dialog = Adw.AlertDialog(
+            heading="Remove downloaded lyrics?",
+            body=f"Remove downloaded lyrics for “{track.title}”? Manually edited lyrics are kept.",
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("remove", "Remove")
+        dialog.set_response_appearance("remove", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+        def response(current, response_id):
+            if response_id == "remove":
+                self.download_service.lyrics.remove(track)
+                self._show_lyrics(track)
+            current.close()
+        dialog.connect("response", response)
+        dialog.present(self)
+
     def _confirm_remove_from_library(self, track):
         LOGGER.info("remove confirmation opened track=%r path=%r", track.title, track.path)
         dialog = Adw.AlertDialog(
@@ -1676,6 +1993,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.player_bar.insert_child_after(self.mini_cover, None)
         self.vinyl.set_cover(cover_path); self.vinyl.set_progress(0)
         self.now_play.set_label("Pause")
+        if hasattr(self, "lyrics_button"):
+            timeline, _row = self.download_service.lyrics.find(track)
+            self.lyrics_button.set_sensitive(bool(timeline))
+        self._update_lyrics_for_current()
+        if getattr(self, "_lyrics_fullscreen_window", None):
+            self._lyrics_fullscreen_window.set_title(f"Lyrics — {track.title}")
+            timeline, _row = self.download_service.lyrics.find(track)
+            self._lyrics_fullscreen_view.set_document(timeline)
         self._notify_track(track, cover_path)
 
     def _notify_track(self, track, cover_path):
@@ -1694,6 +2019,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.progress.set_range(0, max(1, duration)); self.progress.set_value(position)
         self.vinyl.set_duration(duration)
         self.vinyl.set_progress(position / duration if duration else 0)
+        if hasattr(self, "_lyrics_widgets") and self.stack.get_visible_child_name() == "lyrics":
+            self._lyrics_widgets["view"].update_position(int(position * 1000))
+        if getattr(self, "_lyrics_fullscreen_view", None):
+            self._lyrics_fullscreen_view.update_position(int(position * 1000))
 
     def _on_state(self, _player, playing):
         self.play_button.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
@@ -1837,6 +2166,22 @@ class GrooviaWindow(Adw.ApplicationWindow):
         sync.set_active(True)
         sync.set_visible(False)
         body.append(sync)
+        lyrics_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        lyrics_box.add_css_class("card")
+        lyrics_box.set_margin_top(4)
+        lyrics_box.append(Gtk.Label(label="Lyrics", xalign=0, css_classes=["heading"]))
+        lyrics_synced = Gtk.CheckButton(label="Download synchronized lyrics")
+        lyrics_fallback = Gtk.CheckButton(label="Use plain lyrics as fallback")
+        lyrics_lrc = Gtk.CheckButton(label="Save an external .lrc file")
+        lyrics_synced.set_active(self._settings.get_boolean("lyrics-synced") if self._settings else True)
+        lyrics_fallback.set_active(self._settings.get_boolean("lyrics-fallback") if self._settings else True)
+        lyrics_lrc.set_active(self._settings.get_boolean("lyrics-generate-lrc") if self._settings else True)
+        lyrics_box.append(lyrics_synced); lyrics_box.append(lyrics_fallback); lyrics_box.append(lyrics_lrc)
+        lyrics_box.append(Gtk.Label(
+            label="Synchronized lyrics may not be available for every song. They follow playback when timing data exists.",
+            wrap=True, xalign=0, css_classes=["dim-label"],
+        ))
+        body.append(lyrics_box)
         permission = Gtk.CheckButton(label="I understand and accept responsibility for this download")
         if self._settings:
             permission.set_active(self._settings.get_boolean("spotdl-legal-acknowledged"))
@@ -1860,6 +2205,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._download_sync = sync
         self._download_source_entry = entry
         self._download_destination = destination
+        self._download_lyrics_synced = lyrics_synced
+        self._download_lyrics_fallback = lyrics_fallback
+        self._download_lyrics_lrc = lyrics_lrc
         entry.connect("changed", lambda current_entry: self._update_download_detection(
             current_entry, detected, destination, sync, download_button, permission,
         ))
@@ -1885,14 +2233,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
         labels = {
             "track": "Spotify track detected",
             "playlist": "Spotify playlist detected",
+            "album": "Spotify album detected",
             "sync": "spotDL synchronization file detected",
             "invalid": "Waiting for a valid Spotify source",
         }
         detected.set_label(labels[info.kind])
-        sync.set_visible(info.kind in {"playlist", "sync"})
+        sync.set_visible(info.kind in {"playlist", "album", "sync"})
         if info.kind == "track":
             destination.set_label(f"Destination: {self.download_service.music_dir}")
-        elif info.kind in {"playlist", "sync"}:
+        elif info.kind in {"playlist", "album", "sync"}:
             destination.set_label(f"Managed synchronization directory: {self.download_service.sync_root}")
         else:
             destination.set_label("")
@@ -1934,6 +2283,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
             progress.set_fraction(0)
             progress.set_text("Starting spotDL…")
         settings = self._settings
+        synced_widget = getattr(self, "_download_lyrics_synced", None)
+        fallback_widget = getattr(self, "_download_lyrics_fallback", None)
+        lrc_widget = getattr(self, "_download_lyrics_lrc", None)
+        synced = synced_widget.get_active() if synced_widget else (settings.get_boolean("lyrics-synced") if settings else True)
+        fallback = fallback_widget.get_active() if fallback_widget else (settings.get_boolean("lyrics-fallback") if settings else True)
+        generate_lrc = lrc_widget.get_active() if lrc_widget else (settings.get_boolean("lyrics-generate-lrc") if settings else True)
+        lyrics_mode = "synced" if synced else ("plain" if fallback else "none")
+        provider_text = settings.get_string("lyrics-providers") if settings else "synced,genius,musixmatch,azlyrics"
+        providers = tuple(item.strip() for item in provider_text.split(",") if item.strip())
         job = self.download_service.submit(
             value,
             sync_enabled=sync_enabled,
@@ -1943,6 +2301,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
             bitrate=settings.get_string("download-bitrate") if settings else "auto",
             cover_policy=settings.get_string("playlist-cover-policy") if settings else "follow",
             order_policy=settings.get_string("playlist-order-policy") if settings else "spotify",
+            lyrics_mode=lyrics_mode, lyrics_fallback=fallback,
+            generate_lrc=generate_lrc, lyrics_providers=providers,
+            sync_remove_lrc=settings.get_boolean("lyrics-remove-sync") if settings else False,
         )
         if job:
             self._download_job = job
@@ -1973,6 +2334,20 @@ class GrooviaWindow(Adw.ApplicationWindow):
             else:
                 self._toast("Track downloaded and added to your library")
             self._append_download_log(f"Completed: {len(tracks)} track(s) imported")
+            lyrics_counts = payload.get("lyrics_counts", {})
+            if lyrics_counts:
+                self._append_download_log(
+                    "Lyrics: "
+                    f"{lyrics_counts.get('synced', 0)} synchronized, "
+                    f"{lyrics_counts.get('plain', 0)} plain, "
+                    f"{lyrics_counts.get('failed', 0)} unavailable"
+                )
+        elif event == "lyrics-completed":
+            self._toast("Lyrics downloaded" if payload.get("timeline") else "No lyrics found")
+            if payload.get("track"):
+                self._show_lyrics(payload["track"])
+        elif event == "lyrics-failed":
+            self._toast(f"Lyrics unavailable: {payload.get('error', 'search failed')}")
         elif event in {"failed", "cancelled"}:
             message = payload.get("error") or (job.error if job else event)
             if payload.get("tracks"):
@@ -2173,6 +2548,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.toast_overlay.add_toast(Adw.Toast(title=message, timeout=3))
 
     def close(self):
+        if getattr(self, "_lyrics_fullscreen_window", None):
+            self._lyrics_fullscreen_window.close()
         popover = getattr(self, "_track_popover", None)
         if popover is not None:
             popover.popdown()

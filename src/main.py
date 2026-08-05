@@ -22,6 +22,7 @@ class GrooviaApplication(Adw.Application):
         self.create_action("shortcuts", self.on_shortcuts, ["<primary>question"])
         self.create_action("import", lambda *_: self._window_action("_choose_folder"), ["<primary>o"])
         self.create_action("search", lambda *_: self._window_action("_focus_search"), ["<primary>f"])
+        self.create_action("show-lyrics", lambda *_: self._window_action("_show_lyrics"), ["<primary>l"])
         self.create_action("toggle-play", lambda *_: self._window_action("_toggle_play"))
         self.create_action("next", lambda *_: self._window_action("_next"), ["<primary>Right"])
         self.create_action("previous", lambda *_: self._window_action("_previous"), ["<primary>Left"])

@@ -14,5 +14,14 @@
 		<key name="auto-sync-policy" type="s"><default>'manual'</default><summary>Automatic synchronization policy</summary></key>
 		<key name="playlist-cover-policy" type="s"><default>'follow'</default><summary>Playlist cover policy</summary></key>
 		<key name="playlist-order-policy" type="s"><default>'spotify'</default><summary>Playlist order policy</summary></key>
+		<key name="lyrics-synced" type="b"><default>true</default><summary>Download synchronized lyrics</summary></key>
+		<key name="lyrics-fallback" type="b"><default>true</default><summary>Use plain lyrics fallback</summary></key>
+		<key name="lyrics-generate-lrc" type="b"><default>true</default><summary>Generate external LRC files</summary></key>
+		<key name="lyrics-embed-plain" type="b"><default>true</default><summary>Embed plain lyrics</summary></key>
+		<key name="lyrics-providers" type="s"><default>'synced,genius,musixmatch,azlyrics'</default><summary>Lyrics providers</summary></key>
+		<key name="lyrics-auto-missing" type="b"><default>false</default><summary>Search missing lyrics automatically</summary></key>
+		<key name="lyrics-preserve-edited" type="b"><default>true</default><summary>Preserve edited lyrics</summary></key>
+		<key name="lyrics-remove-sync" type="b"><default>false</default><summary>Remove synchronized lyrics during mirror sync</summary></key>
+		<key name="lyrics-show-availability" type="b"><default>true</default><summary>Show lyrics availability</summary></key>
 	</schema>
 </schemalist>

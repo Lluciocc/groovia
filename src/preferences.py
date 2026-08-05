@@ -107,4 +107,31 @@ class PreferencesWindow(Adw.PreferencesWindow):
         sync_options.add(mode); sync_options.add(policy); sync_options.add(cover_policy); sync_options.add(order_policy)
         downloads.add(sync_options)
 
+        lyrics_options = Adw.PreferencesGroup(
+            title="Lyrics",
+            description="Synchronized lyrics are optional and may not be available for every track.",
+        )
+        synced_lyrics = Adw.SwitchRow(title="Download synchronized lyrics")
+        settings.bind("lyrics-synced", synced_lyrics, "active", Gio.SettingsBindFlags.DEFAULT)
+        fallback_lyrics = Adw.SwitchRow(title="Download plain lyrics as fallback")
+        settings.bind("lyrics-fallback", fallback_lyrics, "active", Gio.SettingsBindFlags.DEFAULT)
+        generate_lrc = Adw.SwitchRow(title="Generate external .lrc files")
+        settings.bind("lyrics-generate-lrc", generate_lrc, "active", Gio.SettingsBindFlags.DEFAULT)
+        embed_plain = Adw.SwitchRow(title="Embed plain lyrics when supported")
+        settings.bind("lyrics-embed-plain", embed_plain, "active", Gio.SettingsBindFlags.DEFAULT)
+        auto_missing = Adw.SwitchRow(title="Search automatically for missing lyrics")
+        settings.bind("lyrics-auto-missing", auto_missing, "active", Gio.SettingsBindFlags.DEFAULT)
+        preserve = Adw.SwitchRow(title="Keep manually edited lyrics")
+        settings.bind("lyrics-preserve-edited", preserve, "active", Gio.SettingsBindFlags.DEFAULT)
+        remove_sync = Adw.SwitchRow(title="Remove lyrics during mirror synchronization")
+        settings.bind("lyrics-remove-sync", remove_sync, "active", Gio.SettingsBindFlags.DEFAULT)
+        show_availability = Adw.SwitchRow(title="Show lyrics availability")
+        settings.bind("lyrics-show-availability", show_availability, "active", Gio.SettingsBindFlags.DEFAULT)
+        providers = Adw.EntryRow(title="Preferred providers")
+        providers.set_text(settings.get_string("lyrics-providers"))
+        providers.connect("changed", lambda row: settings.set_string("lyrics-providers", row.get_text()))
+        for row in (synced_lyrics, fallback_lyrics, generate_lrc, embed_plain, auto_missing, preserve, remove_sync, show_availability, providers):
+            lyrics_options.add(row)
+        downloads.add(lyrics_options)
+
         self.add(playback); self.add(interface); self.add(library); self.add(downloads)

@@ -13,6 +13,7 @@ from typing import Callable
 
 from ..models import Track
 from .spotdl import AUDIO_SUFFIXES, read_sync_metadata
+from ..lyrics import LyricsService
 
 
 def _key(value: str | None) -> str:
@@ -20,12 +21,15 @@ def _key(value: str | None) -> str:
 
 
 class DownloadedTrackImporter:
-    def __init__(self, database, scanner):
+    def __init__(self, database, scanner, lyrics_service=None):
         self.database = database
         self.scanner = scanner
+        self.lyrics_service = lyrics_service
+        self.lyrics_counts = {"synced": 0, "plain": 0, "failed": 0}
 
     def import_files(self, files: set[str], metadata: list[dict] | None = None) -> list[Track]:
         metadata = metadata or []
+        self.lyrics_counts = {"synced": 0, "plain": 0, "failed": 0}
         unused = list(metadata)
         imported: list[Track] = []
         for raw_path in sorted(files):
@@ -52,6 +56,7 @@ class DownloadedTrackImporter:
                 imported.append(existing)
                 if scanned.spotify_id:
                     self.database.save_track_source(scanned.spotify_id, existing, scanned.isrc)
+                self._ingest_lyrics(existing, path)
                 if Path(scanned.path).resolve() != Path(existing.path).resolve():
                     try:
                         Path(scanned.path).unlink()
@@ -61,6 +66,7 @@ class DownloadedTrackImporter:
             self.database.upsert_tracks([scanned])
             stored = self.database.track_by_path(scanned.path) or scanned
             imported.append(stored)
+            self._ingest_lyrics(stored, path)
             if scanned.spotify_id:
                 self.database.save_track_source(scanned.spotify_id, stored, scanned.isrc)
         # A safe sync often has no new files at all. Reuse the existing library
@@ -75,6 +81,19 @@ class DownloadedTrackImporter:
                     imported.append(existing)
                     known_ids.add(spotify_id)
         return imported
+
+    def _ingest_lyrics(self, track, audio_path: Path):
+        if not self.lyrics_service:
+            return
+        for candidate in (audio_path.with_suffix(".lrc"), audio_path.with_suffix(".txt")):
+            if not candidate.is_file():
+                continue
+            timeline = self.lyrics_service.ingest_download(track, candidate)
+            if timeline:
+                self.lyrics_counts["synced" if timeline.synchronized else "plain"] += 1
+            else:
+                self.lyrics_counts["failed"] += 1
+            return
 
     @staticmethod
     def _match_metadata(track: Track, metadata: list[dict]) -> dict | None:
@@ -95,11 +114,13 @@ class DownloadedTrackImporter:
 class SpotDLImportService:
     """Connect subprocess completion to the database without blocking GTK."""
 
-    def __init__(self, database, scanner, callback: Callable | None = None):
+    def __init__(self, database, scanner, callback: Callable | None = None,
+                 lyrics_service: LyricsService | None = None):
         self.database = database
         self.scanner = scanner
         self.callback = callback
-        self.importer = DownloadedTrackImporter(database, scanner)
+        self.importer = DownloadedTrackImporter(database, scanner, lyrics_service)
+        self.lyrics_service = lyrics_service
 
     def import_async(self, job, payload: dict):
         thread = threading.Thread(
@@ -112,12 +133,14 @@ class SpotDLImportService:
         self._emit("import-started", job, {})
         sync_file = job.sync_file if job.sync_file and job.sync_file.exists() else None
         metadata = read_sync_metadata(sync_file) if sync_file else []
-        tracks = self.importer.import_files(payload.get("files", set()), metadata)
+        files = payload.get("files", set())
+        tracks = self.importer.import_files(files, metadata)
         playlist_name, cover_url = self._playlist_oembed(job.source) if job.job_type in {"sync", "playlist"} else (None, None)
         cover_path = self._download_cover(job, metadata, cover_url)
         self._emit("import-finished", job, {
             "tracks": tracks, "metadata": metadata, "sync_file": str(sync_file) if sync_file else None,
             "cover_path": cover_path, "playlist_name": playlist_name,
+            "lyrics_counts": self.importer.lyrics_counts,
         })
 
     @staticmethod

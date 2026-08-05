@@ -37,3 +37,9 @@ Spotify files are written to `Music/Groovia`, with synchronized playlists in
 `Music/Groovia/Synced Playlists`. The Flatpak requests network access and
 scoped read/write access to the user's Music directory so these configured
 destinations work inside the sandbox; no home-directory permission is used.
+
+Lyrics are optional. When enabled, spotDL receives the configured `--lyrics`
+providers and generates local `.lrc` files when the installed version supports
+`--generate-lrc`. Groovia keeps lyrics mappings in SQLite and stores manually
+imported lyrics under `$XDG_DATA_HOME/groovia/lyrics`; edited lyrics are
+preserved during later downloads and synchronization.

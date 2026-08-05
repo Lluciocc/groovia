@@ -6,6 +6,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..lyrics import LyricsService
 from .importer import SpotDLImportService
 from .manager import DownloadManager
 from .spotdl import SourceInfo, classify_input, read_sync_metadata, read_sync_source
@@ -17,7 +18,8 @@ class SpotDLService:
         self.scanner = scanner
         self.callback = callback
         self.manager = DownloadManager(data_dir, self._manager_event, database)
-        self.importer = SpotDLImportService(database, scanner, self._import_event)
+        self.lyrics = LyricsService(database, scanner, data_dir)
+        self.importer = SpotDLImportService(database, scanner, self._import_event, self.lyrics)
         self._contexts: dict[str, dict] = {}
 
     @property
@@ -51,7 +53,10 @@ class SpotDLService:
     def submit(self, value: str, sync_enabled: bool = True, sync_mode: str = "safe",
                existing_action: str | None = None, playlist_id: int | None = None,
                output_format: str = "mp3", bitrate: str = "auto",
-               cover_policy: str = "follow", order_policy: str = "spotify"):
+               cover_policy: str = "follow", order_policy: str = "spotify",
+               lyrics_mode: str = "none", lyrics_fallback: bool = True,
+               generate_lrc: bool = False, lyrics_providers: tuple[str, ...] = (),
+               sync_remove_lrc: bool = False):
         info = self.classify(value)
         if info.kind == "invalid":
             self._emit("input-error", None, {"message": "Enter a Spotify track, Spotify playlist or .spotdl file."})
@@ -60,7 +65,7 @@ class SpotDLService:
             self._emit("input-error", None, {"message": "This .spotdl file is invalid or cannot be read."})
             return None
         playlist = None
-        if info.kind == "playlist":
+        if info.kind in {"playlist", "album"}:
             playlist = self.database.playlist_by_source(info.spotify_id, info.value)
         elif info.kind == "sync":
             sync_url = None
@@ -84,15 +89,15 @@ class SpotDLService:
         else:
             if playlist is None:
                 if existing_action == "duplicate":
-                    name = self._unique_name(f"Spotify Playlist {info.spotify_id or 'Import'}")
+                    name = self._unique_name(f"Spotify {info.kind.title()} {info.spotify_id or 'Import'}")
                 else:
-                    name = f"Spotify Playlist {info.spotify_id or 'Import'}"
+                    name = f"Spotify {info.kind.title()} {info.spotify_id or 'Import'}"
                 destination = self.sync_root / (info.spotify_id or "imported")
                 sync_file = self.data_root / "sync" / f"{info.spotify_id or 'imported'}.spotdl"
                 destination.mkdir(parents=True, exist_ok=True)
                 sync_file.parent.mkdir(parents=True, exist_ok=True)
                 playlist = self.database.create_playlist(
-                    name, source_url=info.value if info.kind == "playlist" else sync_url,
+                    name, source_url=info.value if info.kind in {"playlist", "album"} else sync_url,
                     source_id=info.spotify_id, sync_file=str(sync_file),
                     managed_dir=str(destination), sync_mode=sync_mode,
                     cover_policy=cover_policy, order_policy=order_policy,
@@ -123,12 +128,18 @@ class SpotDLService:
             job_type, source, destination, sync_file if job_type == "sync" else None,
             sync_mode=sync_mode, output_format=output_format, bitrate=bitrate,
             playlist_id=playlist.id if playlist else playlist_id,
+            lyrics_mode=lyrics_mode, lyrics_fallback=lyrics_fallback,
+            generate_lrc=generate_lrc, lyrics_providers=lyrics_providers,
+            sync_remove_lrc=sync_remove_lrc,
         )
         self._contexts[job.id] = context
         return job
 
     def synchronize(self, playlist_id: int, sync_mode: str | None = None,
-                    output_format: str = "mp3", bitrate: str = "auto"):
+                    output_format: str = "mp3", bitrate: str = "auto",
+                    lyrics_mode: str = "none", lyrics_fallback: bool = True,
+                    generate_lrc: bool = False, lyrics_providers: tuple[str, ...] = (),
+                    sync_remove_lrc: bool = False):
         playlist = self.database.playlist(playlist_id)
         if not playlist or not playlist.sync_file:
             self._emit("sync-error", None, {"playlist_id": playlist_id, "message": "Synchronization data is missing."})
@@ -143,12 +154,30 @@ class SpotDLService:
             "sync", playlist.sync_file, destination,
             playlist.sync_file, sync_mode=mode, output_format=output_format,
             bitrate=bitrate, playlist_id=playlist.id,
+            lyrics_mode=lyrics_mode, lyrics_fallback=lyrics_fallback,
+            generate_lrc=generate_lrc, lyrics_providers=lyrics_providers,
+            sync_remove_lrc=sync_remove_lrc,
         )
         self._contexts[job.id] = {"playlist": playlist, "info": SourceInfo("sync", playlist.sync_file), "replace": False}
         return job
 
     def disconnect(self, playlist_id: int):
         self.database.update_playlist_source(playlist_id, sync_status="disconnected", auto_sync="manual")
+
+    def find_lyrics(self, track, *, providers: tuple[str, ...] = (), fallback: bool = True):
+        """Ask spotDL for lyrics while keeping the existing audio file untouched."""
+        if not track.spotify_id:
+            self._emit("lyrics-error", None, {"track": track, "message": "This track has no Spotify source mapping."})
+            return None
+        source = f"https://open.spotify.com/track/{track.spotify_id}"
+        destination = Path(track.path).parent
+        job = self.manager.submit(
+            "lyrics", source, destination, sync_mode="safe", output_format="mp3",
+            bitrate="auto", lyrics_mode="synced", lyrics_fallback=fallback,
+            generate_lrc=True, lyrics_providers=providers or ("synced", "genius", "musixmatch", "azlyrics"),
+        )
+        self._contexts[job.id] = {"track": track}
+        return job
 
     def _unique_name(self, base: str) -> str:
         names = {item.name for item in self.database.playlists()}
@@ -160,6 +189,16 @@ class SpotDLService:
         return name
 
     def _manager_event(self, event, job, payload):
+        if job and job.job_type == "lyrics" and event == "finished":
+            context = self._contexts.get(job.id, {})
+            track = context.get("track")
+            lrc_path = Path(track.path).with_suffix(".lrc") if track else None
+            timeline = self.lyrics.ingest_download(track, lrc_path) if track and lrc_path and lrc_path.exists() else None
+            self._emit("lyrics-completed", job, {"track": track, "timeline": timeline})
+            return
+        if job and job.job_type == "lyrics" and event in {"failed", "cancelled"}:
+            self._emit("lyrics-failed", job, {"track": self._contexts.get(job.id, {}).get("track"), "error": job.error or event})
+            return
         if event == "finished":
             self.importer.import_async(job, payload)
         elif event in {"failed", "cancelled"}:
@@ -216,10 +255,12 @@ class SpotDLService:
                 last_sync_at=now if job.state == "finished" else playlist.last_sync_at,
                 last_sync_result=f"{len(ordered)} tracks imported" if job.state == "finished" else (job.error or "partial failure"),
             )
+            if job.state == "finished" and job.job_type == "sync" and job.sync_mode == "mirror" and job.sync_remove_lrc:
+                self.lyrics.cleanup_missing_managed(job.destination)
         terminal_event = "completed" if job.state == "finished" else ("cancelled" if job.state == "cancelled" else "failed")
         self._emit(terminal_event, job, {
             "tracks": tracks, "playlist": playlist, "metadata": payload.get("metadata", []),
-            "count": len(tracks),
+            "count": len(tracks), "lyrics_counts": payload.get("lyrics_counts", {}),
         })
 
     def _emit(self, event, job, payload):

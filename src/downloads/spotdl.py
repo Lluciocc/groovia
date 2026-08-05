@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 SPOTIFY_ID = re.compile(r"^[A-Za-z0-9]{22}$")
 SPOTIFY_URL = re.compile(
-    r"^https?://open\.spotify\.com/(?:intl-[^/]+/)?(?P<kind>track|playlist)/(?P<id>[A-Za-z0-9]{22})(?:[/?#].*)?$",
+    r"^https?://open\.spotify\.com/(?:intl-[^/]+/)?(?P<kind>track|playlist|album)/(?P<id>[A-Za-z0-9]{22})(?:[/?#].*)?$",
     re.IGNORECASE,
 )
 SYNC_SUFFIX = ".spotdl"
@@ -71,6 +71,7 @@ class SpotDLCommandResolver:
         base = Path(data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
         self.data_dir = base / "groovia"
         self._command: tuple[str, ...] | None = None
+        self._supported_options: set[str] | None = None
 
     @property
     def venv_dir(self) -> Path:
@@ -149,6 +150,22 @@ class SpotDLCommandResolver:
 
     def invalidate(self) -> None:
         self._command = None
+        self._supported_options = None
+
+    def supported_options(self) -> set[str]:
+        """Read the installed CLI help before using optional flags."""
+        if self._supported_options is not None:
+            return self._supported_options
+        try:
+            result = subprocess.run(
+                [*self.resolve(), "--help"], stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True, timeout=8, check=False,
+                env=self.process_environment(),
+            )
+            self._supported_options = set(re.findall(r"--[a-z0-9-]+", result.stdout))
+        except (OSError, subprocess.SubprocessError, SpotDLUnavailable):
+            self._supported_options = set()
+        return self._supported_options
 
     def installation_command(self) -> list[str]:
         self.venv_dir.parent.mkdir(parents=True, exist_ok=True)

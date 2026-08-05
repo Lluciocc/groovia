@@ -68,6 +68,25 @@ class LibraryScanner:
         """Read one file on demand, useful for libraries imported before artwork support."""
         return self._read_track(Path(path))
 
+    def read_embedded_lyrics(self, path: str) -> str | None:
+        """Read plain lyrics exposed by GStreamer without altering the audio file."""
+        try:
+            discoverer = GstPbutils.Discoverer.new(5 * Gst.SECOND)
+            info = discoverer.discover_uri(Path(path).resolve().as_uri())
+            tags = info.get_tags()
+            if not tags:
+                return None
+            for tag_name in ("lyrics", "unsynced-lyrics", "extended-comment"):
+                try:
+                    ok, value = tags.get_string(tag_name)
+                    if ok and value:
+                        return value
+                except Exception:
+                    continue
+        except Exception:
+            return None
+        return None
+
     def inspect_track(self, path: str) -> dict[str, str]:
         """Return presentation-friendly technical metadata for Song Information."""
         details = {

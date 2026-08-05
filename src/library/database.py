@@ -94,8 +94,36 @@ class LibraryDatabase:
               downloaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS track_sources_track_id ON track_sources(track_id);
+            CREATE TABLE IF NOT EXISTS lyrics (
+              id INTEGER PRIMARY KEY,
+              track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+              kind TEXT NOT NULL,
+              file_path TEXT,
+              provider TEXT,
+              language TEXT,
+              source_id TEXT,
+              content TEXT,
+              downloaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              user_edited INTEGER NOT NULL DEFAULT 0,
+              timing_offset_ms INTEGER NOT NULL DEFAULT 0,
+              checksum TEXT
+            );
+            CREATE INDEX IF NOT EXISTS lyrics_track ON lyrics(track_id);
+            CREATE INDEX IF NOT EXISTS lyrics_kind ON lyrics(track_id, kind);
             """
         )
+        job_columns = {
+            "lyrics_mode": "TEXT NOT NULL DEFAULT 'none'",
+            "lyrics_fallback": "INTEGER NOT NULL DEFAULT 1",
+            "generate_lrc": "INTEGER NOT NULL DEFAULT 0",
+            "lyrics_providers": "TEXT",
+            "sync_remove_lrc": "INTEGER NOT NULL DEFAULT 0",
+        }
+        existing_jobs = {row[1] for row in self.connection.execute("PRAGMA table_info(download_jobs)")}
+        for name, definition in job_columns.items():
+            if name not in existing_jobs:
+                self.connection.execute(f"ALTER TABLE download_jobs ADD COLUMN {name} {definition}")
 
     @staticmethod
     def _playlist(row: sqlite3.Row) -> Playlist:
@@ -322,13 +350,20 @@ class LibraryDatabase:
 
     def save_download_job(self, job_id: str, job_type: str, source: str, state: str,
                           progress: float = 0.0, destination: str | None = None,
-                          error: str | None = None, completed_at: str | None = None) -> None:
+                          error: str | None = None, completed_at: str | None = None,
+                          lyrics_mode: str = "none", lyrics_fallback: bool = True,
+                          generate_lrc: bool = False, lyrics_providers: str | None = None,
+                          sync_remove_lrc: bool = False) -> None:
         self.connection.execute(
-            """INSERT INTO download_jobs(id, job_type, source, state, progress, destination, error, completed_at)
-               VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,
+            """INSERT INTO download_jobs(id, job_type, source, state, progress, destination, error, completed_at,
+               lyrics_mode, lyrics_fallback, generate_lrc, lyrics_providers, sync_remove_lrc)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,
                progress=excluded.progress, destination=excluded.destination, error=excluded.error,
-               completed_at=excluded.completed_at""",
-            (job_id, job_type, source, state, progress, destination, error, completed_at),
+               completed_at=excluded.completed_at, lyrics_mode=excluded.lyrics_mode,
+               lyrics_fallback=excluded.lyrics_fallback, generate_lrc=excluded.generate_lrc,
+               lyrics_providers=excluded.lyrics_providers, sync_remove_lrc=excluded.sync_remove_lrc""",
+            (job_id, job_type, source, state, progress, destination, error, completed_at,
+             lyrics_mode, int(lyrics_fallback), int(generate_lrc), lyrics_providers, int(sync_remove_lrc)),
         )
         self.connection.commit()
 
@@ -337,6 +372,74 @@ class LibraryDatabase:
             "SELECT * FROM download_jobs ORDER BY created_at DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def lyrics_for_track(self, track_id: int | None) -> list[dict]:
+        if track_id is None:
+            return []
+        rows = self.connection.execute(
+            "SELECT * FROM lyrics WHERE track_id = ? ORDER BY user_edited DESC, modified_at DESC",
+            (track_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def save_lyrics(self, track_id: int, kind: str, file_path: str | None,
+                    provider: str | None, language: str | None, content: str,
+                    *, user_edited: bool = False, timing_offset_ms: int = 0,
+                    checksum: str | None = None, source_id: str | None = None) -> int:
+        row = self.connection.execute(
+            "SELECT id FROM lyrics WHERE track_id = ? AND kind = ? AND file_path IS ?",
+            (track_id, kind, file_path),
+        ).fetchone()
+        if row:
+            self.connection.execute(
+                """UPDATE lyrics SET provider=?, language=?, source_id=?, content=?,
+                   modified_at=CURRENT_TIMESTAMP, user_edited=?, timing_offset_ms=?, checksum=?
+                   WHERE id=?""",
+                (provider, language, source_id, content, int(user_edited), timing_offset_ms, checksum, row[0]),
+            )
+            lyric_id = row[0]
+        else:
+            cursor = self.connection.execute(
+                """INSERT INTO lyrics(track_id, kind, file_path, provider, language, source_id,
+                   content, user_edited, timing_offset_ms, checksum)
+                   VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (track_id, kind, file_path, provider, language, source_id, content,
+                 int(user_edited), timing_offset_ms, checksum),
+            )
+            lyric_id = cursor.lastrowid
+        self.connection.commit()
+        return lyric_id
+
+    def delete_lyrics(self, lyric_id: int) -> None:
+        self.connection.execute("DELETE FROM lyrics WHERE id = ?", (lyric_id,))
+        self.connection.commit()
+
+    def lyrics_path_references(self, file_path: str) -> int:
+        row = self.connection.execute(
+            "SELECT COUNT(*) FROM lyrics WHERE file_path = ?", (file_path,)
+        ).fetchone()
+        return int(row[0]) if row else 0
+
+    def update_lyrics_offset(self, lyric_id: int, offset_ms: int) -> None:
+        self.connection.execute(
+            "UPDATE lyrics SET timing_offset_ms = ?, modified_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (int(offset_ms), lyric_id),
+        )
+        self.connection.commit()
+
+    def lyrics_coverage(self, track_ids: Iterable[int] | None = None) -> dict[str, int]:
+        if track_ids:
+            values = list(track_ids)
+            placeholders = ",".join("?" for _ in values)
+            rows = self.connection.execute(
+                f"SELECT kind, COUNT(DISTINCT track_id) count FROM lyrics WHERE track_id IN ({placeholders}) GROUP BY kind",
+                values,
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                "SELECT kind, COUNT(DISTINCT track_id) count FROM lyrics GROUP BY kind"
+            ).fetchall()
+        return {row["kind"]: row["count"] for row in rows}
 
     def rename_playlist(self, playlist_id: int, name: str) -> None:
         self.connection.execute(

@@ -37,6 +37,11 @@ class DownloadJob:
     current_track: str = ""
     completed: int = 0
     failed: int = 0
+    lyrics_mode: str = "none"
+    lyrics_fallback: bool = True
+    generate_lrc: bool = False
+    lyrics_providers: tuple[str, ...] = ()
+    sync_remove_lrc: bool = False
     created_at: float = field(default_factory=time.time)
     process: subprocess.Popen | None = field(default=None, repr=False)
     cancel_requested: bool = field(default=False, repr=False)
@@ -63,6 +68,9 @@ class ProgressParser:
         return data
 
 
+LYRICS_PROVIDERS = {"synced", "genius", "musixmatch", "azlyrics"}
+
+
 class DownloadManager:
     """Run one controlled spotDL subprocess at a time, independently of playback."""
 
@@ -83,6 +91,11 @@ class DownloadManager:
                         previous["id"], previous["job_type"], previous["source"],
                         "interrupted", previous["progress"], previous["destination"],
                         "Groovia closed while this job was running",
+                        lyrics_mode=previous.get("lyrics_mode", "none"),
+                        lyrics_fallback=bool(previous.get("lyrics_fallback", 1)),
+                        generate_lrc=bool(previous.get("generate_lrc", 0)),
+                        lyrics_providers=previous.get("lyrics_providers"),
+                        sync_remove_lrc=bool(previous.get("sync_remove_lrc", 0)),
                     )
 
     @property
@@ -95,13 +108,18 @@ class DownloadManager:
     def submit(self, job_type: str, source: str, destination: str | Path,
                sync_file: str | Path | None = None, sync_mode: str = "safe",
                output_format: str = "mp3", bitrate: str = "auto",
-               playlist_id: int | None = None) -> DownloadJob:
+               playlist_id: int | None = None, lyrics_mode: str = "none",
+               lyrics_fallback: bool = True, generate_lrc: bool = False,
+               lyrics_providers: tuple[str, ...] = (), sync_remove_lrc: bool = False) -> DownloadJob:
         job = DownloadJob(
             id=uuid.uuid4().hex, job_type=job_type, source=source,
             destination=Path(destination).expanduser().resolve(),
             sync_file=Path(sync_file).expanduser().resolve() if sync_file else None,
             sync_mode=sync_mode, output_format=output_format, bitrate=bitrate,
             playlist_id=playlist_id,
+            lyrics_mode=lyrics_mode, lyrics_fallback=lyrics_fallback,
+            generate_lrc=generate_lrc, lyrics_providers=tuple(lyrics_providers),
+            sync_remove_lrc=sync_remove_lrc,
         )
         job.destination.mkdir(parents=True, exist_ok=True)
         with self._lock:
@@ -138,6 +156,8 @@ class DownloadManager:
         return self.submit(
             old.job_type, old.source, old.destination, old.sync_file, old.sync_mode,
             old.output_format, old.bitrate, old.playlist_id,
+            old.lyrics_mode, old.lyrics_fallback, old.generate_lrc,
+            old.lyrics_providers, old.sync_remove_lrc,
         )
 
     def _start_next(self):
@@ -172,13 +192,29 @@ class DownloadManager:
         ])
         if job.bitrate != "auto":
             args.extend(["--bitrate", job.bitrate])
+        supported = self.resolver.supported_options()
+        if job.lyrics_mode != "none" and "--lyrics" in supported:
+            providers = [provider for provider in (job.lyrics_providers or ("synced", "genius", "musixmatch", "azlyrics")) if provider in LYRICS_PROVIDERS]
+            if not providers:
+                providers = ["synced", "genius", "musixmatch", "azlyrics"]
+            if job.lyrics_mode != "synced":
+                providers = [provider for provider in providers if provider != "synced"]
+                if not providers:
+                    providers = ["genius", "musixmatch", "azlyrics"]
+            if job.lyrics_fallback:
+                providers.extend(provider for provider in ("genius", "musixmatch", "azlyrics") if provider not in providers)
+            args.extend(["--lyrics", *providers])
+            if job.generate_lrc and "--generate-lrc" in supported and "synced" in providers:
+                args.append("--generate-lrc")
+        if job.job_type == "sync" and job.sync_mode == "mirror" and job.sync_remove_lrc and "--sync-remove-lrc" in supported:
+            args.append("--sync-remove-lrc")
         return args
 
     @staticmethod
     def _files(destination: Path) -> set[str]:
         return {
             str(path.resolve()) for path in destination.rglob("*")
-            if path.is_file() and path.suffix.lower() in {".mp3", ".flac", ".ogg", ".oga", ".opus", ".wav", ".aac", ".m4a", ".mp4"}
+            if path.is_file() and path.suffix.lower() in {".mp3", ".flac", ".ogg", ".oga", ".opus", ".wav", ".aac", ".m4a", ".mp4", ".lrc", ".txt"}
         }
 
     def _run(self, job: DownloadJob):
@@ -241,6 +277,8 @@ class DownloadManager:
                 job.id, job.job_type, job.source, state, job.progress,
                 str(job.destination), job.error,
                 time.strftime("%Y-%m-%dT%H:%M:%S%z") if state in {"finished", "failed", "cancelled"} else None,
+                job.lyrics_mode, job.lyrics_fallback, job.generate_lrc,
+                ",".join(job.lyrics_providers), job.sync_remove_lrc,
             )
         if not self.callback:
             return
