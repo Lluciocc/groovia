@@ -7,6 +7,8 @@ import gi
 gi.require_version("Gst", "1.0")
 from gi.repository import GLib, GObject, Gst
 
+from ..autodj.planner import TransitionPlan
+
 
 LOGGER = logging.getLogger("groovia.audio")
 if not LOGGER.handlers:
@@ -23,6 +25,7 @@ class AudioPlayer(GObject.Object):
     __gsignals__ = {
         "track-changed": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
         "position-changed": (GObject.SignalFlags.RUN_FIRST, None, (float, float)),
+        "seeked": (GObject.SignalFlags.RUN_FIRST, None, (float,)),
         "state-changed": (GObject.SignalFlags.RUN_FIRST, None, (bool,)),
         "volume-changed": (GObject.SignalFlags.RUN_FIRST, None, (float,)),
         "error": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
@@ -106,6 +109,7 @@ class AudioPlayer(GObject.Object):
             self.pipeline.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT,
                                       max(0, int(seconds * Gst.SECOND)))
             self._cancel_crossfade("seek", preserve_next=True)
+            self.emit("seeked", self.position)
 
     def set_volume(self, value):
         self.volume = max(0.0, min(1.0, value))
@@ -124,13 +128,25 @@ class AudioPlayer(GObject.Object):
             self.emit("position-changed", position, self.duration)
             if self.playing and duration > 0:
                 remaining = duration - position
-                started_auto_dj = False
-                if (self.auto_dj_enabled and self.auto_dj_plan and self.next_track and
-                        self.auto_dj_plan.auto_dj and
-                        self.auto_dj_plan.next_path == self.next_track.path and
-                        remaining <= self.auto_dj_plan.duration):
-                    started_auto_dj = self._start_auto_dj_transition()
-                if not started_auto_dj and self.crossfade > 0 and remaining <= self.crossfade:
+                auto_dj_plan_matches = bool(
+                    self.auto_dj_enabled and self.auto_dj_plan and self.next_track and
+                    self.auto_dj_plan.auto_dj and
+                    self.auto_dj_plan.next_path == self.next_track.path
+                )
+                if auto_dj_plan_matches:
+                    if not self._crossfading and remaining <= self.auto_dj_plan.duration:
+                        started = self._start_auto_dj_transition()
+                        if not started and not self._crossfading:
+                            LOGGER.warning(
+                                "Auto DJ transition not ready yet: %s -> %s; waiting for EOS fallback",
+                                self.track.title if self.track else "Unknown track",
+                                self.next_track.title if self.next_track else "Unknown track",
+                            )
+                    # Do not enter the old crossfade branch while a valid Auto
+                    # DJ plan exists. It can discard the preloaded stream and
+                    # create the audible gap Auto DJ is meant to avoid.
+                    return True
+                if self.crossfade > 0 and remaining <= self.crossfade:
                     if self.auto_dj_enabled and self.next_pipeline:
                         self._stop_pipeline(self.next_pipeline)
                         self.next_pipeline = None
@@ -182,10 +198,18 @@ class AudioPlayer(GObject.Object):
         return False
 
     def _start_auto_dj_transition(self, duration_override=None):
-        if self._crossfading or not self.pipeline or not self.next_pipeline or not self.next_track:
+        if self._crossfading or not self.pipeline or not self.next_track:
             return False
+        if self.next_pipeline is None:
+            LOGGER.warning("Auto DJ next stream was unavailable; recreating it for %s", self.next_track.title)
+            self.next_pipeline = self._new_pipeline(self.next_track, 0.0, True)
+            if self.next_pipeline is None:
+                return False
+            self.next_pipeline.set_state(Gst.State.PAUSED)
         plan = self.auto_dj_plan
         if plan is None:
+            return False
+        if not getattr(plan, "auto_dj", True):
             return False
         if plan.next_path != self.next_track.path:
             return False
@@ -198,6 +222,12 @@ class AudioPlayer(GObject.Object):
             "Auto DJ transition starting: %s -> %s (%ss, %s)",
             self.track.title if self.track else "Unknown track", self.next_track.title,
             round(duration, 2), plan.mode,
+        )
+        print(
+            f"[Groovia Auto DJ] transition started "
+            f"{self.track.title if self.track else 'Unknown track'!r} -> {self.next_track.title!r} "
+            f"mode={plan.mode} duration={duration:.2f}s",
+            flush=True,
         )
         self._crossfading = True
         self._auto_dj_transition = True
@@ -249,6 +279,11 @@ class AudioPlayer(GObject.Object):
             self.auto_dj_plan = None
             self.position = 0.0
             self.duration = self.track.duration
+            print(
+                f"[Groovia Auto DJ] transition finished "
+                f"{previous_track.title if previous_track else 'Unknown track'!r} -> {self.track.title!r}",
+                flush=True,
+            )
             self.emit("track-changed", self.track)
             self.emit("track-transitioned", previous_track, self.track)
             self.emit("auto-dj-transition-finished", previous_track, self.track)
@@ -268,6 +303,19 @@ class AudioPlayer(GObject.Object):
                 self.next_pipeline = self._new_pipeline(track, 0.0, True)
                 if self.next_pipeline:
                     self.next_pipeline.set_state(Gst.State.PAUSED)
+            if (self.auto_dj_enabled and self.track and track.path != self.track.path and
+                    self.next_pipeline is not None):
+                # Analysis runs asynchronously. Keep an immediate, short
+                # Auto DJ plan so a track can never reach EOS and silently
+                # fall back just because ffmpeg is still analyzing it.
+                self.auto_dj_plan = TransitionPlan(
+                    current_path=self.track.path,
+                    next_path=track.path,
+                    duration=2.0,
+                    mode="fallback",
+                    smart_eq=False,
+                    reason="analysis pending",
+                )
         else:
             LOGGER.info("No next track prepared; automatic transition disabled")
             self._stop_pipeline(self.next_pipeline)
@@ -294,6 +342,11 @@ class AudioPlayer(GObject.Object):
             return
         if plan.next_path == self.next_track.path and plan.current_path == getattr(self.track, "path", None):
             self.auto_dj_plan = plan
+            LOGGER.info(
+                "Auto DJ plan ready: %s -> %s (%ss, %s)",
+                self.track.title if self.track else "Unknown track",
+                self.next_track.title, round(plan.duration, 2), plan.reason,
+            )
 
     def start_prepared_transition(self, duration=1.8):
         """Use a prepared next stream for an immediate manual Next action."""
@@ -305,6 +358,8 @@ class AudioPlayer(GObject.Object):
     def _cancel_crossfade(self, reason="manual", preserve_next=False):
         if self._crossfading:
             LOGGER.info("Crossfade cancelled (%s)", reason)
+            if self._auto_dj_transition:
+                print(f"[Groovia Auto DJ] transition cancelled reason={reason}", flush=True)
         pending_track = self.next_track if preserve_next else None
         if self.next_pipeline:
             self._stop_pipeline(self.next_pipeline)
@@ -321,6 +376,18 @@ class AudioPlayer(GObject.Object):
             LOGGER.error("GStreamer error: %s", error.message)
             self.emit("error", error.message)
         elif message.type == Gst.MessageType.EOS and source is self.pipeline and not self._crossfading:
+            if self.auto_dj_enabled and self.next_pipeline and self.next_track:
+                if not self.auto_dj_plan:
+                    self.auto_dj_plan = TransitionPlan(
+                        current_path=self.track.path,
+                        next_path=self.next_track.path,
+                        duration=.8,
+                        mode="fallback",
+                        smart_eq=False,
+                        reason="end-of-stream fallback",
+                    )
+                if self._start_auto_dj_transition(duration_override=.8):
+                    return
             LOGGER.info("Track ended without an active crossfade; handing off to the queue")
             self.emit("finished")
 

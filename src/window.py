@@ -1274,6 +1274,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _connect_player(self):
         self.player.connect("track-changed", self._on_track_changed)
         self.player.connect("position-changed", self._on_position)
+        self.player.connect("seeked", self._on_player_seeked)
         self.player.connect("state-changed", self._on_state)
         self.player.connect("track-transitioned", self._on_track_transitioned)
         self.player.connect("auto-dj-transition-started", self._on_auto_dj_transition_started)
@@ -2171,6 +2172,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._lyrics_widgets["view"].update_position(int(position * 1000))
         if getattr(self, "_lyrics_fullscreen_view", None):
             self._lyrics_fullscreen_view.update_position(int(position * 1000))
+
+    def _on_player_seeked(self, _player, _position):
+        if self._auto_dj_enabled and self.current:
+            # A seek invalidates the old overlap position. Keep the same queue
+            # candidate, but recreate its stream and its analysis plan.
+            self._prepare_next_track()
 
     def _on_state(self, _player, playing):
         self.play_button.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")

@@ -103,6 +103,11 @@ class TrackAnalyzer:
         path = str(Path(track.path).expanduser().resolve())
         cached = self.cache.get(path)
         if cached:
+            print(
+                f"[Groovia Auto DJ] analysis ready (cache) track={getattr(track, 'title', Path(path).name)!r} "
+                f"bpm={cached.bpm or 'unknown'} lufs={cached.loudness_lufs or 'unknown'}",
+                flush=True,
+            )
             return cached
 
         duration = float(getattr(track, "duration", 0.0) or 0.0)
@@ -128,6 +133,12 @@ class TrackAnalyzer:
             phrase_boundaries=(),
         )
         self.cache.put(analysis)
+        print(
+            f"[Groovia Auto DJ] analysis ready track={getattr(track, 'title', Path(path).name)!r} "
+            f"bpm={analysis.bpm or 'unknown'} lufs={analysis.loudness_lufs or 'unknown'} "
+            f"intro_silence={analysis.intro_silence:.2f}s outro_silence={analysis.outro_silence:.2f}s",
+            flush=True,
+        )
         return analysis
 
     def _probe_tags(self, path: str) -> dict[str, str]:

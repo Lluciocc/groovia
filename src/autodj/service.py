@@ -33,9 +33,22 @@ class AutoDJService:
                 left = self.analyzer.analyze(current)
                 right = self.analyzer.analyze(following)
                 plan = self.planner.plan(current, following, left, right, options)
+                print(
+                    f"[Groovia Auto DJ] transition selected "
+                    f"{getattr(current, 'title', current.path)!r} -> "
+                    f"{getattr(following, 'title', following.path)!r} "
+                    f"mode={plan.mode} duration={plan.duration:.2f}s reason={plan.reason!r} ready=yes",
+                    flush=True,
+                )
             except Exception:
                 # A plan is optional; playback must remain available even if a
                 # decoder or an analyzer fails.
+                print(
+                    f"[Groovia Auto DJ] analysis/transition unavailable "
+                    f"{getattr(current, 'title', current.path)!r} -> "
+                    f"{getattr(following, 'title', following.path)!r} ready=no",
+                    flush=True,
+                )
                 plan = None
             GLib.idle_add(self._deliver, generation, plan)
 
