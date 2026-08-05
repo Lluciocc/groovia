@@ -536,6 +536,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             widgets["view"].update_position(int(self.player.position * 1000))
         if getattr(self, "_lyrics_fullscreen_view", None):
             self._lyrics_fullscreen_view.set_document(timeline)
+            self._set_fullscreen_lyrics_cover(track)
 
     def _update_lyrics_for_current(self):
         if not hasattr(self, "_lyrics_widgets"):
@@ -612,6 +613,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if getattr(self, "_lyrics_fullscreen_window", None):
             self._lyrics_fullscreen_window.present()
             return
+        self._resolve_cover(self.current)
         timeline, _row = self.download_service.lyrics.find(self.current)
         window = Gtk.Window(title=f"Lyrics — {self.current.title}", transient_for=self)
         window.set_default_size(1000, 720)
@@ -621,13 +623,23 @@ class GrooviaWindow(Adw.ApplicationWindow):
         close = Gtk.Button(icon_name="view-restore-symbolic", tooltip_text="Exit fullscreen")
         close.connect("clicked", lambda *_: window.close())
         top.append(close); root.append(top)
+
+        background = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, opacity=0.22)
+        background.set_can_shrink(True)
+        cover_path = self.current.cover_path if self.current.cover_path and Path(self.current.cover_path).is_file() else None
+        if cover_path:
+            background.set_filename(cover_path)
         view = LyricsView()
         view.set_document(timeline)
         view.connect("seek-requested", lambda _view, seconds: self.player.seek(seconds))
-        root.append(view)
+        lyrics_overlay = Gtk.Overlay()
+        lyrics_overlay.set_child(background)
+        lyrics_overlay.add_overlay(view)
+        root.append(lyrics_overlay)
         window.set_child(root)
         self._lyrics_fullscreen_window = window
         self._lyrics_fullscreen_view = view
+        self._lyrics_fullscreen_background = background
         window.connect("close-request", lambda current: self._close_lyrics_fullscreen(current))
         window.present()
         try:
@@ -638,7 +650,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _close_lyrics_fullscreen(self, window):
         self._lyrics_fullscreen_window = None
         self._lyrics_fullscreen_view = None
+        self._lyrics_fullscreen_background = None
         return False
+
+    def _set_fullscreen_lyrics_cover(self, track):
+        background = getattr(self, "_lyrics_fullscreen_background", None)
+        if background is None:
+            return
+        cover_path = track.cover_path if track and track.cover_path and Path(track.cover_path).is_file() else None
+        background.set_filename(cover_path)
 
     def _playlist_page(self, playlist_id: int):
         root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
@@ -2001,6 +2021,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._lyrics_fullscreen_window.set_title(f"Lyrics — {track.title}")
             timeline, _row = self.download_service.lyrics.find(track)
             self._lyrics_fullscreen_view.set_document(timeline)
+            self._set_fullscreen_lyrics_cover(track)
         self._notify_track(track, cover_path)
 
     def _notify_track(self, track, cover_path):
