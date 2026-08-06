@@ -82,6 +82,22 @@ Verify bundled tools to capture the four tool versions. Reinstall Groovia to
 repair packaged tools; the application never removes files from its
 installation directory.
 
+## Build for windows
+```powershell
+$env:Path = @(
+    "C:\msys64\ucrt64\bin"
+    "C:\msys64\usr\bin"
+    "C:\Program Files (x86)\Inno Setup 6"
+    $env:Path
+) -join ";"
+
+Get-Process Groovia,spotdl,ffmpeg,ffprobe,deno `
+    -ErrorAction SilentlyContinue |
+    Stop-Process -Force
+
+.\packaging\windows\build-windows.ps1
+```
+
 ## Spotify imports
 
 Groovia uses the official spotDL command-line tool to find matching audio on
