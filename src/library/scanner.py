@@ -1,6 +1,6 @@
+import hashlib
 import os
 import threading
-import hashlib
 from pathlib import Path
 
 import gi

@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 import urllib.error
 import urllib.parse
 import urllib.request
-import json
 from pathlib import Path
 from typing import Callable
 
+from ..lyrics import LyricsService
 from ..models import Track
 from .spotdl import AUDIO_SUFFIXES, read_sync_metadata
-from ..lyrics import LyricsService
 
 
 def _key(value: str | None) -> str:

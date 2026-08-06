@@ -12,7 +12,8 @@ from gi.repository import GLib
 from ..lyrics import LyricsService
 from .importer import SpotDLImportService
 from .manager import DownloadManager
-from .spotdl import SourceInfo, classify_input, read_sync_metadata, read_sync_source
+from .spotdl import (SourceInfo, classify_input, read_sync_metadata,
+                     read_sync_source)
 
 
 class SpotDLService:

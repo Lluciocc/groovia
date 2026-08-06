@@ -1,6 +1,7 @@
 """Local lyrics models, parsing and storage helpers."""
 
-from .parser import LyricsLine, LyricsTimeline, LyricsWord, parse_lyrics, parse_lrc
+from .parser import (LyricsLine, LyricsTimeline, LyricsWord, parse_lrc,
+                     parse_lyrics)
 from .service import LyricsBundle, LyricsService
 
 __all__ = [

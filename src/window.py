@@ -1,12 +1,12 @@
+import logging
 import os
 import random
 import shutil
 import time
-import logging
 from datetime import datetime, timezone
 from html import escape
-from urllib.parse import unquote, urlparse
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
