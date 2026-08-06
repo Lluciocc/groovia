@@ -33,6 +33,8 @@ groovia_sources = [
   'models.py',
   'preferences.py',
   'mpris.py',
+  'platform_compat.py',
+  'runtime.py',
   'visuals.py',
 ]
 

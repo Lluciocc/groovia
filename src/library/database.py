@@ -1,20 +1,21 @@
 import json
-import os
 import sqlite3
 from pathlib import Path
 from typing import Iterable
 
 from ..models import Playlist, Track
+from ..platform_compat import get_data_dir
 
 
 class LibraryDatabase:
     """Small SQLite store for the local library and playback history."""
 
     def __init__(self, data_dir: str | None = None):
-        base = Path(
-            data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")
+        self.path = (
+            Path(data_dir) / "groovia" / "library.db"
+            if data_dir
+            else get_data_dir() / "library.db"
         )
-        self.path = base / "groovia" / "library.db"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row

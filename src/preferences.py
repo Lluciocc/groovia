@@ -1,5 +1,7 @@
 from gi.repository import Adw, Gio, Gtk
 
+from .platform_compat import IS_WINDOWS
+
 
 class PreferencesWindow(Adw.PreferencesWindow):
     def __init__(self, parent):
@@ -177,32 +179,50 @@ class PreferencesWindow(Adw.PreferencesWindow):
             description="Groovia uses spotDL to find matching audio and preserve Spotify metadata.",
         )
         dependency = Adw.ActionRow(
-            title="spotDL dependencies",
-            subtitle="spotDL, FFmpeg and Deno are managed separately from playback.",
-        )
-        repair = Gtk.Button(label="Install or repair", valign=Gtk.Align.CENTER)
-        repair.add_css_class("suggested-action")
-        repair.connect(
-            "clicked",
-            lambda *_: parent._show_dependency_dialog(
-                ["spotDL", "FFmpeg", "Deno"],
-                lambda: None,
-                presenter=self,
+            title=("Bundled downloader tools" if IS_WINDOWS else "spotDL dependencies"),
+            subtitle=(
+                "spotDL, FFmpeg and Deno are installed with Groovia and managed by the installer."
+                if IS_WINDOWS
+                else "spotDL, FFmpeg and Deno are managed separately from playback."
             ),
         )
+        repair = Gtk.Button(
+            label=("Verify bundled tools" if IS_WINDOWS else "Install or repair"),
+            valign=Gtk.Align.CENTER,
+        )
+        repair.add_css_class("suggested-action")
+        if IS_WINDOWS:
+            repair.connect("clicked", lambda *_: parent._verify_download_tools(self))
+        else:
+            repair.connect(
+                "clicked",
+                lambda *_: parent._show_dependency_dialog(
+                    ["spotDL", "FFmpeg", "Deno"],
+                    lambda: None,
+                    presenter=self,
+                ),
+            )
         dependency.add_suffix(repair)
         spotdl_group.add(dependency)
-        remove_row = Adw.ActionRow(
-            title="Remove Groovia-managed tools",
-            subtitle="Remove the private spotDL environment, FFmpeg and Deno copies.",
-        )
-        remove = Gtk.Button(label="Remove", valign=Gtk.Align.CENTER)
-        remove.add_css_class("destructive-action")
-        remove.connect(
-            "clicked", lambda *_: parent._remove_managed_dependencies(presenter=self)
-        )
-        remove_row.add_suffix(remove)
-        spotdl_group.add(remove_row)
+        if IS_WINDOWS:
+            spotdl_group.add(
+                Adw.ActionRow(
+                    title="Packaged tools",
+                    subtitle="Reinstall Groovia to repair bundled downloader files.",
+                )
+            )
+        else:
+            remove_row = Adw.ActionRow(
+                title="Remove Groovia-managed tools",
+                subtitle="Remove the private spotDL environment, FFmpeg and Deno copies.",
+            )
+            remove = Gtk.Button(label="Remove", valign=Gtk.Align.CENTER)
+            remove.add_css_class("destructive-action")
+            remove.connect(
+                "clicked", lambda *_: parent._remove_managed_dependencies(presenter=self)
+            )
+            remove_row.add_suffix(remove)
+            spotdl_group.add(remove_row)
         downloads.add(spotdl_group)
 
         locations = Adw.PreferencesGroup(title="Locations")

@@ -9,8 +9,17 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio
 
-from .mpris import MprisService
+from .platform_compat import supports_mpris
+from .runtime import configure_icon_theme, initialize_runtime
+
+initialize_runtime()
+
 from .window import GrooviaWindow
+
+if supports_mpris():
+    from .mpris import MprisService
+else:
+    MprisService = None
 
 
 class GrooviaApplication(Adw.Application):
@@ -48,8 +57,9 @@ class GrooviaApplication(Adw.Application):
         )
 
     def do_activate(self):
+        configure_icon_theme()
         win = self.props.active_window or GrooviaWindow(application=self)
-        if not hasattr(self, "mpris"):
+        if MprisService is not None and not hasattr(self, "mpris"):
             self.mpris = MprisService(win)
         win.present()
 
@@ -84,7 +94,7 @@ class GrooviaApplication(Adw.Application):
             getattr(window, method)()
 
     def do_shutdown(self):
-        if hasattr(self, "mpris"):
+        if getattr(self, "mpris", None) is not None:
             self.mpris.close()
         # PyGObject does not bind Gio's virtual shutdown method correctly
         # through super() here; call the parent implementation explicitly.
@@ -99,4 +109,5 @@ class GrooviaApplication(Adw.Application):
 
 
 def main(_version):
+    initialize_runtime()
     return GrooviaApplication().run(sys.argv)

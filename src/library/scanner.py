@@ -1,5 +1,4 @@
 import hashlib
-import os
 import threading
 from pathlib import Path
 
@@ -12,6 +11,7 @@ from gi.repository import GLib, Gst
 Gst.init(None)
 
 from ..models import Track
+from ..platform_compat import get_cache_dir
 
 FORMATS = {".mp3", ".flac", ".ogg", ".oga", ".opus", ".wav", ".aac", ".m4a", ".mp4"}
 
@@ -19,11 +19,7 @@ FORMATS = {".mp3", ".flac", ".ogg", ".oga", ".opus", ".wav", ".aac", ".m4a", ".m
 class LibraryScanner:
     def __init__(self, database):
         self.database = database
-        self.artwork_dir = (
-            Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-            / "groovia"
-            / "artwork"
-        )
+        self.artwork_dir = get_cache_dir() / "artwork"
         self.artwork_dir.mkdir(parents=True, exist_ok=True)
 
     def scan_async(self, folders: list[str], callback):

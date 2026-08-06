@@ -8,13 +8,18 @@ falls back to a conservative transition in that case.
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 import subprocess
 import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+from ..platform_compat import (
+    get_data_dir,
+    get_managed_executable_name,
+    subprocess_window_kwargs,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,10 +44,11 @@ class AnalysisCache:
     """JSON cache keyed by canonical path and file signature."""
 
     def __init__(self, data_dir: str | Path | None = None):
-        base = Path(
-            data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")
+        self.path = (
+            Path(data_dir) / "groovia" / "autodj" / "analysis.json"
+            if data_dir
+            else get_data_dir() / "autodj" / "analysis.json"
         )
-        self.path = base / "groovia" / "autodj" / "analysis.json"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._items: dict[str, dict] = {}
@@ -103,8 +109,8 @@ class TrackAnalyzer:
 
     def __init__(self, cache: AnalysisCache | None = None):
         self.cache = cache or AnalysisCache()
-        self.ffmpeg = shutil.which("ffmpeg")
-        self.ffprobe = shutil.which("ffprobe")
+        self.ffmpeg = shutil.which(get_managed_executable_name("ffmpeg"))
+        self.ffprobe = shutil.which(get_managed_executable_name("ffprobe"))
 
     def analyze(self, track) -> TrackAnalysis:
         path = str(Path(track.path).expanduser().resolve())
@@ -163,7 +169,12 @@ class TrackAnalyzer:
         ]
         try:
             result = subprocess.run(
-                command, capture_output=True, text=True, timeout=12, check=False
+                command,
+                capture_output=True,
+                text=True,
+                timeout=12,
+                check=False,
+                **subprocess_window_kwargs(),
             )
             payload = json.loads(result.stdout or "{}")
             format_data = payload.get("format") or {}
@@ -196,7 +207,12 @@ class TrackAnalyzer:
         ]
         try:
             result = subprocess.run(
-                command, capture_output=True, text=True, timeout=45, check=False
+                command,
+                capture_output=True,
+                text=True,
+                timeout=45,
+                check=False,
+                **subprocess_window_kwargs(),
             )
             output = f"{result.stdout}\n{result.stderr}"
             starts = [float(value) for value in self._silence_start.findall(output)]
@@ -225,7 +241,12 @@ class TrackAnalyzer:
         ]
         try:
             result = subprocess.run(
-                command, capture_output=True, text=True, timeout=60, check=False
+                command,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+                **subprocess_window_kwargs(),
             )
             output = f"{result.stdout}\n{result.stderr}"
             loudness = self._loudness.findall(output)

@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from ..platform_compat import get_cache_dir
+
 DEFAULT_BASE = "https://apic-desktop.musixmatch.com/ws/1.1/"
 APP_ID = "web-desktop-app-v1.0"
 USER_AGENT = (
@@ -148,7 +150,7 @@ class MusixmatchRichsync:
         self.token_cache = (
             Path(token_cache)
             if token_cache
-            else (Path.home() / ".cache" / "musixmatch-richsync-token.json")
+            else get_cache_dir() / "musixmatch-richsync-token.json"
         )
         self._token = None
         self._token_at = 0.0
