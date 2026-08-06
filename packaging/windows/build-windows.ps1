@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [switch]$SkipInstaller
+    [switch]$SkipInstaller,
+    [switch]$Console
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,6 +43,7 @@ Get-ChildItem -LiteralPath (Join-Path $RepoRoot "src") -Directory | Where-Object
 }
 
 $env:GROOVIA_WINDOWS_BUILD_DIR = $BuildRoot
+$env:GROOVIA_WINDOWS_CONSOLE = if ($Console) { "1" } else { "0" }
 & glib-compile-resources `
     --sourcedir (Join-Path $RepoRoot "src") `
     --target (Join-Path $BuildRoot "groovia.gresource") `

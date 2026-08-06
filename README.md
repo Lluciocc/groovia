@@ -50,13 +50,17 @@ available to PowerShell. From PowerShell or the UCRT64 shell:
 powershell.exe -ExecutionPolicy Bypass -File packaging/windows/build-windows.ps1
 # Or, from MSYS2 UCRT64:
 bash packaging/windows/build-windows.sh
+# Keep a console attached to the Windows executable when debugging:
+bash packaging/windows/build-windows.sh --console
 ```
 
 The reproducible build compiles the GResource and GSettings schema bundle,
 creates a one-folder application at `dist/Groovia/`, validates
 `dist/Groovia/Groovia.exe`, and writes the Inno Setup installer under
 `dist/installer/`. Pass `-SkipInstaller` or `--skip-installer` when only the
-PyInstaller directory is needed. The installed application uses
+PyInstaller directory is needed. Pass `-Console` to the PowerShell script, or
+`--console` to the Bash wrapper, to build a console-enabled executable. The
+installed application uses
 `%LOCALAPPDATA%\Programs\Groovia`; user music, database, lyrics, cache and
 settings are outside that directory and survive upgrades and uninstall.
 

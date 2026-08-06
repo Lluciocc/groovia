@@ -153,7 +153,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,
+    console=os.environ.get("GROOVIA_WINDOWS_CONSOLE", "0").lower() in {"1", "true", "yes", "on"},
     icon=(
         str(BUILD_ROOT / "Groovia.ico")
         if (BUILD_ROOT / "Groovia.ico").is_file()
