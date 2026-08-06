@@ -21,6 +21,58 @@ meson compile -C build
 
 The interface is intentionally English for this first release.
 
+Linux is Groovia's primary supported platform. The Meson, GNOME and Flatpak
+builds remain the reference implementations and retain XDG paths, GSettings,
+GTK resources and MPRIS integration.
+
+## Windows development and packaging
+
+Windows support targets a native MSYS2 UCRT64 environment. Install the
+project's runtime packages and build tools in the UCRT64 shell; do not use the
+MSYS shell or install into an MSYS2 directory:
+
+```sh
+pacman -S mingw-w64-ucrt-x86_64-python \
+  mingw-w64-ucrt-x86_64-python-gobject \
+  mingw-w64-ucrt-x86_64-gtk4 mingw-w64-ucrt-x86_64-libadwaita \
+  mingw-w64-ucrt-x86_64-gstreamer mingw-w64-ucrt-x86_64-gst-plugins-base \
+  mingw-w64-ucrt-x86_64-gst-plugins-good mingw-w64-ucrt-x86_64-gst-plugins-bad \
+  mingw-w64-ucrt-x86_64-glib2 mingw-w64-ucrt-x86_64-python-pip
+```
+
+Then install the pinned build tool into that UCRT64 Python environment with
+`python -m pip install pyinstaller`.
+
+Install Inno Setup and ImageMagick on Windows, with `iscc.exe` and `magick`
+available to PowerShell. From PowerShell or the UCRT64 shell:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File packaging/windows/build-windows.ps1
+# Or, from MSYS2 UCRT64:
+bash packaging/windows/build-windows.sh
+```
+
+The reproducible build compiles the GResource and GSettings schema bundle,
+creates a one-folder application at `dist/Groovia/`, validates
+`dist/Groovia/Groovia.exe`, and writes the Inno Setup installer under
+`dist/installer/`. Pass `-SkipInstaller` or `--skip-installer` when only the
+PyInstaller directory is needed. The installed application uses
+`%LOCALAPPDATA%\Programs\Groovia`; user music, database, lyrics, cache and
+settings are outside that directory and survive upgrades and uninstall.
+
+The bundled runtime includes the GStreamer core libraries, plugin DLLs,
+plugin scanner, selected GObject typelibs, schemas and resources. The plugin
+subset is sourced from the MSYS2 GStreamer installation rather than copying
+the whole MSYS2 tree. Audio formats still depend on the plugins available in
+the build environment. MPRIS is Linux-only and is skipped on Windows.
+
+For Windows troubleshooting, run the build with `-SkipInstaller` first and
+check `dist/Groovia/`. A missing schema, resource, typelib or GStreamer
+scanner is reported by the runtime helper. spotDL is optional; a packaged
+build cannot create a new Python virtual environment, so use a development
+build or provide a pre-existing managed spotDL installation when downloads
+are required.
+
 ## Spotify imports
 
 Groovia uses the official spotDL command-line tool to find matching audio on

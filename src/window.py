@@ -16,6 +16,7 @@ from .downloads import SpotDLService, classify_input
 from .library import LibraryDatabase, LibraryScanner
 from .library.scanner import FORMATS
 from .models import Playlist, Track
+from .platform_compat import IS_WINDOWS, open_folder
 from .visuals import css_rgb, mix, palette_for
 from .widgets import LyricsView, VinylView
 
@@ -2548,6 +2549,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 "file manager action skipped; file does not exist path=%r", track.path
             )
             self._toast("The audio file is no longer available")
+            return
+        if IS_WINDOWS:
+            try:
+                open_folder(Path(track.path).parent)
+            except OSError as error:
+                LOGGER.warning("Windows file manager launch failed: %s", error)
+                self._toast("Could not open the file manager")
             return
         file = Gio.File.new_for_path(str(Path(track.path).resolve()))
         try:

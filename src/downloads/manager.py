@@ -14,6 +14,7 @@ from typing import Callable
 
 from gi.repository import GLib
 
+from ..platform_compat import subprocess_window_kwargs
 from .spotdl import SpotDLCommandResolver, SpotDLUnavailable
 
 EventCallback = Callable[[str, "DownloadJob", dict], None]
@@ -342,6 +343,7 @@ class DownloadManager:
                 text=True,
                 bufsize=1,
                 env={**self.resolver.process_environment(), "PYTHONUNBUFFERED": "1"},
+                **subprocess_window_kwargs(),
             )
             parser = ProgressParser()
             assert job.process.stdout is not None
@@ -478,6 +480,7 @@ class DownloadManager:
                 text=True,
                 bufsize=1,
                 env=self.resolver.process_environment(),
+                **subprocess_window_kwargs(),
             )
             self._dependency_process = process
             assert process.stdout is not None

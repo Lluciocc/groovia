@@ -12,6 +12,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from ..platform_compat import (
+    IS_WINDOWS,
+    get_data_dir,
+    get_managed_executable_name,
+    subprocess_window_kwargs,
+)
+
 SPOTIFY_ID = re.compile(r"^[A-Za-z0-9]{22}$")
 SPOTIFY_URL = re.compile(
     r"^https?://open\.spotify\.com/(?:intl-[^/]+/)?(?P<kind>track|playlist|album)/(?P<id>[A-Za-z0-9]{22})(?:[/?#].*)?$",
@@ -77,10 +84,9 @@ class SpotDLCommandResolver:
     """Resolve one working spotDL command and cache it for the session."""
 
     def __init__(self, data_dir: str | Path | None = None):
-        base = Path(
-            data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")
+        self.data_dir = (
+            Path(data_dir) / "groovia" if data_dir else get_data_dir()
         )
-        self.data_dir = base / "groovia"
         self._command: tuple[str, ...] | None = None
         self._supported_options: set[str] | None = None
 
@@ -98,16 +104,21 @@ class SpotDLCommandResolver:
         environment = dict(os.environ)
         environment["HOME"] = str(self.managed_home)
         environment["XDG_CONFIG_HOME"] = str(self.managed_home / ".config")
+        if IS_WINDOWS:
+            environment["USERPROFILE"] = str(self.managed_home)
+            environment["APPDATA"] = str(self.managed_home / "AppData" / "Roaming")
+            environment["LOCALAPPDATA"] = str(self.managed_home / "AppData" / "Local")
         return environment
 
     def candidates(self) -> list[tuple[str, ...]]:
         candidates: list[tuple[str, ...]] = []
-        spotdl = shutil.which("spotdl")
+        spotdl = shutil.which(get_managed_executable_name("spotdl"))
         if spotdl:
             candidates.append((spotdl,))
-        python3 = shutil.which("python3") or sys.executable
-        candidates.append((python3, "-m", "spotdl"))
-        venv_spotdl = self.venv_dir / "bin" / "spotdl"
+        if not getattr(sys, "frozen", False):
+            python = shutil.which("python3") or shutil.which("python") or sys.executable
+            candidates.append((python, "-m", "spotdl"))
+        venv_spotdl = self.venv_dir / ("Scripts" if IS_WINDOWS else "bin") / get_managed_executable_name("spotdl")
         if venv_spotdl.exists():
             candidates.append((str(venv_spotdl),))
         return candidates
@@ -125,6 +136,7 @@ class SpotDLCommandResolver:
                     timeout=5,
                     check=False,
                     env=self.process_environment(),
+                    **subprocess_window_kwargs(),
                 )
                 if result.returncode == 0:
                     self._command = candidate
@@ -143,19 +155,20 @@ class SpotDLCommandResolver:
             spotdl=command is not None,
             ffmpeg=self._binary_available("ffmpeg"),
             deno=self._binary_available("deno"),
-            python=shutil.which("python3") is not None or bool(sys.executable),
+            python=not getattr(sys, "frozen", False) or self._venv_python().is_file(),
             pip=shutil.which("pip3") is not None or shutil.which("pip") is not None,
             command=command,
         )
 
     def _binary_available(self, name: str) -> bool:
-        if shutil.which(name):
+        if shutil.which(get_managed_executable_name(name)):
             return True
+        executable = get_managed_executable_name(name)
         managed = (
-            self.venv_dir / "bin" / name,
-            self.data_dir / "downloader" / name,
-            self.managed_home / ".config" / "spotdl" / name,
-            self.managed_home / ".spotdl" / name,
+            self.venv_dir / ("Scripts" if IS_WINDOWS else "bin") / executable,
+            self.data_dir / "downloader" / executable,
+            self.managed_home / ".config" / "spotdl" / executable,
+            self.managed_home / ".spotdl" / executable,
         )
         return any(path.exists() and path.is_file() for path in managed)
 
@@ -176,6 +189,7 @@ class SpotDLCommandResolver:
                 timeout=8,
                 check=False,
                 env=self.process_environment(),
+                **subprocess_window_kwargs(),
             )
             self._supported_options = set(re.findall(r"--[a-z0-9-]+", result.stdout))
         except (OSError, subprocess.SubprocessError, SpotDLUnavailable):
@@ -183,8 +197,16 @@ class SpotDLCommandResolver:
         return self._supported_options
 
     def installation_command(self) -> list[str]:
+        if getattr(sys, "frozen", False):
+            raise SpotDLUnavailable(
+                "The packaged Windows build cannot create a Python environment; "
+                "install spotDL separately or use a development build."
+            )
         self.venv_dir.parent.mkdir(parents=True, exist_ok=True)
         return [sys.executable, "-m", "venv", str(self.venv_dir)]
+
+    def _venv_python(self) -> Path:
+        return self.venv_dir / ("Scripts" if IS_WINDOWS else "bin") / get_managed_executable_name("python")
 
     def managed_dependency_paths(self) -> tuple[Path, ...]:
         """Return only paths that Groovia itself owns and may safely remove."""

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from .parser import LyricsTimeline, parse_lyrics
+from ..platform_compat import get_data_dir
 
 
 @dataclass(slots=True)
@@ -30,10 +30,11 @@ class LyricsService:
     def __init__(self, database, scanner, data_dir: str | Path | None = None):
         self.database = database
         self.scanner = scanner
-        base = Path(
-            data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")
+        self.root = (
+            Path(data_dir) / "groovia" / "lyrics"
+            if data_dir
+            else get_data_dir() / "lyrics"
         )
-        self.root = base / "groovia" / "lyrics"
         self.root.mkdir(parents=True, exist_ok=True)
         # Keep the custom Musixmatch workaround as the single Musixmatch
         # implementation.  Import lazily so the lyrics package remains usable

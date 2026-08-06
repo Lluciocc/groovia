@@ -10,6 +10,7 @@ from pathlib import Path
 from gi.repository import GLib
 
 from ..lyrics import LyricsService
+from ..platform_compat import get_data_dir, get_music_dir
 from .importer import SpotDLImportService
 from .manager import DownloadManager
 from .spotdl import (SourceInfo, classify_input, read_sync_metadata,
@@ -32,18 +33,16 @@ class SpotDLService:
 
     @property
     def data_root(self) -> Path:
-        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
-        return base / "groovia"
+        return get_data_dir()
 
     @property
     def music_dir(self) -> Path:
         configured = os.environ.get("GROOVIA_MUSIC_DIR")
-        if configured:
-            return Path(configured).expanduser().resolve()
-        music = os.environ.get("XDG_MUSIC_DIR")
         return (
-            Path(music).expanduser() if music else Path.home() / "Music"
-        ) / "Groovia"
+            Path(configured).expanduser().resolve()
+            if configured
+            else get_music_dir() / "Groovia"
+        )
 
     @property
     def sync_root(self) -> Path:
