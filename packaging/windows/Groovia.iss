@@ -17,7 +17,7 @@ VersionInfoCopyright=Copyright 2026 Lluciocc
 DefaultDirName={localappdata}\Programs\Groovia
 DefaultGroupName={#MyAppName}
 PrivilegesRequired=lowest
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesInstallIn64BitMode=x64
 OutputDir=..\..\dist\installer
 OutputBaseFilename=Groovia-{#MyAppVersion}-Setup
 Compression=lzma2
@@ -42,6 +42,9 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Groovia"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
 
 ; The uninstaller removes only {app}. Groovia's database, music, lyrics,
 ; downloader cache and settings live outside {app} and are intentionally kept.

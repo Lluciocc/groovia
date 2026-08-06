@@ -16,7 +16,7 @@ from .downloads import SpotDLService, classify_input
 from .library import LibraryDatabase, LibraryScanner
 from .library.scanner import FORMATS
 from .models import Playlist, Track
-from .platform_compat import IS_WINDOWS, open_folder
+from .platform_compat import IS_WINDOWS, iter_gtk_children, open_folder
 from .visuals import css_rgb, mix, palette_for
 from .widgets import LyricsView, VinylView
 
@@ -242,9 +242,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
         ):
             self._set_album_palette(None)
 
+    @staticmethod
+    def _load_css(provider: Gtk.CssProvider, css: str) -> None:
+        """Load CSS across PyGObject builds with different signatures."""
+        try:
+            provider.load_from_data(css)
+        except TypeError:
+            provider.load_from_data(css, len(css))
+
     def _apply_css(self):
         provider = Gtk.CssProvider()
-        provider.load_from_data(CSS.encode())
+        self._load_css(provider, CSS)
         display = Gdk.Display.get_default()
         Gtk.StyleContext.add_provider_for_display(
             display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
@@ -267,7 +275,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         .now-card {{ border: 1px solid {accent_css}; }}
         .vinyl-panel {{ background: radial-gradient(circle at 50% 40%, {accent_css}, {background_css} 54%, #111117 100%); }}
         """
-        self._dynamic_provider.load_from_data(css.encode())
+        self._load_css(self._dynamic_provider, css)
         if hasattr(self, "vinyl"):
             self.vinyl.set_accent(accent)
 
@@ -1081,7 +1089,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         return root
 
     def _refresh_playlist_sidebar(self):
-        for child in list(self.playlist_list):
+        for child in iter_gtk_children(self.playlist_list):
             self.playlist_list.remove(child)
         for playlist in self.database.playlists():
             row = Gtk.ListBoxRow()
@@ -1149,7 +1157,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         sort_names = ["custom", "title", "artist", "album", "duration", "date"]
         sort = sort_names[min(view["sort"].get_selected(), len(sort_names) - 1)]
         tracks = self.database.playlist_tracks(playlist_id, search, sort)
-        for child in list(view["cover_slot"]):
+        for child in iter_gtk_children(view["cover_slot"]):
             view["cover_slot"].remove(child)
         view["cover_slot"].append(
             cover_widget(self._playlist_cover_path(playlist), 180)
@@ -1169,7 +1177,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             subtitle_text += f" · Lyrics {coverage.get('synced', 0)} synced / {coverage.get('plain', 0)} plain"
         view["subtitle"].set_label(subtitle_text)
         view["sync_button"].set_visible(bool(playlist.source_url or playlist.sync_file))
-        for child in list(view["tracks"]):
+        for child in iter_gtk_children(view["tracks"]):
             view["tracks"].remove(child)
         for position, track in enumerate(tracks, 1):
             view["tracks"].append(self._track_row(track, True, playlist, position))
@@ -1812,7 +1820,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _refresh_library(self, search=""):
         tracks = self.database.all_tracks(search)
-        for child in list(self.library_content_box):
+        for child in iter_gtk_children(self.library_content_box):
             self.library_content_box.remove(child)
         self.library_content_box.append(
             Gtk.Label(label="All Music", xalign=0, css_classes=["hero-title"])
@@ -1831,11 +1839,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         self.library_content_box.append(self.library_items_box)
         self._append_library_batch()
-        for child in list(self.album_flow):
+        for child in iter_gtk_children(self.album_flow):
             self.album_flow.remove(child)
         for album in self.database.albums():
             self.album_flow.append(self._album_card(album))
-        for child in list(self.recent_box):
+        for child in iter_gtk_children(self.recent_box):
             self.recent_box.remove(child)
         recent = self.database.recent_tracks()
         for track in recent:
@@ -2317,7 +2325,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _refresh_queue(self):
         LOGGER.info("queue refresh size=%s", len(self.queue))
-        for child in list(self.queue_box):
+        for child in iter_gtk_children(self.queue_box):
             self.queue_box.remove(child)
         self.queue_empty.set_visible(not self.queue)
         for track in self.queue:
@@ -2536,7 +2544,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         getattr(self, f"{kind}_detail_heading").set_label(title)
         getattr(self, f"{kind}_detail_subtitle").set_label(subtitle)
         items = getattr(self, f"{kind}_detail_items")
-        for child in list(items):
+        for child in iter_gtk_children(items):
             items.remove(child)
         for item in tracks:
             items.append(self._track_row(item, True))
@@ -3380,11 +3388,20 @@ class GrooviaWindow(Adw.ApplicationWindow):
             for name, present in (("spotDL", status.spotdl), ("FFmpeg", status.ffmpeg))
             if not present
         ]
+        if IS_WINDOWS and not status.deno:
+            missing.append("Deno")
         if not status.deno:
             self._append_download_log(
                 "Deno was not found; spotDL recommends it for reliable YouTube matching."
+                if not IS_WINDOWS
+                else "Bundled Deno was not found in this Windows installation."
             )
         if missing:
+            if IS_WINDOWS:
+                self._download_error(
+                    "Bundled downloader tools are missing. Reinstall Groovia or rebuild the Windows package."
+                )
+                return
             self._show_dependency_dialog(
                 missing,
                 lambda: self._start_download(entry.get_text(), sync.get_active()),
@@ -3560,8 +3577,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
         elif event == "conflict":
             self._show_playlist_conflict(payload)
         elif event == "dependency-installed":
-            self._toast("Dependencies installed")
-            self._append_download_log("Dependencies installed successfully")
+            message = (
+                "Bundled downloader tools verified"
+                if payload.get("bundled")
+                else "Dependencies installed"
+            )
+            self._toast(message)
+            self._append_download_log(message)
             dependency_dialog = getattr(self, "_dependency_dialog", None)
             if dependency_dialog:
                 dependency_dialog.close()
@@ -3570,6 +3592,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._download_resume = None
             if resume:
                 resume()
+        elif event == "dependency-verified":
+            self._append_download_log("Downloader tool versions:")
+            for name, result in payload.get("tools", {}).items():
+                if result.get("available"):
+                    self._append_download_log(f"{name}: {result.get('version', 'available')}")
+                else:
+                    self._append_download_log(f"{name}: unavailable ({result.get('error', 'unknown error')})")
+            self._toast("Bundled downloader tools verified")
         elif event == "dependency-started":
             status = payload.get("status")
             self._set_dependency_feedback("Preparing dependency installation…")
@@ -3609,7 +3639,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if buffer is None:
             return
         end = buffer.get_end_iter()
-        buffer.insert(end, f"{line}\n")
+        # GTK 4 bindings require the explicit text length.  -1 means the
+        # supplied UTF-8 string is NUL-terminated and keeps this compatible
+        # with non-ASCII downloader output as well.
+        buffer.insert(end, f"{line}\n", -1)
 
     def _download_error(self, message):
         self._append_download_log(f"ERROR: {message}")
@@ -3645,6 +3678,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
             )
 
     def _show_dependency_dialog(self, missing, resume, presenter=None):
+        if IS_WINDOWS:
+            self._verify_download_tools(presenter)
+            return
         dialog = Gtk.Dialog(
             title="Install download dependencies",
             transient_for=presenter or self,
@@ -3723,6 +3759,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._dependency_dialog = None
             dialog.close()
 
+    def _verify_download_tools(self, presenter=None):
+        self._append_download_log("Verifying bundled downloader tools…")
+        self.download_service.manager.verify_tools(self._download_event)
+        self._toast("Verifying bundled downloader tools")
+
     def _set_dependency_feedback(self, message, pulse=False):
         feedback = getattr(self, "_dependency_feedback", None)
         if feedback:
@@ -3738,7 +3779,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if buffer is None:
             return
         end = buffer.get_end_iter()
-        buffer.insert(end, f"{line}\n")
+        buffer.insert(end, f"{line}\n", -1)
 
     def _remove_managed_dependencies(self, presenter=None):
         if (
@@ -3881,3 +3922,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.player.close()
         self.database.close()
         super().close()
+        if IS_WINDOWS:
+            application = self.get_application()
+            if application:
+                application.quit()

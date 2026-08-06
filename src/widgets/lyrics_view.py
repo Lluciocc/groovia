@@ -10,6 +10,8 @@ gi.require_version("PangoCairo", "1.0")
 
 from gi.repository import Adw, Gio, GLib, GObject, Gtk, Pango, PangoCairo
 
+from ..platform_compat import iter_gtk_children
+
 
 class WordSyncedLyricsRenderer(Gtk.DrawingArea):
     """Draw one word-synced line with a single, canonical Pango layout.
@@ -470,7 +472,7 @@ class LyricsView(Gtk.ScrolledWindow):
         if self._scroll_animation:
             self._scroll_animation.skip()
             self._scroll_animation = None
-        for child in list(self._content):
+        for child in iter_gtk_children(self._content):
             self._content.remove(child)
         self._buttons = []
         self._word_renderers = {}

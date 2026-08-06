@@ -98,3 +98,17 @@ def subprocess_window_kwargs() -> dict:
         "startupinfo": startupinfo,
         "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0),
     }
+
+
+def iter_gtk_children(container):
+    """Return a stable snapshot of a GTK 4 widget's direct children.
+
+    PyGObject does not expose GTK containers as Python iterables on every
+    platform, so callers must use GTK's sibling traversal API instead.
+    """
+    children = []
+    child = container.get_first_child()
+    while child is not None:
+        children.append(child)
+        child = child.get_next_sibling()
+    return children

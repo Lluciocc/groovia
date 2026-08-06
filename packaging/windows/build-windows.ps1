@@ -53,6 +53,12 @@ if ($LASTEXITCODE -ne 0) { throw "glib-compile-resources failed" }
     (Join-Path $RepoRoot "data")
 if ($LASTEXITCODE -ne 0) { throw "glib-compile-schemas failed" }
 
+& (Join-Path $PSScriptRoot "stage-dependencies.ps1") `
+    -ManifestPath (Join-Path $PSScriptRoot "dependencies.json") `
+    -OutputDir (Join-Path $BuildRoot "tools") `
+    -LicenseDir (Join-Path $BuildRoot "licenses")
+if ($LASTEXITCODE -ne 0) { throw "Windows downloader dependency staging failed" }
+
 # PyInstaller and Inno Setup both require an ICO.  ImageMagick converts the
 # maintained GNOME SVG without adding a second icon source to the repository.
 Require-Command "magick" "Install ImageMagick to convert the application SVG to an ICO."
@@ -70,6 +76,78 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 $Exe = Join-Path $AppRoot "Groovia.exe"
 if (-not (Test-Path -LiteralPath $Exe)) { throw "PyInstaller output is missing: $Exe" }
 Write-Host "Validated standalone application: $Exe"
+
+$IconRoot = Join-Path $AppRoot "_internal\share\icons"
+$AdwaitaIconRoot = Join-Path $IconRoot "Adwaita"
+$HicolorIconRoot = Join-Path $IconRoot "hicolor"
+foreach ($ThemeRoot in @($AdwaitaIconRoot, $HicolorIconRoot)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $ThemeRoot "index.theme") -PathType Leaf)) {
+        throw "Packaged icon theme metadata is missing: $(Join-Path $ThemeRoot 'index.theme')"
+    }
+}
+
+$RequiredIconNames = @(
+    "audio-x-generic-symbolic",
+    "open-menu-symbolic",
+    "list-add-symbolic",
+    "folder-music-symbolic",
+    "document-save-symbolic",
+    "media-playback-start-symbolic",
+    "go-previous-symbolic",
+    "find-location-symbolic",
+    "view-fullscreen-symbolic",
+    "text-x-generic-symbolic",
+    "system-search-symbolic",
+    "document-open-symbolic",
+    "image-x-generic-symbolic",
+    "view-restore-symbolic",
+    "media-playlist-shuffle-symbolic",
+    "view-more-symbolic",
+    "view-refresh-symbolic",
+    "starred-symbolic",
+    "view-list-symbolic",
+    "audio-volume-high-symbolic",
+    "media-skip-forward-symbolic",
+    "media-skip-backward-symbolic",
+    "media-playlist-repeat-symbolic",
+    "media-playlist-repeat-song-symbolic",
+    "edit-paste-symbolic",
+    "media-playback-pause-symbolic",
+    "applications-graphics-symbolic",
+    "edit-delete-symbolic",
+    "sidebar-show-symbolic",
+    "go-home-symbolic"
+)
+foreach ($IconName in $RequiredIconNames) {
+    $Match = Get-ChildItem -LiteralPath $IconRoot -Recurse -File | Where-Object { $_.BaseName -eq $IconName } | Select-Object -First 1
+    if (-not $Match) {
+        throw "Required Groovia icon is absent from the packaged themes: $IconName (searched recursively below $IconRoot)"
+    }
+}
+foreach ($IconName in @("io.github.Lluciocc.Groovia", "io.github.Lluciocc.Groovia-symbolic")) {
+    $Match = Get-ChildItem -LiteralPath $HicolorIconRoot -Recurse -File | Where-Object { $_.BaseName -eq $IconName } | Select-Object -First 1
+    if (-not $Match) {
+        throw "Groovia application icon is absent from the packaged hicolor theme: $IconName"
+    }
+}
+Write-Host "Validated Adwaita and hicolor icon themes ($($RequiredIconNames.Count) standard icons plus Groovia icons)"
+
+& python (Join-Path $PSScriptRoot "smoke-test-icons.py") --bundle-root $AppRoot
+if ($LASTEXITCODE -ne 0) { throw "Bundled GTK icon theme smoke test failed" }
+
+$PackagedToolsRoot = Join-Path $AppRoot "_internal\tools"
+
+if (-not (Test-Path -LiteralPath $PackagedToolsRoot)) {
+    throw "Packaged tools directory is missing: $PackagedToolsRoot"
+}
+
+& (Join-Path $PSScriptRoot "smoke-test-tools.ps1") `
+    -ToolsRoot $PackagedToolsRoot
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Packaged downloader tool smoke test failed"
+}
+if ($LASTEXITCODE -ne 0) { throw "Packaged downloader tool smoke test failed" }
 
 if (-not $SkipInstaller) {
     New-Item -ItemType Directory -Force -Path $InstallerRoot | Out-Null

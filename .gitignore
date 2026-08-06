@@ -43,3 +43,5 @@ src/*.ui~
 Thumbs.db
 
 install
+pip
+dist/

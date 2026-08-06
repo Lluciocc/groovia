@@ -10,7 +10,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio
 
 from .platform_compat import supports_mpris
-from .runtime import initialize_runtime
+from .runtime import configure_icon_theme, initialize_runtime
 
 initialize_runtime()
 
@@ -57,6 +57,7 @@ class GrooviaApplication(Adw.Application):
         )
 
     def do_activate(self):
+        configure_icon_theme()
         win = self.props.active_window or GrooviaWindow(application=self)
         if MprisService is not None and not hasattr(self, "mpris"):
             self.mpris = MprisService(win)

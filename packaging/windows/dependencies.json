@@ -1,0 +1,38 @@
+{
+  "spotdl": {
+    "version": "4.5.2",
+    "url": "https://github.com/spotDL/spotify-downloader/releases/download/v4.5.2/spotdl-4.5.2-win32.exe",
+    "sha256": "4490AE3B38C4321173E17975A9990A130CF9A9AEA8132EE2978AFECEFBEEB477",
+    "kind": "file",
+    "cache_name": "spotdl-4.5.2-win32.exe",
+    "output": "spotdl.exe",
+    "license_url": "https://raw.githubusercontent.com/spotDL/spotify-downloader/v4.5.2/LICENSE",
+    "license_sha256": "194110D442EBDF82593EA2151EB439E94C269A0BAD38EEDE7D1AE68531BC6A60",
+    "license_name": "spotDL-LICENSE.txt"
+  },
+  "ffmpeg": {
+    "version": "autobuild-2026-08-06-13-39 / N-125978-g95c43d7df7",
+    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-06-13-39/ffmpeg-N-125978-g95c43d7df7-win64-gpl.zip",
+    "sha256": "ee299bc305e69ebec53c7eb4419a0397df12aaebb9f3c51552ab937248ba9fa9",
+    "kind": "archive",
+    "cache_name": "ffmpeg-N-125978-g95c43d7df7-win64-gpl.zip",
+    "files": {
+      "ffmpeg.exe": "ffmpeg.exe",
+      "ffprobe.exe": "ffprobe.exe"
+    },
+    "license_globs": ["LICENSE*", "COPYING*"]
+  },
+  "deno": {
+    "version": "2.9.4",
+    "url": "https://github.com/denoland/deno/releases/download/v2.9.4/deno-x86_64-pc-windows-msvc.zip",
+    "sha256": "68ED08B05C56CF887E9AA509947DC3F468F7E12F47A13E5C1ABD51D46D1453EF",
+    "kind": "archive",
+    "cache_name": "deno-x86_64-pc-windows-msvc.zip",
+    "files": {
+      "deno.exe": "deno.exe"
+    },
+    "license_url": "https://raw.githubusercontent.com/denoland/deno/v2.9.4/LICENSE.md",
+    "license_sha256": "F62497FFFECC0852960C8D3E6934B9DB86D16396E9B604072E923892CAE3A588",
+    "license_name": "Deno-LICENSE.md"
+  }
+}

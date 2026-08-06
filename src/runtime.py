@@ -9,10 +9,19 @@ import os
 import sys
 from pathlib import Path
 
-from .platform_compat import IS_WINDOWS, get_cache_dir, get_config_dir
+from .platform_compat import (
+    IS_WINDOWS,
+    get_cache_dir,
+    get_config_dir,
+    get_managed_executable_name,
+)
 
 LOGGER = logging.getLogger("groovia.runtime")
 _RESOURCE_REGISTERED = False
+
+
+def is_frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
 
 
 def _resource_roots(resource_dir: str | Path | None = None) -> list[Path]:
@@ -44,9 +53,34 @@ def bundled_resource_path(relative_path: str | Path, resource_dir=None) -> Path:
     return roots[0] / relative
 
 
+def bundled_tool_path(name: str, tools_dir: str | Path | None = None) -> Path | None:
+    """Resolve a native downloader tool in a frozen bundle or dev staging dir."""
+    executable = get_managed_executable_name(name)
+    roots: list[Path] = []
+    if tools_dir:
+        roots.append(Path(tools_dir))
+    if configured := os.environ.get("GROOVIA_TOOLS_DIR"):
+        roots.append(Path(configured))
+    if is_frozen() or IS_WINDOWS:
+        roots.append(bundled_resource_path("tools"))
+    for root in roots:
+        candidate = root / executable
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _set_if_directory(name: str, path: Path) -> None:
     if path.is_dir():
         os.environ.setdefault(name, str(path))
+
+
+def _prepend_path_environment(name: str, path: Path) -> None:
+    """Prepend a bundled search root without discarding user configuration."""
+    value = str(path)
+    entries = [entry for entry in os.environ.get(name, "").split(os.pathsep) if entry]
+    entries = [entry for entry in entries if Path(entry).resolve() != path.resolve()]
+    os.environ[name] = os.pathsep.join([value, *entries])
 
 
 def _configure_bundle_environment(resource_dir=None) -> None:
@@ -89,7 +123,50 @@ def _configure_bundle_environment(resource_dir=None) -> None:
 
     share_dir = bundled_resource_path("share", resource_dir)
     if share_dir.is_dir():
-        os.environ.setdefault("XDG_DATA_DIRS", str(share_dir))
+        if IS_WINDOWS and is_frozen():
+            _prepend_path_environment("XDG_DATA_DIRS", share_dir)
+        else:
+            os.environ.setdefault("XDG_DATA_DIRS", str(share_dir))
+
+
+def configure_icon_theme(resource_dir=None) -> None:
+    """Register the bundled Adwaita theme for a frozen Windows process.
+
+    Linux and Flatpak retain their normal system-selected icon theme.  GTK's
+    display-dependent API is intentionally called separately from the early
+    environment setup, after an application has a display but before its
+    first window is constructed.
+    """
+    if not (IS_WINDOWS and is_frozen()):
+        return
+
+    share_dir = bundled_resource_path("share", resource_dir)
+    icon_dir = share_dir / "icons"
+    if not icon_dir.is_dir():
+        LOGGER.error("Bundled icon theme directory is missing: %s", icon_dir)
+        return
+
+    _prepend_path_environment("XDG_DATA_DIRS", share_dir)
+    try:
+        import gi
+
+        gi.require_version("Gdk", "4.0")
+        gi.require_version("Gtk", "4.0")
+        from gi.repository import Gdk, Gtk
+
+        display = Gdk.Display.get_default()
+        if display is None:
+            LOGGER.warning("Cannot configure bundled icon theme before a GDK display exists")
+            return
+        # GTK 4 exposes the display icon theme as a singleton, on which
+        # set_theme_name() raises a critical assertion.  Set the supported
+        # display setting first; the singleton then selects Adwaita normally.
+        settings = Gtk.Settings.get_for_display(display)
+        settings.set_property("gtk-icon-theme-name", "Adwaita")
+        theme = Gtk.IconTheme.get_for_display(display)
+        theme.add_search_path(str(icon_dir))
+    except Exception:
+        LOGGER.exception("Could not configure the bundled Adwaita icon theme")
 
 
 def _register_gresource(resource_dir=None) -> None:

@@ -14,7 +14,8 @@ from typing import Callable
 
 from gi.repository import GLib
 
-from ..platform_compat import subprocess_window_kwargs
+from ..platform_compat import IS_WINDOWS, subprocess_window_kwargs
+from ..runtime import bundled_tool_path
 from .spotdl import SpotDLCommandResolver, SpotDLUnavailable
 
 EventCallback = Callable[[str, "DownloadJob", dict], None]
@@ -263,6 +264,10 @@ class DownloadManager:
         if job.bitrate != "auto":
             args.extend(["--bitrate", job.bitrate])
         supported = self.resolver.supported_options()
+        if IS_WINDOWS and "--ffmpeg" in supported:
+            ffmpeg = bundled_tool_path("ffmpeg")
+            if ffmpeg:
+                args.extend(["--ffmpeg", str(ffmpeg)])
         if job.lyrics_mode != "none" and "--lyrics" in supported:
             selected = tuple(
                 provider.lower()
@@ -453,7 +458,7 @@ class DownloadManager:
         GLib.idle_add(self.callback, event, job, payload)
 
     def install_spotdl(self, callback: EventCallback | None = None):
-        """Install spotDL into the app-managed venv after explicit UI consent."""
+        """Install spotDL on Linux; Windows tools are staged by the build."""
         self.install_dependencies(callback=callback, install_spotdl=True)
 
     def install_dependencies(
@@ -501,6 +506,41 @@ class DownloadManager:
             try:
                 status = self.resolver.dependency_status()
                 emit("dependency-started", {"status": status})
+                if IS_WINDOWS:
+                    missing = [
+                        name
+                        for name, present in (
+                            ("spotDL", status.spotdl),
+                            ("FFmpeg", status.ffmpeg),
+                            ("Deno", status.deno),
+                        )
+                        if not present
+                    ]
+                    if missing:
+                        raise SpotDLUnavailable(
+                            "Bundled Windows downloader tools are missing: "
+                            + ", ".join(missing)
+                            + ". Reinstall Groovia or rebuild the package."
+                        )
+                    emit(
+                        "dependency-output",
+                        {
+                            "line": (
+                                "Bundled Windows downloader tools are installed. "
+                                "They are managed by the Groovia installer."
+                            )
+                        },
+                    )
+                    emit(
+                        "dependency-installed",
+                        {
+                            "ffmpeg": True,
+                            "deno": True,
+                            "spotdl": True,
+                            "bundled": True,
+                        },
+                    )
+                    return
                 if install_spotdl and not status.spotdl:
                     venv = self.resolver.venv_dir
                     venv.parent.mkdir(parents=True, exist_ok=True)
@@ -562,6 +602,19 @@ class DownloadManager:
         except OSError:
             pass
         return True
+
+    def verify_tools(self, callback: EventCallback | None = None):
+        """Probe downloader executables without changing the installation."""
+        callback = callback or self.callback
+
+        def worker():
+            results = self.resolver.verify_tools()
+            if callback:
+                GLib.idle_add(callback, "dependency-verified", None, {"tools": results})
+
+        threading.Thread(
+            target=worker, daemon=True, name="groovia-dependency-verify"
+        ).start()
 
     def remove_managed_dependencies(self) -> list[str]:
         """Remove only Groovia's private venv and spotDL tool home."""

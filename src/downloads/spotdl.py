@@ -18,6 +18,7 @@ from ..platform_compat import (
     get_managed_executable_name,
     subprocess_window_kwargs,
 )
+from ..runtime import bundled_tool_path, is_frozen
 
 SPOTIFY_ID = re.compile(r"^[A-Za-z0-9]{22}$")
 SPOTIFY_URL = re.compile(
@@ -53,6 +54,7 @@ class DependencyStatus:
     python: bool
     pip: bool
     command: tuple[str, ...] | None = None
+    bundled: bool = False
 
 
 class SpotDLUnavailable(RuntimeError):
@@ -108,18 +110,40 @@ class SpotDLCommandResolver:
             environment["USERPROFILE"] = str(self.managed_home)
             environment["APPDATA"] = str(self.managed_home / "AppData" / "Roaming")
             environment["LOCALAPPDATA"] = str(self.managed_home / "AppData" / "Local")
+            tools_dir = self.tool_dir()
+            if tools_dir:
+                environment["PATH"] = str(tools_dir) + os.pathsep + environment.get("PATH", "")
+                for name, variable in (
+                    ("ffmpeg", "FFMPEG_BINARY"),
+                    ("ffprobe", "FFPROBE_BINARY"),
+                    ("deno", "DENO_BINARY"),
+                ):
+                    tool = bundled_tool_path(name, tools_dir)
+                    if tool:
+                        environment[variable] = str(tool)
+                environment["DENO_DIR"] = str(self.managed_home / "deno")
         return environment
+
+    def tool_dir(self) -> Path | None:
+        for name in ("spotdl", "ffmpeg", "ffprobe", "deno"):
+            tool = bundled_tool_path(name)
+            if tool:
+                return tool.parent
+        return None
 
     def candidates(self) -> list[tuple[str, ...]]:
         candidates: list[tuple[str, ...]] = []
+        bundled = bundled_tool_path("spotdl")
+        if bundled:
+            candidates.append((str(bundled),))
         spotdl = shutil.which(get_managed_executable_name("spotdl"))
-        if spotdl:
+        if spotdl and not (IS_WINDOWS and is_frozen()):
             candidates.append((spotdl,))
-        if not getattr(sys, "frozen", False):
+        if not IS_WINDOWS:
             python = shutil.which("python3") or shutil.which("python") or sys.executable
             candidates.append((python, "-m", "spotdl"))
-        venv_spotdl = self.venv_dir / ("Scripts" if IS_WINDOWS else "bin") / get_managed_executable_name("spotdl")
-        if venv_spotdl.exists():
+        venv_spotdl = self.venv_dir / "bin" / get_managed_executable_name("spotdl")
+        if not IS_WINDOWS and venv_spotdl.exists():
             candidates.append((str(venv_spotdl),))
         return candidates
 
@@ -155,12 +179,18 @@ class SpotDLCommandResolver:
             spotdl=command is not None,
             ffmpeg=self._binary_available("ffmpeg"),
             deno=self._binary_available("deno"),
-            python=not getattr(sys, "frozen", False) or self._venv_python().is_file(),
-            pip=shutil.which("pip3") is not None or shutil.which("pip") is not None,
+            python=False if IS_WINDOWS else (not is_frozen() or self._venv_python().is_file()),
+            pip=False if IS_WINDOWS else (shutil.which("pip3") is not None or shutil.which("pip") is not None),
             command=command,
+            bundled=IS_WINDOWS and bundled_tool_path("spotdl") is not None,
         )
 
     def _binary_available(self, name: str) -> bool:
+        bundled = bundled_tool_path(name)
+        if bundled:
+            return True
+        if IS_WINDOWS and is_frozen():
+            return False
         if shutil.which(get_managed_executable_name(name)):
             return True
         executable = get_managed_executable_name(name)
@@ -197,10 +227,10 @@ class SpotDLCommandResolver:
         return self._supported_options
 
     def installation_command(self) -> list[str]:
-        if getattr(sys, "frozen", False):
+        if IS_WINDOWS:
             raise SpotDLUnavailable(
-                "The packaged Windows build cannot create a Python environment; "
-                "install spotDL separately or use a development build."
+                "Windows downloader tools are staged at build time; "
+                "runtime venv and pip installation are disabled."
             )
         self.venv_dir.parent.mkdir(parents=True, exist_ok=True)
         return [sys.executable, "-m", "venv", str(self.venv_dir)]
@@ -210,7 +240,42 @@ class SpotDLCommandResolver:
 
     def managed_dependency_paths(self) -> tuple[Path, ...]:
         """Return only paths that Groovia itself owns and may safely remove."""
+        if IS_WINDOWS:
+            return ()
         return (self.venv_dir, self.managed_home)
+
+    def verify_tools(self) -> dict[str, dict[str, str | bool]]:
+        """Run version probes and return captured diagnostics for the UI."""
+        results: dict[str, dict[str, str | bool]] = {}
+        for name in ("spotdl", "ffmpeg", "ffprobe", "deno"):
+            path = bundled_tool_path(name)
+            if not path and not (IS_WINDOWS and is_frozen()):
+                path = Path(shutil.which(get_managed_executable_name(name)) or "")
+            if not path or not path.is_file():
+                results[name] = {"available": False, "error": "not found"}
+                continue
+            argument = "--version" if name in {"spotdl", "deno"} else "-version"
+            try:
+                result = subprocess.run(
+                    [str(path), argument],
+                    cwd=str(path.parent),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=15,
+                    check=False,
+                    env=self.process_environment(),
+                    **subprocess_window_kwargs(),
+                )
+                output = (result.stdout or "").strip().splitlines()
+                results[name] = {
+                    "available": result.returncode == 0,
+                    "version": output[0] if output else "",
+                    "error": "" if result.returncode == 0 else f"exit {result.returncode}",
+                }
+            except (OSError, subprocess.SubprocessError) as error:
+                results[name] = {"available": False, "error": str(error)}
+        return results
 
 
 def _walk_dicts(value):
