@@ -87,7 +87,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         repair = Gtk.Button(label="Install or repair", valign=Gtk.Align.CENTER)
         repair.add_css_class("suggested-action")
         repair.connect("clicked", lambda *_: parent._show_dependency_dialog(
-            ["spotDL", "FFmpeg", "Deno"], lambda: None,
+            ["spotDL", "FFmpeg", "Deno"], lambda: None, presenter=self,
         ))
         dependency.add_suffix(repair)
         spotdl_group.add(dependency)
@@ -97,7 +97,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         )
         remove = Gtk.Button(label="Remove", valign=Gtk.Align.CENTER)
         remove.add_css_class("destructive-action")
-        remove.connect("clicked", lambda *_: parent._remove_managed_dependencies())
+        remove.connect("clicked", lambda *_: parent._remove_managed_dependencies(presenter=self))
         remove_row.add_suffix(remove)
         spotdl_group.add(remove_row)
         downloads.add(spotdl_group)
@@ -184,7 +184,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         )
         clear_button = Gtk.Button(label="Delete all data", valign=Gtk.Align.CENTER)
         clear_button.add_css_class("destructive-action")
-        clear_button.connect("clicked", lambda *_: parent._confirm_clear_all_data())
+        clear_button.connect("clicked", lambda *_: parent._confirm_clear_all_data(presenter=self))
         clear_row.add_suffix(clear_button)
         data_group.add(clear_row)
         data.add(data_group)

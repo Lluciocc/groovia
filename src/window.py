@@ -2690,8 +2690,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if response in {"sync", "duplicate", "replace"}:
             self._start_download(payload["value"], self._download_sync.get_active(), response)
 
-    def _show_dependency_dialog(self, missing, resume):
-        dialog = Gtk.Dialog(title="Install download dependencies", transient_for=self, modal=True)
+    def _show_dependency_dialog(self, missing, resume, presenter=None):
+        dialog = Gtk.Dialog(
+            title="Install download dependencies",
+            transient_for=presenter or self,
+            modal=True,
+        )
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         install_button = dialog.add_button("Install", Gtk.ResponseType.ACCEPT)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -2763,7 +2767,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         end = buffer.get_end_iter()
         buffer.insert(end, f"{line}\n")
 
-    def _remove_managed_dependencies(self):
+    def _remove_managed_dependencies(self, presenter=None):
         if self.download_service.manager.active or self.download_service.manager._dependency_process:
             self._toast("Stop active downloads before removing managed tools")
             return
@@ -2789,9 +2793,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._toast("Managed download tools removed" if removed else "No managed tools to remove")
 
         dialog.connect("response", response)
-        dialog.present(self)
+        dialog.present(presenter or self)
 
-    def _confirm_clear_all_data(self):
+    def _confirm_clear_all_data(self, presenter=None):
         manager = self.download_service.manager
         running_jobs = [job for job in manager.jobs() if job.state in {"queued", "running"}]
         if running_jobs or manager._dependency_process:
@@ -2822,7 +2826,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 self._clear_all_data(data_root, music_dir, cache_root)
 
         dialog.connect("response", response)
-        dialog.present(self)
+        dialog.present(presenter or self)
 
     def _clear_all_data(self, data_root: Path, music_dir: Path, cache_root: Path):
         """Delete Groovia-owned files, then close so no state can be recreated."""
