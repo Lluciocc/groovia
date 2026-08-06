@@ -2791,6 +2791,76 @@ class GrooviaWindow(Adw.ApplicationWindow):
         dialog.connect("response", response)
         dialog.present(self)
 
+    def _confirm_clear_all_data(self):
+        manager = self.download_service.manager
+        running_jobs = [job for job in manager.jobs() if job.state in {"queued", "running"}]
+        if running_jobs or manager._dependency_process:
+            self._toast("Stop active downloads before deleting Groovia data")
+            return
+
+        data_root = self.download_service.data_root
+        music_dir = self.download_service.music_dir
+        cache_root = self.scanner.artwork_dir.parent
+        dialog = Adw.AlertDialog(
+            heading="Delete all Groovia data?",
+            body=(
+                "This permanently deletes Groovia's library database, downloaded music, lyrics, "
+                "playlists, artwork, synchronization files, cache and managed download tools. "
+                f"The music folder to delete is {music_dir}. Music imported from other folders will not be touched. "
+                "Groovia will close after deletion."
+            ),
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("delete", "Delete all data")
+        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+
+        def response(current, choice):
+            current.close()
+            if choice == "delete":
+                self._clear_all_data(data_root, music_dir, cache_root)
+
+        dialog.connect("response", response)
+        dialog.present(self)
+
+    def _clear_all_data(self, data_root: Path, music_dir: Path, cache_root: Path):
+        """Delete Groovia-owned files, then close so no state can be recreated."""
+        self._data_reset = True
+        self.current = None
+        self.queue.clear()
+        self._playback_source.clear()
+        self._history.clear()
+        self.player.close()
+        self.auto_dj.close()
+
+        for target in (data_root, music_dir, cache_root):
+            path = Path(target).expanduser().resolve()
+            if path in {Path("/"), Path.home().resolve()}:
+                LOGGER.error("Refusing to delete unsafe Groovia data path: %s", path)
+                self._data_reset = False
+                self._toast("Could not delete Groovia data")
+                return
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path)
+                elif path.exists():
+                    path.unlink()
+            except OSError:
+                LOGGER.exception("Could not delete Groovia data path: %s", path)
+                self._data_reset = False
+                self._toast("Could not delete all Groovia data")
+                return
+
+        if self._settings:
+            for key in self._settings.list_keys():
+                self._settings.reset(key)
+        self.database.close()
+        self.close()
+        application = self.get_application()
+        if application:
+            application.quit()
+
     def _folder_selected(self, dialog, result):
         try:
             folder = dialog.select_folder_finish(result)
@@ -2808,6 +2878,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.toast_overlay.add_toast(Adw.Toast(title=message, timeout=3))
 
     def close(self):
+        if getattr(self, "_data_reset", False):
+            super().close()
+            return
         if getattr(self, "_lyrics_fullscreen_window", None):
             self._lyrics_fullscreen_window.close()
         popover = getattr(self, "_track_popover", None)

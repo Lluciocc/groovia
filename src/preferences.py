@@ -173,4 +173,20 @@ class PreferencesWindow(Adw.PreferencesWindow):
             lyrics_options.add(row)
         downloads.add(lyrics_options)
 
-        self.add(playback); self.add(interface); self.add(library); self.add(downloads)
+        data = Adw.PreferencesPage(title="Data", icon_name="edit-delete-symbolic")
+        data_group = Adw.PreferencesGroup(
+            title="Reset Groovia",
+            description="Remove Groovia's downloaded music, lyrics, playlists, cache and settings.",
+        )
+        clear_row = Adw.ActionRow(
+            title="Delete all Groovia data",
+            subtitle="Downloaded music in Music/Groovia and all local application data will be permanently deleted.",
+        )
+        clear_button = Gtk.Button(label="Delete all data", valign=Gtk.Align.CENTER)
+        clear_button.add_css_class("destructive-action")
+        clear_button.connect("clicked", lambda *_: parent._confirm_clear_all_data())
+        clear_row.add_suffix(clear_button)
+        data_group.add(clear_row)
+        data.add(data_group)
+
+        self.add(playback); self.add(interface); self.add(library); self.add(downloads); self.add(data)

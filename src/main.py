@@ -61,7 +61,9 @@ class GrooviaApplication(Adw.Application):
     def do_shutdown(self):
         if hasattr(self, "mpris"):
             self.mpris.close()
-        super().do_shutdown()
+        # PyGObject does not bind Gio's virtual shutdown method correctly
+        # through super() here; call the parent implementation explicitly.
+        Gio.Application.do_shutdown(self)
 
     def create_action(self, name, callback, shortcuts=None):
         action = Gio.SimpleAction.new(name, None)
