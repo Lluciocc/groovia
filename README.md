@@ -84,8 +84,6 @@ installation directory.
 
 ## Build for windows
 ```powershell
-Set-Location "C:\msys64\home\Lucas Cialdella\groovia"
-
 $env:Path = @(
     "C:\msys64\ucrt64\bin"
     "C:\msys64\usr\bin"
