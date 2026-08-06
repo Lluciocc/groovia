@@ -124,6 +124,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.repeat_mode = "all"
         self.repeat_all = True
         self.shuffle = False
+        self._library_random_mode = False
         self._playback_source: list[Track] = []
         self._history: list[Track] = []
         self.current: Track | None = None
@@ -1447,6 +1448,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if shuffle:
             random.shuffle(tracks)
         self._current_playlist_id = playlist_id
+        self._library_random_mode = False
         self._history.clear()
         self._playback_source = tracks
         self.queue = tracks[1:]
@@ -2347,6 +2349,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             if track.album == album and track.album_artist == artist
         ]
         if tracks:
+            self._library_random_mode = False
             self._history.clear()
             self._playback_source = tracks
             self.queue = tracks[1:]
@@ -2355,9 +2358,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _play_first(self):
         tracks = self.database.all_tracks()
         if tracks:
+            self._current_playlist_id = None
+            self._library_random_mode = True
             self._history.clear()
             self._playback_source = tracks
-            self.queue = tracks[1:]
+            self.queue = []
             self._play_track(tracks[0])
 
     def _play_track(self, track, autoplay=True):
@@ -2372,8 +2377,30 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.database.mark_played(track)
         self.database.save_playback(track, 0.0)
 
+    def _fill_random_library_queue(self):
+        """Keep direct library playback supplied with random future tracks."""
+        if not self._library_random_mode:
+            return
+        library = self.database.all_tracks()
+        if not library:
+            return
+        current_path = self.current.path if self.current else None
+        candidates = [track for track in library if track.path != current_path]
+        if not candidates:
+            candidates = library
+        target_size = min(8, max(1, len(candidates)))
+        queued_paths = {track.path for track in self.queue}
+        while len(self.queue) < target_size:
+            available = [track for track in candidates if track.path not in queued_paths]
+            if not available:
+                available = candidates
+            track = random.choice(available)
+            self.queue.append(track)
+            queued_paths.add(track.path)
+
     def _prepare_next_track(self):
         """Keep the transition engine one track ahead of the visible queue."""
+        self._fill_random_library_queue()
         candidate = None
         if self.queue:
             candidate = random.choice(self.queue) if self.shuffle else self.queue[0]
@@ -2412,29 +2439,31 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self.player.set_auto_dj_plan(None)
 
     def _play_selected_track(self, track, playlist: Playlist | None = None):
-        """Start a track selected from the library while keeping Next useful.
-
-        A direct library click used to leave an empty queue even though the
-        whole library was available as the playback source. Rebuild the
-        pending queue around the selected track, preserving the same source
-        when possible.
-        """
+        """Start a selected track with playlist order or random library mode."""
         LOGGER.info("play selected track=%r path=%r", track.title, track.path)
-        source = (
-            self.database.playlist_tracks(playlist.id)
-            if playlist
-            else (self._playback_source or self.database.all_tracks())
-        )
+        if playlist:
+            source = self.database.playlist_tracks(playlist.id)
+        else:
+            source = self.database.all_tracks()
         if not any(item.path == track.path for item in source):
             source = self.database.all_tracks()
         if playlist:
             self._current_playlist_id = playlist.id
+            self._library_random_mode = False
+        else:
+            self._current_playlist_id = None
+            self._library_random_mode = True
         self._playback_source = source
         selected_index = next(
             (i for i, item in enumerate(source) if item.path == track.path), -1
         )
-        self._history = source[:selected_index] if selected_index > 0 else []
-        self.queue = source[selected_index + 1 :] if selected_index >= 0 else []
+        self._history = [] if self._library_random_mode else (
+            source[:selected_index] if selected_index > 0 else []
+        )
+        self.queue = (
+            [] if self._library_random_mode
+            else source[selected_index + 1 :] if selected_index >= 0 else []
+        )
         self._play_track(track)
         self._refresh_queue()
 
@@ -3100,6 +3129,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self.scanner.scan_async(folders, self._scan_update)
         if tracks:
             self.database.upsert_tracks(tracks)
+            self._library_random_mode = False
             self._history.clear()
             self._playback_source = tracks
             self.queue = tracks[1:]
@@ -3129,6 +3159,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 None,
             )
             self.database.upsert_tracks([track])
+            self._library_random_mode = False
             self._history.clear()
             self._playback_source = [track]
             self.queue = []
