@@ -1,4 +1,8 @@
+<img height="128" src="data/icons/hicolor/scalable/apps/io.github.Lluciocc.Groovia.svg" align="left"/>
+
 # Groovia
+
+Modern Music player
 
 Groovia is a modern GNOME music player for local files, built with Python,
 GTK 4, Libadwaita, GStreamer and SQLite. It presents a local collection as
