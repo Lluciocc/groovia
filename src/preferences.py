@@ -158,6 +158,19 @@ class PreferencesWindow(Adw.PreferencesWindow):
         visuals.add(rotation)
         visuals.add(animations)
         interface.add(visuals)
+        notifications = Adw.PreferencesGroup(title="Notifications")
+        now_playing_notifications = Adw.SwitchRow(
+            title="Now playing notifications",
+            subtitle="Show a notification when the track changes",
+        )
+        settings.bind(
+            "now-playing-notifications",
+            now_playing_notifications,
+            "active",
+            Gio.SettingsBindFlags.DEFAULT,
+        )
+        notifications.add(now_playing_notifications)
+        interface.add(notifications)
 
         library = Adw.PreferencesPage(
             title="Library", icon_name="folder-music-symbolic"

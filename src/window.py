@@ -2960,6 +2960,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._notify_track(track, cover_path)
 
     def _notify_track(self, track, cover_path):
+        if self._settings and not self._settings.get_boolean("now-playing-notifications"):
+            return
         application = self.get_application()
         if not application:
             return
