@@ -17,6 +17,16 @@ class LyricsService:
         base = Path(data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
         self.root = base / "groovia" / "lyrics"
         self.root.mkdir(parents=True, exist_ok=True)
+        # Keep the custom Musixmatch workaround as the single Musixmatch
+        # implementation.  Import lazily so the lyrics package remains usable
+        # by the download package without creating an import cycle.
+        try:
+            from ..downloads.musicmatch import MusixmatchRichsync
+            self.musixmatch = MusixmatchRichsync(
+                token_cache=self.root / "musixmatch-token.json"
+            )
+        except (ImportError, OSError, TypeError):
+            self.musixmatch = None
 
     @staticmethod
     def _checksum(content: str) -> str:
@@ -36,7 +46,7 @@ class LyricsService:
         return parse_lyrics(content, file_path=str(path), provider=provider)
 
     def _save_mapping(self, track, path: Path, timeline: LyricsTimeline, *, provider=None,
-                      user_edited=False, replace=False):
+                      source_id=None, user_edited=False, replace=False):
         content = path.read_text(encoding="utf-8-sig")
         kind = self._kind(path, timeline)
         existing = self.database.lyrics_for_track(track.id)
@@ -46,6 +56,49 @@ class LyricsService:
             track.id, kind, str(path), provider or timeline.provider,
             timeline.language, content, user_edited=user_edited,
             timing_offset_ms=timeline.offset_ms, checksum=self._checksum(content),
+            source_id=source_id,
+        )
+
+    def ingest_content(self, track, content: str, *, provider: str,
+                       source_id: str | None = None, replace: bool = False,
+                       user_edited: bool = False):
+        """Persist provider output through the same repository as LRC files."""
+        if track.id is None or not content or not content.strip():
+            return None
+        timeline = parse_lyrics(content, provider=provider)
+        if not timeline.lines:
+            return None
+        kind = "synced" if timeline.synchronized else "plain"
+        if not replace and any(item.get("user_edited") and item.get("kind") == kind
+                               for item in self.database.lyrics_for_track(track.id)):
+            return None
+        suffix = ".lrc" if timeline.synchronized else ".txt"
+        safe_provider = "".join(char for char in provider.lower() if char.isalnum() or char in "-_" ) or "lyrics"
+        destination = self.root / f"track-{track.id}-{safe_provider}{suffix}"
+        try:
+            destination.write_text(content, encoding="utf-8")
+            self._save_mapping(track, destination, timeline, provider=provider,
+                               source_id=source_id, user_edited=user_edited, replace=replace)
+        except OSError:
+            return None
+        return self._read_file(destination, provider)
+
+    def fetch_musixmatch(self, track, *, replace: bool = False):
+        """Fetch richsync first, falling back to Musixmatch line subtitles."""
+        if not self.musixmatch or track.id is None:
+            return None
+        try:
+            result = self.musixmatch.get_lyrics(
+                track.title, track.artist, getattr(track, "album", "") or "",
+                getattr(track, "duration", 0) or 0,
+            )
+        except Exception:
+            return None
+        if not result:
+            return None
+        return self.ingest_content(
+            track, result.lrc, provider="musixmatch",
+            source_id=str(result.commontrack_id), replace=replace,
         )
 
     def ingest_download(self, track, lrc_path: str | Path | None, *, provider="spotdl", replace=False):
@@ -91,18 +144,30 @@ class LyricsService:
         if track.id is None:
             return None, None
         rows = self.database.lyrics_for_track(track.id)
-        for row in sorted(rows, key=lambda item: (not item["user_edited"], item["kind"] != "synced")):
+        candidates = []
+        for row in rows:
             path = Path(row["file_path"]) if row.get("file_path") else None
             if path and path.is_file():
                 timeline = self._read_file(path, row.get("provider"))
                 if timeline:
-                    timeline.offset_ms += int(row.get("timing_offset_ms") or 0)
+                    timeline.apply_offset(timeline.offset_ms + int(row.get("timing_offset_ms") or 0))
                     timeline.user_edited = bool(row.get("user_edited"))
-                    return timeline, row
+                    candidates.append((timeline, row))
+                    continue
             if row.get("content"):
                 timeline = parse_lyrics(row["content"], provider=row.get("provider"))
-                timeline.offset_ms += int(row.get("timing_offset_ms") or 0)
-                return timeline, row
+                timeline.apply_offset(timeline.offset_ms + int(row.get("timing_offset_ms") or 0))
+                timeline.user_edited = bool(row.get("user_edited"))
+                candidates.append((timeline, row))
+
+        if candidates:
+            def priority(item):
+                timeline, row = item
+                return (
+                    0 if row.get("user_edited") else 1,
+                    0 if timeline.word_synchronized else (1 if timeline.synchronized else 2),
+                )
+            return min(candidates, key=priority)
 
         if not track.path.startswith(("http://", "https://")):
             audio = Path(track.path)

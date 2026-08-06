@@ -27,18 +27,27 @@ class DownloadedTrackImporter:
         self.lyrics_service = lyrics_service
         self.lyrics_counts = {"synced": 0, "plain": 0, "failed": 0}
 
-    def import_files(self, files: set[str], metadata: list[dict] | None = None) -> list[Track]:
+    def import_files(self, files: set[str], metadata: list[dict] | None = None,
+                     job=None, progress_callback=None) -> list[Track]:
         metadata = metadata or []
         self.lyrics_counts = {"synced": 0, "plain": 0, "failed": 0}
         unused = list(metadata)
         imported: list[Track] = []
-        for raw_path in sorted(files):
-            path = Path(raw_path)
-            if not path.is_file() or path.suffix.lower() not in AUDIO_SUFFIXES:
-                continue
+        audio_paths = [
+            Path(raw_path) for raw_path in sorted(files)
+            if Path(raw_path).is_file() and Path(raw_path).suffix.lower() in AUDIO_SUFFIXES
+        ]
+        total = max(len(audio_paths), len(metadata))
+        processed = 0
+        if progress_callback:
+            progress_callback(0, total, "Preparing library import", "Preparing")
+        for path in audio_paths:
             try:
                 scanned = self.scanner.read_track(str(path))
             except Exception:
+                processed += 1
+                if progress_callback:
+                    progress_callback(processed, total, path.name, "Skipped")
                 continue
             match = self._match_metadata(scanned, unused)
             if match:
@@ -56,19 +65,25 @@ class DownloadedTrackImporter:
                 imported.append(existing)
                 if scanned.spotify_id:
                     self.database.save_track_source(scanned.spotify_id, existing, scanned.isrc)
-                self._ingest_lyrics(existing, path)
+                self._ingest_lyrics(existing, path, job=job)
                 if Path(scanned.path).resolve() != Path(existing.path).resolve():
                     try:
                         Path(scanned.path).unlink()
                     except OSError:
                         pass
+                processed += 1
+                if progress_callback:
+                    progress_callback(processed, total, existing.title, "Imported")
                 continue
             self.database.upsert_tracks([scanned])
             stored = self.database.track_by_path(scanned.path) or scanned
             imported.append(stored)
-            self._ingest_lyrics(stored, path)
+            self._ingest_lyrics(stored, path, job=job)
             if scanned.spotify_id:
                 self.database.save_track_source(scanned.spotify_id, stored, scanned.isrc)
+            processed += 1
+            if progress_callback:
+                progress_callback(processed, total, stored.title, "Imported")
         # A safe sync often has no new files at all. Reuse the existing library
         # entries described by the refreshed .spotdl file so playlist removals
         # and order changes can still be applied without reimporting audio.
@@ -80,11 +95,43 @@ class DownloadedTrackImporter:
                 if existing:
                     imported.append(existing)
                     known_ids.add(spotify_id)
+                    processed += 1
+                    if progress_callback:
+                        progress_callback(min(processed, total), total, existing.title, "Reused from library")
+        # A sync can reuse an existing library track without producing a new
+        # audio file. Fetch the selected custom provider for those entries too.
+        if job and self.lyrics_service and self._uses_musixmatch(job):
+            for track in imported:
+                if not track.id:
+                    continue
+                current, _row = self.lyrics_service.find(track)
+                if current is None:
+                    timeline = self.lyrics_service.fetch_musixmatch(track)
+                    if timeline:
+                        self.lyrics_counts["synced" if timeline.synchronized else "plain"] += 1
+                    else:
+                        self.lyrics_counts["failed"] += 1
         return imported
 
-    def _ingest_lyrics(self, track, audio_path: Path):
+    @staticmethod
+    def _uses_musixmatch(job) -> bool:
+        selected = job.lyrics_providers or ("synced", "genius", "musixmatch", "azlyrics")
+        return (
+            job.lyrics_mode != "none"
+            and "musixmatch" in {str(provider).lower() for provider in selected}
+        )
+
+    def _ingest_lyrics(self, track, audio_path: Path, *, job=None):
         if not self.lyrics_service:
             return
+        if job and self._uses_musixmatch(job):
+            existing, existing_row = self.lyrics_service.find(track)
+            if existing is not None and existing_row and existing_row.get("provider") == "musixmatch":
+                return
+            timeline = self.lyrics_service.fetch_musixmatch(track)
+            if timeline:
+                self.lyrics_counts["synced" if timeline.synchronized else "plain"] += 1
+                return
         for candidate in (audio_path.with_suffix(".lrc"), audio_path.with_suffix(".txt")):
             if not candidate.is_file():
                 continue
@@ -134,7 +181,13 @@ class SpotDLImportService:
         sync_file = job.sync_file if job.sync_file and job.sync_file.exists() else None
         metadata = read_sync_metadata(sync_file) if sync_file else []
         files = payload.get("files", set())
-        tracks = self.importer.import_files(files, metadata)
+        tracks = self.importer.import_files(
+            files, metadata, job=job,
+            progress_callback=lambda current, total, title, phase: self._emit(
+                "import-progress", job,
+                {"current": current, "total": total, "title": title, "phase": phase},
+            ),
+        )
         playlist_name, cover_url = self._playlist_oembed(job.source) if job.job_type in {"sync", "playlist"} else (None, None)
         cover_path = self._download_cover(job, metadata, cover_url)
         self._emit("import-finished", job, {

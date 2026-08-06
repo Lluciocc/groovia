@@ -68,6 +68,13 @@ button.favorite-active { color: #f6d32d; }
 .lyrics-line:hover { color: @window_fg_color; background: alpha(@window_fg_color, .08); }
 .lyrics-line:focus-visible { outline: 2px solid @accent_color; outline-offset: 2px; }
 .lyrics-current { color: @window_fg_color; font-size: 20px; font-weight: 800; }
+.lyrics-word-line { padding: 8px 12px; }
+.lyrics-word { padding: 2px 1px; margin: 0; color: alpha(@window_fg_color, .66); font-size: 20px; }
+.lyrics-word:hover { color: @window_fg_color; background: alpha(@window_fg_color, .08); }
+.lyrics-word:focus-visible { outline: 2px solid @accent_color; outline-offset: 2px; }
+.lyrics-word-current { color: @window_fg_color; font-weight: 800; }
+.lyrics-word-previous { color: alpha(@window_fg_color, .82); }
+.lyrics-word-upcoming { color: alpha(@window_fg_color, .52); }
 """
 
 
@@ -2344,6 +2351,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         progress = Gtk.ProgressBar(show_text=True)
         progress.set_text("Waiting for a source")
         body.append(progress)
+        download_status = Gtk.Label(label="Waiting for a source", xalign=0, css_classes=["dim-label"])
+        body.append(download_status)
         current = Gtk.Label(label="", xalign=0, ellipsize=3, css_classes=["dim-label"])
         body.append(current)
         log_view = Gtk.TextView(editable=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR)
@@ -2355,6 +2364,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         dialog.get_content_area().append(body)
         self._download_dialog = dialog
         self._download_progress = progress
+        self._download_status = download_status
         self._download_current = current
         self._download_log = log_view.get_buffer()
         self._download_sync = sync
@@ -2467,21 +2477,62 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _download_event(self, event, job, payload):
         if event == "output":
             data = payload
+            completed = data.get("completed", getattr(job, "completed", 0) if job else 0)
+            total = data.get("total", getattr(job, "total", 0) if job else 0)
+            phase = data.get("phase", getattr(job, "phase", "Downloading") if job else "Downloading")
+            failed = getattr(job, "failed", 0) if job else data.get("failed", 0)
             if data.get("progress") is not None and getattr(self, "_download_progress", None):
                 self._download_progress.set_fraction(data["progress"] / 100)
-                self._download_progress.set_text(f"{data['progress']:.0f}%")
+                progress_text = f"{data['progress']:.0f}%"
+                if total:
+                    progress_text += f" · {completed}/{total} tracks"
+                self._download_progress.set_text(progress_text)
+            elif total and getattr(self, "_download_progress", None):
+                self._download_progress.set_fraction(min(1.0, completed / total))
+                self._download_progress.set_text(f"{completed}/{total} tracks")
+            if getattr(self, "_download_status", None):
+                if total:
+                    suffix = f" · {failed} failed" if failed else ""
+                    self._download_status.set_label(
+                        f"{phase} · Music {completed}/{total} downloaded{suffix}"
+                    )
+                else:
+                    self._download_status.set_label(phase)
             if data.get("current") and getattr(self, "_download_current", None):
                 self._download_current.set_label(data["current"])
             self._append_download_log(data.get("line", ""))
         elif event == "started":
+            if getattr(self, "_download_status", None):
+                self._download_status.set_label("Starting download…")
             self._append_download_log("spotDL process started")
+        elif event == "command":
+            if getattr(self, "_download_status", None):
+                self._download_status.set_label("Preparing download…")
         elif event == "import-started":
             if getattr(self, "_download_progress", None):
                 self._download_progress.set_text("Importing into library…")
+            if getattr(self, "_download_status", None):
+                self._download_status.set_label("Importing downloaded music into your library…")
+        elif event == "import-progress":
+            current = payload.get("current", 0)
+            total = payload.get("total", 0)
+            title = payload.get("title") or ""
+            phase = payload.get("phase", "Importing")
+            if getattr(self, "_download_progress", None) and total:
+                self._download_progress.set_fraction(min(1.0, current / total))
+                self._download_progress.set_text(f"Library {current}/{total} tracks")
+            if getattr(self, "_download_status", None):
+                self._download_status.set_label(f"{phase} · {current}/{total} tracks")
+            if title and getattr(self, "_download_current", None):
+                self._download_current.set_label(title)
         elif event == "completed":
             if getattr(self, "_download_progress", None):
                 self._download_progress.set_fraction(1)
                 self._download_progress.set_text("Completed")
+            if getattr(self, "_download_status", None):
+                self._download_status.set_label(
+                    f"Completed · {len(payload.get('tracks', []))} track(s) available in your library"
+                )
             self._refresh_library(self.search_entry.get_text())
             tracks = payload.get("tracks", [])
             if payload.get("playlist"):

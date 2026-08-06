@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
+
+from gi.repository import GLib
 
 from ..lyrics import LyricsService
 from .importer import SpotDLImportService
@@ -165,19 +168,54 @@ class SpotDLService:
         self.database.update_playlist_source(playlist_id, sync_status="disconnected", auto_sync="manual")
 
     def find_lyrics(self, track, *, providers: tuple[str, ...] = (), fallback: bool = True):
-        """Ask spotDL for lyrics while keeping the existing audio file untouched."""
+        """Find lyrics asynchronously, preferring Groovia's richsync backend."""
         if not track.spotify_id:
             self._emit("lyrics-error", None, {"track": track, "message": "This track has no Spotify source mapping."})
             return None
         source = f"https://open.spotify.com/track/{track.spotify_id}"
         destination = Path(track.path).parent
+        selected = tuple(providers or ("synced", "genius", "musixmatch", "azlyrics"))
+        if "musixmatch" in {provider.lower() for provider in selected}:
+            def worker():
+                timeline = self.lyrics.fetch_musixmatch(track)
+                if timeline:
+                    GLib.idle_add(
+                        self._emit, "lyrics-completed", None,
+                        {"track": track, "timeline": timeline},
+                    )
+                    return
+                if fallback:
+                    self._submit_lyrics_fallback(track, source, destination, selected)
+                else:
+                    GLib.idle_add(
+                        self._emit, "lyrics-failed", None,
+                        {"track": track, "error": "Musixmatch returned no lyrics."},
+                    )
+
+            threading.Thread(target=worker, daemon=True, name="groovia-musixmatch-lyrics").start()
+            # Keep the public contract truthy so batch callers can report that
+            # a search was queued even though no spotDL job exists yet.
+            return True
+
         job = self.manager.submit(
             "lyrics", source, destination, sync_mode="safe", output_format="mp3",
             bitrate="auto", lyrics_mode="synced", lyrics_fallback=fallback,
-            generate_lrc=True, lyrics_providers=providers or ("synced", "genius", "musixmatch", "azlyrics"),
+            generate_lrc=True, lyrics_providers=selected,
         )
         self._contexts[job.id] = {"track": track}
         return job
+
+    def _submit_lyrics_fallback(self, track, source, destination, selected):
+        providers = tuple(
+            provider for provider in selected
+            if provider.lower() != "musixmatch"
+        ) or ("synced", "genius", "azlyrics")
+        job = self.manager.submit(
+            "lyrics", source, destination, sync_mode="safe", output_format="mp3",
+            bitrate="auto", lyrics_mode="synced", lyrics_fallback=True,
+            generate_lrc=True, lyrics_providers=providers,
+        )
+        self._contexts[job.id] = {"track": track}
 
     def _unique_name(self, base: str) -> str:
         names = {item.name for item in self.database.playlists()}

@@ -36,7 +36,9 @@ class DownloadJob:
     error: str | None = None
     current_track: str = ""
     completed: int = 0
+    total: int = 0
     failed: int = 0
+    phase: str = "queued"
     lyrics_mode: str = "none"
     lyrics_fallback: bool = True
     generate_lrc: bool = False
@@ -57,13 +59,31 @@ class ProgressParser:
         match = re.search(r"(\d{1,3})%", line)
         if match:
             data["progress"] = min(100.0, float(match.group(1)))
-        match = re.search(r"(?:track|song)\s+(\d+)\s*(?:/|of)\s*(\d+)", line, re.I)
+        match = re.search(
+            r"(?:track|song|item|file)?\s*(\d+)\s*(?:/|of)\s*(\d+)",
+            line, re.I,
+        )
         if match:
             data["completed"] = int(match.group(1))
             data["total"] = int(match.group(2))
-        for marker in ("Downloading", "Searching", "Processing", "Found"):
-            if marker.lower() in line.lower():
+        lowered = line.lower()
+        phases = (
+            ("downloading", "Downloading"),
+            ("searching", "Searching"),
+            ("processing", "Processing"),
+            ("embedding", "Embedding metadata"),
+            ("found", "Matching audio"),
+            ("skipping", "Reusing existing file"),
+            ("already exists", "Reusing existing file"),
+            ("failed", "Failed"),
+            ("error", "Failed"),
+        )
+        for marker, phase in phases:
+            if marker in lowered:
+                data["phase"] = phase
                 data["current"] = line.strip()
+                if phase == "Failed":
+                    data["failed"] = 1
                 break
         return data
 
@@ -194,18 +214,23 @@ class DownloadManager:
             args.extend(["--bitrate", job.bitrate])
         supported = self.resolver.supported_options()
         if job.lyrics_mode != "none" and "--lyrics" in supported:
-            providers = [provider for provider in (job.lyrics_providers or ("synced", "genius", "musixmatch", "azlyrics")) if provider in LYRICS_PROVIDERS]
-            if not providers:
-                providers = ["synced", "genius", "musixmatch", "azlyrics"]
+            selected = tuple(provider.lower() for provider in (job.lyrics_providers or ("synced", "genius", "musixmatch", "azlyrics")))
+            # Musixmatch is handled by Groovia's custom richsync client. Never
+            # pass it to spotDL: doing so would select the old API path and
+            # reintroduce the HTTP 401 failures this backend avoids.
+            providers = [provider for provider in selected if provider in LYRICS_PROVIDERS and provider != "musixmatch"]
+            if not providers and job.lyrics_fallback:
+                providers = ["synced", "genius", "azlyrics"]
             if job.lyrics_mode != "synced":
                 providers = [provider for provider in providers if provider != "synced"]
-                if not providers:
-                    providers = ["genius", "musixmatch", "azlyrics"]
+                if not providers and job.lyrics_fallback:
+                    providers = ["genius", "azlyrics"]
             if job.lyrics_fallback:
-                providers.extend(provider for provider in ("genius", "musixmatch", "azlyrics") if provider not in providers)
-            args.extend(["--lyrics", *providers])
-            if job.generate_lrc and "--generate-lrc" in supported and "synced" in providers:
-                args.append("--generate-lrc")
+                providers.extend(provider for provider in ("genius", "azlyrics") if provider not in providers)
+            if providers:
+                args.extend(["--lyrics", *providers])
+                if job.generate_lrc and "--generate-lrc" in supported and "synced" in providers:
+                    args.append("--generate-lrc")
         if job.job_type == "sync" and job.sync_mode == "mirror" and job.sync_remove_lrc and "--sync-remove-lrc" in supported:
             args.append("--sync-remove-lrc")
         return args
@@ -239,8 +264,14 @@ class DownloadManager:
                     job.progress = data["progress"]
                 if "current" in data:
                     job.current_track = data["current"]
+                if "total" in data:
+                    job.total = data["total"]
                 if "completed" in data:
                     job.completed = data["completed"]
+                if "phase" in data:
+                    job.phase = data["phase"]
+                if "failed" in data:
+                    job.failed += data["failed"]
                 self._emit("output", job, data)
             returncode = job.process.wait()
             if job.cancel_requested:

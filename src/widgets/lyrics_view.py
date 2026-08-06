@@ -16,12 +16,15 @@ class LyricsView(Gtk.ScrolledWindow):
         self.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self._document = None
         self._buttons = []
+        self._word_buttons = {}
+        self._active_word = (-1, -1)
         self._active_index = -1
         self._upcoming_index = -1
         self._music_icon_size = 20
         self._auto_follow = True
         self._programmatic_scroll = False
         self._animations = {}
+        self._word_animation = None
         self._scroll_animation = None
         self._animations_enabled = self._read_animation_preference()
         self._content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
@@ -66,6 +69,9 @@ class LyricsView(Gtk.ScrolledWindow):
             for animation in self._animations.values():
                 animation.skip()
             self._animations.clear()
+            if self._word_animation:
+                self._word_animation.skip()
+                self._word_animation = None
             if self._scroll_animation:
                 self._scroll_animation.skip()
                 self._scroll_animation = None
@@ -78,7 +84,16 @@ class LyricsView(Gtk.ScrolledWindow):
         if not 0 <= index < len(self._buttons):
             return
 
-        child = self._buttons[index].get_child()
+        if index in self._word_buttons:
+            for word_button in self._word_buttons[index]:
+                child = word_button.get_child()
+                if isinstance(child, Gtk.Label):
+                    attrs = Pango.AttrList()
+                    attrs.insert(Pango.attr_scale_new(float(scale)))
+                    child.set_attributes(attrs)
+            return
+
+        child = self._label_for(self._buttons[index])
 
         if isinstance(child, Gtk.Label):
             attrs = Pango.AttrList()
@@ -164,7 +179,7 @@ class LyricsView(Gtk.ScrolledWindow):
         self._active_index = index
         if 0 <= index < len(self._buttons):
             self._buttons[index].add_css_class("lyrics-current")
-            self._animate_line(index, 1.0, 1.4, .58, 1.0)
+            self._animate_line(index, 1.0, 1.08, .58, 1.0)
 
         self._upcoming_index = index + 1 if index + 1 < len(self._buttons) else -1
         if self._upcoming_index >= 0:
@@ -185,48 +200,74 @@ class LyricsView(Gtk.ScrolledWindow):
         for animation in self._animations.values():
             animation.skip()
         self._animations.clear()
+        if self._word_animation:
+            self._word_animation.skip()
+            self._word_animation = None
         if self._scroll_animation:
             self._scroll_animation.skip()
             self._scroll_animation = None
         for child in list(self._content):
             self._content.remove(child)
         self._buttons = []
+        self._word_buttons = {}
+        self._active_word = (-1, -1)
         if not document:
             return
         for index, line in enumerate(document.lines):
             if document.synchronized:
-                button = Gtk.Button(has_frame=False, focusable=True)
-
-                text = line.text or ""
-
-                if text.strip():
-                    content = Gtk.Label(
-                        label=text,
-                        wrap=True,
-                        justify=Gtk.Justification.CENTER,
-                    )
+                if line.words:
+                    # Word-synced lines use one native, keyboard-focusable
+                    # button per word. The line container remains a single
+                    # item for scrolling and line-level animation.
+                    container = Gtk.FlowBox()
+                    container.set_selection_mode(Gtk.SelectionMode.NONE)
+                    container.set_halign(Gtk.Align.CENTER)
+                    container.set_valign(Gtk.Align.CENTER)
+                    container.set_row_spacing(2)
+                    container.set_column_spacing(1)
+                    container.add_css_class("lyrics-line")
+                    container.add_css_class("lyrics-word-line")
+                    words = []
+                    for word_index, word in enumerate(line.words):
+                        button = Gtk.Button(label=word.text, has_frame=False, focusable=True)
+                        button.add_css_class("lyrics-word")
+                        button.set_tooltip_text("Seek to this lyric word")
+                        button.connect(
+                            "clicked",
+                            lambda _button, word=word: self.emit(
+                                "seek-requested",
+                                (word.start_time_ms + document.offset_ms) / 1000.0,
+                            ),
+                        )
+                        words.append(button)
+                        container.insert(button, -1)
+                    self._word_buttons[index] = words
+                    button = container
+                    self._buttons.append(button)
+                    self._set_line_visuals(index, 1.0, .58)
+                    self._content.append(button)
                 else:
-                    content = Gtk.Image.new_from_icon_name(
-                        "audio-x-generic-symbolic"
+                    button = Gtk.Button(has_frame=False, focusable=True)
+                    text = line.text or ""
+                    if text.strip():
+                        content = Gtk.Label(label=text, wrap=True, justify=Gtk.Justification.CENTER)
+                    else:
+                        content = Gtk.Image.new_from_icon_name("audio-x-generic-symbolic")
+                        content.set_pixel_size(self._music_icon_size)
+                        content.add_css_class("lyrics-music-icon")
+                    button.set_child(content)
+                    button.add_css_class("lyrics-line")
+                    button.set_tooltip_text("Seek to this lyric line")
+                    button.connect(
+                        "clicked",
+                        lambda _button, line=line: self.emit(
+                            "seek-requested",
+                            (line.start_time_ms + document.offset_ms) / 1000.0,
+                        ),
                     )
-                    content.set_pixel_size(self._music_icon_size)
-                    content.add_css_class("lyrics-music-icon")
-
-                button.set_child(content)
-                button.add_css_class("lyrics-line")
-                button.set_tooltip_text("Seek to this lyric line")
-
-                button.connect(
-                    "clicked",
-                    lambda _button, line=line: self.emit(
-                        "seek-requested",
-                        (line.start_time_ms + document.offset_ms) / 1000.0,
-                    ),
-                )
-
-                self._buttons.append(button)
-                self._set_line_visuals(index, 1.0, .58)
-                self._content.append(button)
+                    self._buttons.append(button)
+                    self._set_line_visuals(index, 1.0, .58)
+                    self._content.append(button)
 
             else:
                 label = Gtk.Label(
@@ -243,9 +284,76 @@ class LyricsView(Gtk.ScrolledWindow):
         if not self._document or not self._document.synchronized or not self._buttons:
             return
         index = self._document.current_index(position_ms)
-        if index == self._active_index:
+        if index != self._active_index:
+            self._transition_to(index)
+        if self._document.word_synchronized:
+            self._update_word(position_ms)
+
+    def _update_word(self, position_ms: int):
+        line_index = self._active_index
+        words = self._word_buttons.get(line_index, [])
+        if not words:
             return
-        self._transition_to(index)
+        word_index = self._document.current_word_index(line_index, position_ms)
+        previous_line, previous_word = self._active_word
+        if (previous_line, previous_word) != (line_index, word_index):
+            if 0 <= previous_line and previous_line in self._word_buttons and 0 <= previous_word < len(self._word_buttons[previous_line]):
+                old = self._word_buttons[previous_line][previous_word]
+                old.remove_css_class("lyrics-word-current")
+                old.add_css_class("lyrics-word-previous")
+            if 0 <= word_index < len(words):
+                current = words[word_index]
+                current.remove_css_class("lyrics-word-upcoming")
+                current.add_css_class("lyrics-word-current")
+                self._animate_word(current, 1.08, 1.107, .82, 1.0)
+            self._active_word = (line_index, word_index)
+
+        for index, button in enumerate(words):
+            self._set_word_scale(button, 1.08)
+            button.remove_css_class("lyrics-word-previous")
+            button.remove_css_class("lyrics-word-upcoming")
+            if index < word_index:
+                button.add_css_class("lyrics-word-previous")
+            elif index > word_index:
+                button.add_css_class("lyrics-word-upcoming")
+
+        if 0 <= word_index < len(words):
+            word = self._document.lines[line_index].words[word_index]
+            start = word.start_time_ms + self._document.offset_ms
+            end = word.end_time_ms
+            if end is None:
+                end = self._document.lines[line_index].end_time_ms
+            end = (end if end is not None else word.start_time_ms + 500) + self._document.offset_ms
+            progress = 1.0 if end <= start else max(0.0, min(1.0, (position_ms - start) / (end - start)))
+            button = words[word_index]
+            button.set_opacity(.82 + .18 * progress)
+            self._set_word_scale(button, 1.08 * (1.0 + .025 * progress))
+
+    def _set_word_scale(self, button, scale):
+        child = button.get_child()
+        if isinstance(child, Gtk.Label):
+            attrs = Pango.AttrList()
+            attrs.insert(Pango.attr_scale_new(float(scale)))
+            child.set_attributes(attrs)
+
+    def _animate_word(self, button, from_scale, to_scale, from_opacity, to_opacity):
+        if self._word_animation is not None:
+            self._word_animation.skip()
+            self._word_animation = None
+        if not self._animations_enabled:
+            self._set_word_scale(button, to_scale)
+            button.set_opacity(to_opacity)
+            return
+        def update(value):
+            progress = float(value)
+            self._set_word_scale(button, from_scale + (to_scale - from_scale) * progress)
+            button.set_opacity(from_opacity + (to_opacity - from_opacity) * progress)
+        animation = Adw.TimedAnimation.new(
+            self, 0.0, 1.0, 240, Adw.CallbackAnimationTarget.new(update)
+        )
+        animation.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+        self._word_animation = animation
+        animation.play()
 
     def return_to_current(self):
         self._auto_follow = True

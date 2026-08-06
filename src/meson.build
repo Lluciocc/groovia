@@ -44,5 +44,5 @@ install_data(['widgets/__init__.py', 'widgets/vinyl_view.py', 'widgets/lyrics_vi
 install_data(['lyrics/__init__.py', 'lyrics/parser.py', 'lyrics/service.py'], install_dir: moduledir / 'lyrics')
 install_data([
   'downloads/__init__.py', 'downloads/manager.py', 'downloads/spotdl.py',
-  'downloads/importer.py', 'downloads/service.py',
+  'downloads/importer.py', 'downloads/service.py', 'downloads/musicmatch.py',
 ], install_dir: moduledir / 'downloads')
