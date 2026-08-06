@@ -10,7 +10,14 @@ from .spotdl import (
 )
 
 __all__ = [
-    "DependencyStatus", "DownloadJob", "DownloadManager", "ProgressParser",
-    "SourceInfo", "SpotDLCommandResolver", "SpotDLService", "SpotDLUnavailable",
-    "classify_input", "read_sync_source",
+    "DependencyStatus",
+    "DownloadJob",
+    "DownloadManager",
+    "ProgressParser",
+    "SourceInfo",
+    "SpotDLCommandResolver",
+    "SpotDLService",
+    "SpotDLUnavailable",
+    "classify_input",
+    "read_sync_source",
 ]

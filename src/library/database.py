@@ -11,15 +11,16 @@ class LibraryDatabase:
     """Small SQLite store for the local library and playback history."""
 
     def __init__(self, data_dir: str | None = None):
-        base = Path(data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+        base = Path(
+            data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")
+        )
         self.path = base / "groovia" / "library.db"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA journal_mode=WAL")
         self.connection.execute("PRAGMA foreign_keys=ON")
-        self.connection.executescript(
-            """
+        self.connection.executescript("""
             CREATE TABLE IF NOT EXISTS tracks (
               id INTEGER PRIMARY KEY, title TEXT NOT NULL, artist TEXT NOT NULL,
               album TEXT NOT NULL, album_artist TEXT NOT NULL, year TEXT NOT NULL,
@@ -47,8 +48,7 @@ class LibraryDatabase:
             CREATE INDEX IF NOT EXISTS playlist_tracks_order
               ON playlist_tracks(playlist_id, position);
             CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            """
-        )
+            """)
         self._migrate_download_schema()
         self.connection.execute(
             "INSERT OR IGNORE INTO playlists(name, is_favorites) VALUES('Favorites', 1)"
@@ -63,22 +63,29 @@ class LibraryDatabase:
         columns = {
             "tracks": {"spotify_id": "TEXT", "isrc": "TEXT"},
             "playlists": {
-                "source_url": "TEXT", "source_id": "TEXT", "sync_file": "TEXT",
-                "managed_dir": "TEXT", "sync_mode": "TEXT NOT NULL DEFAULT 'safe'",
+                "source_url": "TEXT",
+                "source_id": "TEXT",
+                "sync_file": "TEXT",
+                "managed_dir": "TEXT",
+                "sync_mode": "TEXT NOT NULL DEFAULT 'safe'",
                 "auto_sync": "TEXT NOT NULL DEFAULT 'manual'",
                 "cover_policy": "TEXT NOT NULL DEFAULT 'follow'",
                 "order_policy": "TEXT NOT NULL DEFAULT 'spotify'",
                 "sync_status": "TEXT NOT NULL DEFAULT 'disconnected'",
-                "last_sync_at": "TEXT", "last_sync_result": "TEXT",
+                "last_sync_at": "TEXT",
+                "last_sync_result": "TEXT",
             },
         }
         for table, wanted in columns.items():
-            existing = {row[1] for row in self.connection.execute(f"PRAGMA table_info({table})")}
+            existing = {
+                row[1] for row in self.connection.execute(f"PRAGMA table_info({table})")
+            }
             for name, definition in wanted.items():
                 if name not in existing:
-                    self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
-        self.connection.executescript(
-            """
+                    self.connection.execute(
+                        f"ALTER TABLE {table} ADD COLUMN {name} {definition}"
+                    )
+        self.connection.executescript("""
             CREATE INDEX IF NOT EXISTS tracks_spotify_id ON tracks(spotify_id);
             CREATE INDEX IF NOT EXISTS playlists_source_id ON playlists(source_id);
             CREATE TABLE IF NOT EXISTS download_jobs (
@@ -111,8 +118,7 @@ class LibraryDatabase:
             );
             CREATE INDEX IF NOT EXISTS lyrics_track ON lyrics(track_id);
             CREATE INDEX IF NOT EXISTS lyrics_kind ON lyrics(track_id, kind);
-            """
-        )
+            """)
         job_columns = {
             "lyrics_mode": "TEXT NOT NULL DEFAULT 'none'",
             "lyrics_fallback": "INTEGER NOT NULL DEFAULT 1",
@@ -120,22 +126,35 @@ class LibraryDatabase:
             "lyrics_providers": "TEXT",
             "sync_remove_lrc": "INTEGER NOT NULL DEFAULT 0",
         }
-        existing_jobs = {row[1] for row in self.connection.execute("PRAGMA table_info(download_jobs)")}
+        existing_jobs = {
+            row[1]
+            for row in self.connection.execute("PRAGMA table_info(download_jobs)")
+        }
         for name, definition in job_columns.items():
             if name not in existing_jobs:
-                self.connection.execute(f"ALTER TABLE download_jobs ADD COLUMN {name} {definition}")
+                self.connection.execute(
+                    f"ALTER TABLE download_jobs ADD COLUMN {name} {definition}"
+                )
 
     @staticmethod
     def _playlist(row: sqlite3.Row) -> Playlist:
         return Playlist(
-            id=row["id"], name=row["name"], cover_path=row["cover_path"],
-            is_favorites=bool(row["is_favorites"]), created_at=row["created_at"],
+            id=row["id"],
+            name=row["name"],
+            cover_path=row["cover_path"],
+            is_favorites=bool(row["is_favorites"]),
+            created_at=row["created_at"],
             modified_at=row["modified_at"],
-            source_url=row["source_url"], source_id=row["source_id"],
-            sync_file=row["sync_file"], managed_dir=row["managed_dir"],
-            sync_mode=row["sync_mode"], auto_sync=row["auto_sync"],
-            cover_policy=row["cover_policy"], order_policy=row["order_policy"],
-            sync_status=row["sync_status"], last_sync_at=row["last_sync_at"],
+            source_url=row["source_url"],
+            source_id=row["source_id"],
+            sync_file=row["sync_file"],
+            managed_dir=row["managed_dir"],
+            sync_mode=row["sync_mode"],
+            auto_sync=row["auto_sync"],
+            cover_policy=row["cover_policy"],
+            order_policy=row["order_policy"],
+            sync_status=row["sync_status"],
+            last_sync_at=row["last_sync_at"],
             last_sync_result=row["last_sync_result"],
         )
 
@@ -144,7 +163,9 @@ class LibraryDatabase:
             query = """SELECT * FROM tracks WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?
                        OR genre LIKE ? ORDER BY album, disc_number, track_number, title"""
             needle = f"%{search}%"
-            rows = self.connection.execute(query, (needle, needle, needle, needle)).fetchall()
+            rows = self.connection.execute(
+                query, (needle, needle, needle, needle)
+            ).fetchall()
         else:
             rows = self.connection.execute(
                 "SELECT * FROM tracks ORDER BY album, disc_number, track_number, title"
@@ -153,7 +174,8 @@ class LibraryDatabase:
 
     def recent_tracks(self, limit: int = 8) -> list[Track]:
         rows = self.connection.execute(
-            "SELECT * FROM tracks ORDER BY COALESCE(last_played, added_at) DESC LIMIT ?", (limit,)
+            "SELECT * FROM tracks ORDER BY COALESCE(last_played, added_at) DESC LIMIT ?",
+            (limit,),
         ).fetchall()
         return [self._track(row) for row in rows]
 
@@ -178,9 +200,21 @@ class LibraryDatabase:
                     duration=excluded.duration, cover_path=excluded.cover_path,
                     spotify_id=COALESCE(excluded.spotify_id, tracks.spotify_id),
                     isrc=COALESCE(excluded.isrc, tracks.isrc)""",
-                (track.title, track.artist, track.album, track.album_artist, track.year, track.genre,
-                 track.track_number, track.disc_number, track.duration, track.path, track.cover_path,
-                 track.spotify_id, track.isrc),
+                (
+                    track.title,
+                    track.artist,
+                    track.album,
+                    track.album_artist,
+                    track.year,
+                    track.genre,
+                    track.track_number,
+                    track.disc_number,
+                    track.duration,
+                    track.path,
+                    track.cover_path,
+                    track.spotify_id,
+                    track.isrc,
+                ),
             )
             count += 1
         self.connection.commit()
@@ -194,7 +228,9 @@ class LibraryDatabase:
         self.connection.commit()
 
     def remove_missing(self) -> None:
-        self.connection.execute("DELETE FROM tracks WHERE path NOT IN (SELECT path FROM tracks WHERE path IS NOT NULL)")
+        self.connection.execute(
+            "DELETE FROM tracks WHERE path NOT IN (SELECT path FROM tracks WHERE path IS NOT NULL)"
+        )
         self.connection.commit()
 
     def close(self) -> None:
@@ -202,14 +238,18 @@ class LibraryDatabase:
 
     def save_queue(self, tracks: Iterable[Track]) -> None:
         value = json.dumps([track.path for track in tracks])
-        self.connection.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('queue', ?)", (value,))
+        self.connection.execute(
+            "INSERT OR REPLACE INTO settings(key, value) VALUES('queue', ?)", (value,)
+        )
         self.connection.commit()
 
     def save_playback(self, track: Track | None, position: float = 0.0) -> None:
-        value = json.dumps({
-            "path": track.path if track else None,
-            "position": max(0.0, float(position)),
-        })
+        value = json.dumps(
+            {
+                "path": track.path if track else None,
+                "position": max(0.0, float(position)),
+            }
+        )
         self.connection.execute(
             "INSERT OR REPLACE INTO settings(key, value) VALUES('playback', ?)",
             (value,),
@@ -217,7 +257,9 @@ class LibraryDatabase:
         self.connection.commit()
 
     def load_playback(self) -> tuple[str, float] | None:
-        row = self.connection.execute("SELECT value FROM settings WHERE key='playback'").fetchone()
+        row = self.connection.execute(
+            "SELECT value FROM settings WHERE key='playback'"
+        ).fetchone()
         if not row:
             return None
         try:
@@ -230,7 +272,9 @@ class LibraryDatabase:
             return None
 
     def track_by_path(self, path: str) -> Track | None:
-        row = self.connection.execute("SELECT * FROM tracks WHERE path = ?", (path,)).fetchone()
+        row = self.connection.execute(
+            "SELECT * FROM tracks WHERE path = ?", (path,)
+        ).fetchone()
         return self._track(row) if row else None
 
     def remove_track(self, path: str) -> None:
@@ -256,27 +300,40 @@ class LibraryDatabase:
         ).fetchone()
         if row:
             return self._playlist(row)
-        self.connection.execute("INSERT INTO playlists(name, is_favorites) VALUES('Favorites', 1)")
+        self.connection.execute(
+            "INSERT INTO playlists(name, is_favorites) VALUES('Favorites', 1)"
+        )
         self.connection.commit()
         return self.favorites()
 
-    def create_playlist(self, name: str, cover_path: str | None = None, **source) -> Playlist:
+    def create_playlist(
+        self, name: str, cover_path: str | None = None, **source
+    ) -> Playlist:
         cursor = self.connection.execute(
             """INSERT INTO playlists(
                 name, cover_path, source_url, source_id, sync_file, managed_dir,
                 sync_mode, auto_sync, cover_policy, order_policy, sync_status
             ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                name.strip(), cover_path, source.get("source_url"), source.get("source_id"),
-                source.get("sync_file"), source.get("managed_dir"), source.get("sync_mode", "safe"),
-                source.get("auto_sync", "manual"), source.get("cover_policy", "follow"),
-                source.get("order_policy", "spotify"), source.get("sync_status", "disconnected"),
+                name.strip(),
+                cover_path,
+                source.get("source_url"),
+                source.get("source_id"),
+                source.get("sync_file"),
+                source.get("managed_dir"),
+                source.get("sync_mode", "safe"),
+                source.get("auto_sync", "manual"),
+                source.get("cover_policy", "follow"),
+                source.get("order_policy", "spotify"),
+                source.get("sync_status", "disconnected"),
             ),
         )
         self.connection.commit()
         return self.playlist(cursor.lastrowid)
 
-    def playlist_by_source(self, source_id: str | None = None, source_url: str | None = None) -> Playlist | None:
+    def playlist_by_source(
+        self, source_id: str | None = None, source_url: str | None = None
+    ) -> Playlist | None:
         if source_id:
             row = self.connection.execute(
                 "SELECT * FROM playlists WHERE source_id = ? LIMIT 1", (source_id,)
@@ -291,9 +348,17 @@ class LibraryDatabase:
 
     def update_playlist_source(self, playlist_id: int, **values) -> None:
         allowed = {
-            "source_url", "source_id", "sync_file", "managed_dir", "sync_mode",
-            "auto_sync", "cover_policy", "order_policy", "sync_status",
-            "last_sync_at", "last_sync_result",
+            "source_url",
+            "source_id",
+            "sync_file",
+            "managed_dir",
+            "sync_mode",
+            "auto_sync",
+            "cover_policy",
+            "order_policy",
+            "sync_status",
+            "last_sync_at",
+            "last_sync_result",
         }
         values = {key: value for key, value in values.items() if key in allowed}
         if not values:
@@ -313,7 +378,8 @@ class LibraryDatabase:
             return self._track(row)
         row = self.connection.execute(
             "SELECT t.* FROM track_sources s JOIN tracks t ON t.id = s.track_id "
-            "WHERE s.spotify_id = ? LIMIT 1", (spotify_id,)
+            "WHERE s.spotify_id = ? LIMIT 1",
+            (spotify_id,),
         ).fetchone()
         return self._track(row) if row else None
 
@@ -331,7 +397,9 @@ class LibraryDatabase:
         ).fetchone()
         return self._track(row) if row else None
 
-    def save_track_source(self, spotify_id: str, track: Track, isrc: str | None = None) -> None:
+    def save_track_source(
+        self, spotify_id: str, track: Track, isrc: str | None = None
+    ) -> None:
         stored = self.track_by_path(track.path)
         if stored and stored.id is not None:
             self.connection.execute(
@@ -348,12 +416,22 @@ class LibraryDatabase:
         )
         self.connection.commit()
 
-    def save_download_job(self, job_id: str, job_type: str, source: str, state: str,
-                          progress: float = 0.0, destination: str | None = None,
-                          error: str | None = None, completed_at: str | None = None,
-                          lyrics_mode: str = "none", lyrics_fallback: bool = True,
-                          generate_lrc: bool = False, lyrics_providers: str | None = None,
-                          sync_remove_lrc: bool = False) -> None:
+    def save_download_job(
+        self,
+        job_id: str,
+        job_type: str,
+        source: str,
+        state: str,
+        progress: float = 0.0,
+        destination: str | None = None,
+        error: str | None = None,
+        completed_at: str | None = None,
+        lyrics_mode: str = "none",
+        lyrics_fallback: bool = True,
+        generate_lrc: bool = False,
+        lyrics_providers: str | None = None,
+        sync_remove_lrc: bool = False,
+    ) -> None:
         self.connection.execute(
             """INSERT INTO download_jobs(id, job_type, source, state, progress, destination, error, completed_at,
                lyrics_mode, lyrics_fallback, generate_lrc, lyrics_providers, sync_remove_lrc)
@@ -362,8 +440,21 @@ class LibraryDatabase:
                completed_at=excluded.completed_at, lyrics_mode=excluded.lyrics_mode,
                lyrics_fallback=excluded.lyrics_fallback, generate_lrc=excluded.generate_lrc,
                lyrics_providers=excluded.lyrics_providers, sync_remove_lrc=excluded.sync_remove_lrc""",
-            (job_id, job_type, source, state, progress, destination, error, completed_at,
-             lyrics_mode, int(lyrics_fallback), int(generate_lrc), lyrics_providers, int(sync_remove_lrc)),
+            (
+                job_id,
+                job_type,
+                source,
+                state,
+                progress,
+                destination,
+                error,
+                completed_at,
+                lyrics_mode,
+                int(lyrics_fallback),
+                int(generate_lrc),
+                lyrics_providers,
+                int(sync_remove_lrc),
+            ),
         )
         self.connection.commit()
 
@@ -382,10 +473,20 @@ class LibraryDatabase:
         ).fetchall()
         return [dict(row) for row in rows]
 
-    def save_lyrics(self, track_id: int, kind: str, file_path: str | None,
-                    provider: str | None, language: str | None, content: str,
-                    *, user_edited: bool = False, timing_offset_ms: int = 0,
-                    checksum: str | None = None, source_id: str | None = None) -> int:
+    def save_lyrics(
+        self,
+        track_id: int,
+        kind: str,
+        file_path: str | None,
+        provider: str | None,
+        language: str | None,
+        content: str,
+        *,
+        user_edited: bool = False,
+        timing_offset_ms: int = 0,
+        checksum: str | None = None,
+        source_id: str | None = None,
+    ) -> int:
         row = self.connection.execute(
             "SELECT id FROM lyrics WHERE track_id = ? AND kind = ? AND file_path IS ?",
             (track_id, kind, file_path),
@@ -395,7 +496,16 @@ class LibraryDatabase:
                 """UPDATE lyrics SET provider=?, language=?, source_id=?, content=?,
                    modified_at=CURRENT_TIMESTAMP, user_edited=?, timing_offset_ms=?, checksum=?
                    WHERE id=?""",
-                (provider, language, source_id, content, int(user_edited), timing_offset_ms, checksum, row[0]),
+                (
+                    provider,
+                    language,
+                    source_id,
+                    content,
+                    int(user_edited),
+                    timing_offset_ms,
+                    checksum,
+                    row[0],
+                ),
             )
             lyric_id = row[0]
         else:
@@ -403,8 +513,18 @@ class LibraryDatabase:
                 """INSERT INTO lyrics(track_id, kind, file_path, provider, language, source_id,
                    content, user_edited, timing_offset_ms, checksum)
                    VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                (track_id, kind, file_path, provider, language, source_id, content,
-                 int(user_edited), timing_offset_ms, checksum),
+                (
+                    track_id,
+                    kind,
+                    file_path,
+                    provider,
+                    language,
+                    source_id,
+                    content,
+                    int(user_edited),
+                    timing_offset_ms,
+                    checksum,
+                ),
             )
             lyric_id = cursor.lastrowid
         self.connection.commit()
@@ -444,14 +564,16 @@ class LibraryDatabase:
     def rename_playlist(self, playlist_id: int, name: str) -> None:
         self.connection.execute(
             "UPDATE playlists SET name = ?, modified_at = CURRENT_TIMESTAMP "
-            "WHERE id = ? AND is_favorites = 0", (name.strip(), playlist_id)
+            "WHERE id = ? AND is_favorites = 0",
+            (name.strip(), playlist_id),
         )
         self.connection.commit()
 
     def update_playlist_cover(self, playlist_id: int, cover_path: str | None) -> None:
         self.connection.execute(
             "UPDATE playlists SET cover_path = ?, modified_at = CURRENT_TIMESTAMP "
-            "WHERE id = ?", (cover_path, playlist_id)
+            "WHERE id = ?",
+            (cover_path, playlist_id),
         )
         self.connection.commit()
 
@@ -462,7 +584,9 @@ class LibraryDatabase:
         self.connection.commit()
         return cursor.rowcount > 0
 
-    def playlist_tracks(self, playlist_id: int, search: str = "", sort: str = "custom") -> list[Track]:
+    def playlist_tracks(
+        self, playlist_id: int, search: str = "", sort: str = "custom"
+    ) -> list[Track]:
         order = {
             "custom": "pt.position",
             "title": "t.title COLLATE NOCASE, pt.position",
@@ -514,7 +638,8 @@ class LibraryDatabase:
                 added += 1
                 position += 1
         self.connection.execute(
-            "UPDATE playlists SET modified_at = CURRENT_TIMESTAMP WHERE id = ?", (playlist_id,)
+            "UPDATE playlists SET modified_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (playlist_id,),
         )
         self.connection.commit()
         return added
@@ -548,9 +673,12 @@ class LibraryDatabase:
         self.connection.commit()
 
     def clear_playlist(self, playlist_id: int) -> None:
-        self.connection.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?", (playlist_id,))
         self.connection.execute(
-            "UPDATE playlists SET modified_at = CURRENT_TIMESTAMP WHERE id = ?", (playlist_id,)
+            "DELETE FROM playlist_tracks WHERE playlist_id = ?", (playlist_id,)
+        )
+        self.connection.execute(
+            "UPDATE playlists SET modified_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (playlist_id,),
         )
         self.connection.commit()
 
@@ -562,7 +690,8 @@ class LibraryDatabase:
                     (position, playlist_id, track_id),
                 )
             self.connection.execute(
-                "UPDATE playlists SET modified_at = CURRENT_TIMESTAMP WHERE id = ?", (playlist_id,)
+                "UPDATE playlists SET modified_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (playlist_id,),
             )
 
     def _normalize_playlist_positions(self, playlist_id: int) -> None:
@@ -577,7 +706,9 @@ class LibraryDatabase:
             )
 
     def load_queue(self) -> list[Track]:
-        row = self.connection.execute("SELECT value FROM settings WHERE key='queue'").fetchone()
+        row = self.connection.execute(
+            "SELECT value FROM settings WHERE key='queue'"
+        ).fetchone()
         if not row:
             return []
         paths = json.loads(row[0])

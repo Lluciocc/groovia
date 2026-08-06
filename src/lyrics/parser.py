@@ -6,7 +6,6 @@ import bisect
 import re
 from dataclasses import dataclass, field
 
-
 TIMESTAMP = re.compile(
     r"\[(?P<minutes>\d+):(?P<seconds>\d{1,2})(?:[.:](?P<fraction>\d{1,3}))?\]"
 )
@@ -116,7 +115,7 @@ def _parse_word_segments(text: str) -> tuple[str, list[tuple[int, str]]]:
     words: list[tuple[int, str]] = []
     for index, match in enumerate(matches):
         end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        word = text[match.end():end].strip()
+        word = text[match.end() : end].strip()
         if word:
             words.append((_timestamp_ms(match), word))
     plain = WORD_TIMESTAMP.sub("", text).strip()
@@ -125,7 +124,9 @@ def _parse_word_segments(text: str) -> tuple[str, list[tuple[int, str]]]:
     return plain, words
 
 
-def parse_lrc(content: str, *, provider: str | None = None, file_path: str | None = None) -> LyricsTimeline:
+def parse_lrc(
+    content: str, *, provider: str | None = None, file_path: str | None = None
+) -> LyricsTimeline:
     metadata: dict[str, str] = {}
     timed: list[tuple[int, str, list[tuple[int, str]]]] = []
     offset = 0
@@ -156,7 +157,11 @@ def parse_lrc(content: str, *, provider: str | None = None, file_path: str | Non
             LyricsWord(
                 text=word,
                 start_time_ms=word_start,
-                end_time_ms=(word_specs[word_index + 1][0] if word_index + 1 < len(word_specs) else end),
+                end_time_ms=(
+                    word_specs[word_index + 1][0]
+                    if word_index + 1 < len(word_specs)
+                    else end
+                ),
             )
             for word_index, (word_start, word) in enumerate(word_specs)
         ]
@@ -172,7 +177,9 @@ def parse_lrc(content: str, *, provider: str | None = None, file_path: str | Non
     )
 
 
-def parse_lyrics(content: str, *, file_path: str | None = None, provider: str | None = None) -> LyricsTimeline:
+def parse_lyrics(
+    content: str, *, file_path: str | None = None, provider: str | None = None
+) -> LyricsTimeline:
     """Parse LRC when timestamps exist, otherwise preserve plain lyrics."""
     timeline = parse_lrc(content, provider=provider, file_path=file_path)
     if timeline.lines:

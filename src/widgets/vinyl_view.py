@@ -90,7 +90,7 @@ class VinylView(Gtk.DrawingArea):
 
     def _inside_record(self, x, y):
         cx, cy, radius = self._record_geometry()
-        return (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2
+        return (x - cx) ** 2 + (y - cy) ** 2 <= radius**2
 
     @staticmethod
     def _angle(x, y, cx, cy):
@@ -124,7 +124,9 @@ class VinylView(Gtk.DrawingArea):
 
         if self.duration > 0:
             # One full manual turn scrubs 45 seconds, in either direction.
-            seconds = self._drag_start_position + self._drag_total_angle / math.tau * 45.0
+            seconds = (
+                self._drag_start_position + self._drag_total_angle / math.tau * 45.0
+            )
             seconds = max(0.0, min(self.duration, seconds))
             self.progress = seconds / self.duration
             self.emit("seek-requested", seconds)
@@ -150,10 +152,15 @@ class VinylView(Gtk.DrawingArea):
         delta = min(0.1, now - self._last_frame)
         self._last_frame = now
         target_velocity = 1.18 if self.is_playing else 0.0
-        self.rotation_velocity += (target_velocity - self.rotation_velocity) * min(1.0, delta * 5.5)
+        self.rotation_velocity += (target_velocity - self.rotation_velocity) * min(
+            1.0, delta * 5.5
+        )
         self.arm_progress += (self.progress - self.arm_progress) * min(1.0, delta * 4.5)
         self.angle = (self.angle + delta * self.rotation_velocity) % math.tau
-        if self.rotation_velocity > .002 or abs(self.arm_progress - self.progress) > .001:
+        if (
+            self.rotation_velocity > 0.002
+            or abs(self.arm_progress - self.progress) > 0.001
+        ):
             self.queue_draw()
         return True
 
@@ -178,7 +185,7 @@ class VinylView(Gtk.DrawingArea):
             cr.set_line_width(1)
             cr.arc(0, 0, ring, 0, math.tau)
             cr.stroke()
-        label = radius * .43
+        label = radius * 0.43
         cr.set_source_rgb(*self.accent)
         cr.arc(0, 0, label, 0, math.tau)
         cr.fill()
@@ -187,7 +194,7 @@ class VinylView(Gtk.DrawingArea):
         cr.set_source_rgb(0.055, 0.055, 0.065)
         cr.arc(0, 0, 7, 0, math.tau)
         cr.fill()
-        cr.set_source_rgba(1, 1, 1, .65)
+        cr.set_source_rgba(1, 1, 1, 0.65)
         cr.arc(-2, -2, 2, 0, math.tau)
         cr.fill()
         cr.restore()
@@ -259,7 +266,9 @@ class VinylView(Gtk.DrawingArea):
             cr.clip()
             # Draw the already bounded Pixbuf into the exact label diameter.
             cr.translate(-diameter / 2, -diameter / 2)
-            cr.scale(diameter / self.cover.get_width(), diameter / self.cover.get_height())
+            cr.scale(
+                diameter / self.cover.get_width(), diameter / self.cover.get_height()
+            )
             Gdk.cairo_set_source_pixbuf(cr, self.cover, 0, 0)
             cr.paint()
             cr.restore()
@@ -269,16 +278,28 @@ class VinylView(Gtk.DrawingArea):
     def _draw_tonearm(self, cr, cx, cy, radius):
         arm_angle = -0.95 + self.arm_progress * 0.44
         arm_length = radius * 1.12
-        ax, ay = cx + math.cos(arm_angle) * radius * .92, cy + math.sin(arm_angle) * radius * .92
-        ex, ey = cx + math.cos(arm_angle) * arm_length, cy + math.sin(arm_angle) * arm_length
+        ax, ay = (
+            cx + math.cos(arm_angle) * radius * 0.92,
+            cy + math.sin(arm_angle) * radius * 0.92,
+        )
+        ex, ey = (
+            cx + math.cos(arm_angle) * arm_length,
+            cy + math.sin(arm_angle) * arm_length,
+        )
         cr.set_line_cap(1)
         cr.set_line_width(8)
         cr.set_source_rgba(0.04, 0.045, 0.06, 0.42)
-        cr.move_to(ax + 3, ay + 4); cr.line_to(ex + 3, ey + 4); cr.stroke()
+        cr.move_to(ax + 3, ay + 4)
+        cr.line_to(ex + 3, ey + 4)
+        cr.stroke()
         cr.set_line_width(5)
         cr.set_source_rgb(0.76, 0.73, 0.70)
-        cr.move_to(ax, ay); cr.line_to(ex, ey); cr.stroke()
+        cr.move_to(ax, ay)
+        cr.line_to(ex, ey)
+        cr.stroke()
         cr.set_source_rgb(0.34, 0.31, 0.29)
-        cr.arc(ex, ey, 10, 0, math.tau); cr.fill()
+        cr.arc(ex, ey, 10, 0, math.tau)
+        cr.fill()
         cr.set_source_rgb(0.86, 0.84, 0.80)
-        cr.arc(ax, ay, 11, 0, math.tau); cr.fill()
+        cr.arc(ax, ay, 11, 0, math.tau)
+        cr.fill()

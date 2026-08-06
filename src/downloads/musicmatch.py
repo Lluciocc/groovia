@@ -106,11 +106,20 @@ def richsync_to_lrc(richsync_body: str) -> str:
         ts = e.get("ts")
         if ts is None:
             continue
-        words = [(ts + (w.get("o") or 0), str(w.get("c") or "").strip()) for w in (e.get("l") or [])]
+        words = [
+            (ts + (w.get("o") or 0), str(w.get("c") or "").strip())
+            for w in (e.get("l") or [])
+        ]
         words = [(wt, wc) for wt, wc in words if wc]
         if words:
             has_words = True
-            out.append((ts, f"[{_stamp(ts)}]" + " ".join(f"<{_stamp(wt)}>{wc}" for wt, wc in words)))
+            out.append(
+                (
+                    ts,
+                    f"[{_stamp(ts)}]"
+                    + " ".join(f"<{_stamp(wt)}>{wc}" for wt, wc in words),
+                )
+            )
         elif (e.get("x") or "").strip():
             out.append((ts, f"[{_stamp(ts)}]" + e["x"].strip()))
     if not has_words:
@@ -136,7 +145,11 @@ class MusixmatchRichsync:
     ):
         self.base_url = base_url.rstrip("/") + "/"
         self.timeout = timeout
-        self.token_cache = Path(token_cache) if token_cache else (Path.home() / ".cache" / "musixmatch-richsync-token.json")
+        self.token_cache = (
+            Path(token_cache)
+            if token_cache
+            else (Path.home() / ".cache" / "musixmatch-richsync-token.json")
+        )
         self._token = None
         self._token_at = 0.0
 
@@ -184,7 +197,9 @@ class MusixmatchRichsync:
                 self._token, self._token_at = tok, time.time()
                 try:
                     self.token_cache.parent.mkdir(parents=True, exist_ok=True)
-                    self.token_cache.write_text(json.dumps({"v": tok, "t": self._token_at}), "utf-8")
+                    self.token_cache.write_text(
+                        json.dumps({"v": tok, "t": self._token_at}), "utf-8"
+                    )
                 except Exception:
                     pass
                 return tok
@@ -194,7 +209,9 @@ class MusixmatchRichsync:
     @staticmethod
     def _trusted(t: dict, title: str, artist: str, duration: float) -> bool:
         wt, wa = _normalize(title), _normalize(artist)
-        gt, ga = _normalize(t.get("track_name", "")), _normalize(t.get("artist_name", ""))
+        gt, ga = _normalize(t.get("track_name", "")), _normalize(
+            t.get("artist_name", "")
+        )
         tl = t.get("track_length") or 0
         dd = abs(tl - duration) if (tl and duration) else 9999
         if dd > 15 and dd != 9999:
@@ -223,7 +240,9 @@ class MusixmatchRichsync:
         token = self.get_token()
         if not token:
             return ""
-        rich = self._get("track.richsync.get", {"commontrack_id": commontrack_id, "usertoken": token})
+        rich = self._get(
+            "track.richsync.get", {"commontrack_id": commontrack_id, "usertoken": token}
+        )
         body = _deep_find(rich, "richsync_body")
         return richsync_to_lrc(body) if isinstance(body, str) and body else ""
 
@@ -251,10 +270,18 @@ class MusixmatchRichsync:
             return None
 
         track = _deep_find(_deep_find(macro, "matcher.track.get"), "track") or {}
-        if not track or not self._trusted(track, title, artist, duration) or track.get("instrumental"):
+        if (
+            not track
+            or not self._trusted(track, title, artist, duration)
+            or track.get("instrumental")
+        ):
             return None
         ctid = track.get("commontrack_id")
-        meta = dict(track_name=track.get("track_name", ""), artist_name=track.get("artist_name", ""), commontrack_id=ctid or 0)
+        meta = dict(
+            track_name=track.get("track_name", ""),
+            artist_name=track.get("artist_name", ""),
+            commontrack_id=ctid or 0,
+        )
 
         if track.get("has_richsync") and ctid:
             lrc = self.get_richsync(ctid)

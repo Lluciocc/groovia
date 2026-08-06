@@ -16,7 +16,6 @@ from gi.repository import GLib
 
 from .spotdl import SpotDLCommandResolver, SpotDLUnavailable
 
-
 EventCallback = Callable[[str, "DownloadJob", dict], None]
 
 
@@ -61,7 +60,8 @@ class ProgressParser:
             data["progress"] = min(100.0, float(match.group(1)))
         match = re.search(
             r"(?:track|song|item|file)?\s*(\d+)\s*(?:/|of)\s*(\d+)",
-            line, re.I,
+            line,
+            re.I,
         )
         if match:
             data["completed"] = int(match.group(1))
@@ -94,7 +94,12 @@ LYRICS_PROVIDERS = {"synced", "genius", "azlyrics"}
 class DownloadManager:
     """Run one controlled spotDL subprocess at a time, independently of playback."""
 
-    def __init__(self, data_dir: str | Path | None = None, callback: EventCallback | None = None, database=None):
+    def __init__(
+        self,
+        data_dir: str | Path | None = None,
+        callback: EventCallback | None = None,
+        database=None,
+    ):
         self.resolver = SpotDLCommandResolver(data_dir)
         self.callback = callback
         self.database = database
@@ -108,8 +113,12 @@ class DownloadManager:
             for previous in self.database.download_jobs():
                 if previous["state"] in {"queued", "running"}:
                     self.database.save_download_job(
-                        previous["id"], previous["job_type"], previous["source"],
-                        "interrupted", previous["progress"], previous["destination"],
+                        previous["id"],
+                        previous["job_type"],
+                        previous["source"],
+                        "interrupted",
+                        previous["progress"],
+                        previous["destination"],
                         "Groovia closed while this job was running",
                         lyrics_mode=previous.get("lyrics_mode", "none"),
                         lyrics_fallback=bool(previous.get("lyrics_fallback", 1)),
@@ -125,20 +134,36 @@ class DownloadManager:
     def jobs(self) -> list[DownloadJob]:
         return list(self._jobs.values())
 
-    def submit(self, job_type: str, source: str, destination: str | Path,
-               sync_file: str | Path | None = None, sync_mode: str = "safe",
-               output_format: str = "mp3", bitrate: str = "auto",
-               playlist_id: int | None = None, lyrics_mode: str = "none",
-               lyrics_fallback: bool = True, generate_lrc: bool = False,
-               lyrics_providers: tuple[str, ...] = (), sync_remove_lrc: bool = False) -> DownloadJob:
+    def submit(
+        self,
+        job_type: str,
+        source: str,
+        destination: str | Path,
+        sync_file: str | Path | None = None,
+        sync_mode: str = "safe",
+        output_format: str = "mp3",
+        bitrate: str = "auto",
+        playlist_id: int | None = None,
+        lyrics_mode: str = "none",
+        lyrics_fallback: bool = True,
+        generate_lrc: bool = False,
+        lyrics_providers: tuple[str, ...] = (),
+        sync_remove_lrc: bool = False,
+    ) -> DownloadJob:
         job = DownloadJob(
-            id=uuid.uuid4().hex, job_type=job_type, source=source,
+            id=uuid.uuid4().hex,
+            job_type=job_type,
+            source=source,
             destination=Path(destination).expanduser().resolve(),
             sync_file=Path(sync_file).expanduser().resolve() if sync_file else None,
-            sync_mode=sync_mode, output_format=output_format, bitrate=bitrate,
+            sync_mode=sync_mode,
+            output_format=output_format,
+            bitrate=bitrate,
             playlist_id=playlist_id,
-            lyrics_mode=lyrics_mode, lyrics_fallback=lyrics_fallback,
-            generate_lrc=generate_lrc, lyrics_providers=tuple(lyrics_providers),
+            lyrics_mode=lyrics_mode,
+            lyrics_fallback=lyrics_fallback,
+            generate_lrc=generate_lrc,
+            lyrics_providers=tuple(lyrics_providers),
             sync_remove_lrc=sync_remove_lrc,
         )
         job.destination.mkdir(parents=True, exist_ok=True)
@@ -174,10 +199,19 @@ class DownloadManager:
         if not old or old.state not in {"failed", "cancelled"}:
             return None
         return self.submit(
-            old.job_type, old.source, old.destination, old.sync_file, old.sync_mode,
-            old.output_format, old.bitrate, old.playlist_id,
-            old.lyrics_mode, old.lyrics_fallback, old.generate_lrc,
-            old.lyrics_providers, old.sync_remove_lrc,
+            old.job_type,
+            old.source,
+            old.destination,
+            old.sync_file,
+            old.sync_mode,
+            old.output_format,
+            old.bitrate,
+            old.playlist_id,
+            old.lyrics_mode,
+            old.lyrics_fallback,
+            old.generate_lrc,
+            old.lyrics_providers,
+            old.sync_remove_lrc,
         )
 
     def _start_next(self):
@@ -188,7 +222,12 @@ class DownloadManager:
             job = self._active
             job.state = "running"
         self._emit("started", job)
-        threading.Thread(target=self._run, args=(job,), daemon=True, name=f"groovia-spotdl-{job.id[:8]}").start()
+        threading.Thread(
+            target=self._run,
+            args=(job,),
+            daemon=True,
+            name=f"groovia-spotdl-{job.id[:8]}",
+        ).start()
 
     def _command(self, job: DownloadJob) -> list[str]:
         command = list(self.resolver.resolve())
@@ -205,20 +244,40 @@ class DownloadManager:
                     args.append("--sync-without-deleting")
         else:
             args = [*command, "download", job.source]
-        args.extend([
-            "--output", template, "--format", job.output_format,
-            "--overwrite", "skip", "--restrict", "strict", "--print-errors",
-            "--log-level", "INFO",
-        ])
+        args.extend(
+            [
+                "--output",
+                template,
+                "--format",
+                job.output_format,
+                "--overwrite",
+                "skip",
+                "--restrict",
+                "strict",
+                "--print-errors",
+                "--log-level",
+                "INFO",
+            ]
+        )
         if job.bitrate != "auto":
             args.extend(["--bitrate", job.bitrate])
         supported = self.resolver.supported_options()
         if job.lyrics_mode != "none" and "--lyrics" in supported:
-            selected = tuple(provider.lower() for provider in (job.lyrics_providers or ("synced", "genius", "musixmatch", "azlyrics")))
+            selected = tuple(
+                provider.lower()
+                for provider in (
+                    job.lyrics_providers
+                    or ("synced", "genius", "musixmatch", "azlyrics")
+                )
+            )
             # Musixmatch is handled by Groovia's custom richsync client. Never
             # pass it to spotDL: doing so would select the old API path and
             # reintroduce the HTTP 401 failures this backend avoids.
-            providers = [provider for provider in selected if provider in LYRICS_PROVIDERS and provider != "musixmatch"]
+            providers = [
+                provider
+                for provider in selected
+                if provider in LYRICS_PROVIDERS and provider != "musixmatch"
+            ]
             if not providers and job.lyrics_fallback:
                 providers = ["synced", "genius", "azlyrics"]
             if job.lyrics_mode != "synced":
@@ -226,20 +285,48 @@ class DownloadManager:
                 if not providers and job.lyrics_fallback:
                     providers = ["genius", "azlyrics"]
             if job.lyrics_fallback:
-                providers.extend(provider for provider in ("genius", "azlyrics") if provider not in providers)
+                providers.extend(
+                    provider
+                    for provider in ("genius", "azlyrics")
+                    if provider not in providers
+                )
             if providers:
                 args.extend(["--lyrics", *providers])
-                if job.generate_lrc and "--generate-lrc" in supported and "synced" in providers:
+                if (
+                    job.generate_lrc
+                    and "--generate-lrc" in supported
+                    and "synced" in providers
+                ):
                     args.append("--generate-lrc")
-        if job.job_type == "sync" and job.sync_mode == "mirror" and job.sync_remove_lrc and "--sync-remove-lrc" in supported:
+        if (
+            job.job_type == "sync"
+            and job.sync_mode == "mirror"
+            and job.sync_remove_lrc
+            and "--sync-remove-lrc" in supported
+        ):
             args.append("--sync-remove-lrc")
         return args
 
     @staticmethod
     def _files(destination: Path) -> set[str]:
         return {
-            str(path.resolve()) for path in destination.rglob("*")
-            if path.is_file() and path.suffix.lower() in {".mp3", ".flac", ".ogg", ".oga", ".opus", ".wav", ".aac", ".m4a", ".mp4", ".lrc", ".txt"}
+            str(path.resolve())
+            for path in destination.rglob("*")
+            if path.is_file()
+            and path.suffix.lower()
+            in {
+                ".mp3",
+                ".flac",
+                ".ogg",
+                ".oga",
+                ".opus",
+                ".wav",
+                ".aac",
+                ".m4a",
+                ".mp4",
+                ".lrc",
+                ".txt",
+            }
         }
 
     def _run(self, job: DownloadJob):
@@ -276,22 +363,49 @@ class DownloadManager:
             returncode = job.process.wait()
             if job.cancel_requested:
                 job.state = "cancelled"
-                self._emit("cancelled", job, {"returncode": returncode, "files": self._files(job.destination) - before})
+                self._emit(
+                    "cancelled",
+                    job,
+                    {
+                        "returncode": returncode,
+                        "files": self._files(job.destination) - before,
+                    },
+                )
             elif returncode == 0:
                 job.state = "finished"
                 job.progress = 100.0
-                self._emit("finished", job, {
-                    "returncode": returncode, "files": self._files(job.destination) - before,
-                    "sync_file": str(job.sync_file) if job.sync_file and job.sync_file.exists() else None,
-                })
+                self._emit(
+                    "finished",
+                    job,
+                    {
+                        "returncode": returncode,
+                        "files": self._files(job.destination) - before,
+                        "sync_file": (
+                            str(job.sync_file)
+                            if job.sync_file and job.sync_file.exists()
+                            else None
+                        ),
+                    },
+                )
             else:
                 job.state = "failed"
                 job.error = f"spotDL exited with status {returncode}"
-                self._emit("failed", job, {"returncode": returncode, "files": self._files(job.destination) - before})
+                self._emit(
+                    "failed",
+                    job,
+                    {
+                        "returncode": returncode,
+                        "files": self._files(job.destination) - before,
+                    },
+                )
         except (OSError, SpotDLUnavailable, subprocess.SubprocessError) as error:
             job.state = "failed"
             job.error = str(error)
-            self._emit("failed", job, {"error": str(error), "files": self._files(job.destination) - before})
+            self._emit(
+                "failed",
+                job,
+                {"error": str(error), "files": self._files(job.destination) - before},
+            )
         finally:
             job.process = None
             with self._lock:
@@ -299,17 +413,36 @@ class DownloadManager:
             self._start_next()
 
     def _emit(self, event: str, job: DownloadJob, data: dict | None = None):
-        if job and self.database and event in {"queued", "started", "finished", "failed", "cancelled"}:
+        if (
+            job
+            and self.database
+            and event in {"queued", "started", "finished", "failed", "cancelled"}
+        ):
             state = {
-                "queued": "queued", "started": "running", "finished": "finished",
-                "failed": "failed", "cancelled": "cancelled",
+                "queued": "queued",
+                "started": "running",
+                "finished": "finished",
+                "failed": "failed",
+                "cancelled": "cancelled",
             }.get(event, job.state)
             self.database.save_download_job(
-                job.id, job.job_type, job.source, state, job.progress,
-                str(job.destination), job.error,
-                time.strftime("%Y-%m-%dT%H:%M:%S%z") if state in {"finished", "failed", "cancelled"} else None,
-                job.lyrics_mode, job.lyrics_fallback, job.generate_lrc,
-                ",".join(job.lyrics_providers), job.sync_remove_lrc,
+                job.id,
+                job.job_type,
+                job.source,
+                state,
+                job.progress,
+                str(job.destination),
+                job.error,
+                (
+                    time.strftime("%Y-%m-%dT%H:%M:%S%z")
+                    if state in {"finished", "failed", "cancelled"}
+                    else None
+                ),
+                job.lyrics_mode,
+                job.lyrics_fallback,
+                job.generate_lrc,
+                ",".join(job.lyrics_providers),
+                job.sync_remove_lrc,
             )
         if not self.callback:
             return
@@ -321,8 +454,13 @@ class DownloadManager:
         """Install spotDL into the app-managed venv after explicit UI consent."""
         self.install_dependencies(callback=callback, install_spotdl=True)
 
-    def install_dependencies(self, install_ffmpeg: bool = False, install_deno: bool = False,
-                             callback: EventCallback | None = None, install_spotdl: bool = False):
+    def install_dependencies(
+        self,
+        install_ffmpeg: bool = False,
+        install_deno: bool = False,
+        callback: EventCallback | None = None,
+        install_spotdl: bool = False,
+    ):
         """Install only explicitly selected components in the managed environment."""
         callback = callback or self.callback
 
@@ -363,23 +501,43 @@ class DownloadManager:
                 if install_spotdl and not status.spotdl:
                     venv = self.resolver.venv_dir
                     venv.parent.mkdir(parents=True, exist_ok=True)
-                    run_command(self.resolver.installation_command(), "Creating private Python environment")
+                    run_command(
+                        self.resolver.installation_command(),
+                        "Creating private Python environment",
+                    )
                     python = venv / "bin" / "python"
-                    run_command([str(python), "-m", "pip", "install", "--upgrade", "spotdl"], "Installing spotDL")
+                    run_command(
+                        [str(python), "-m", "pip", "install", "--upgrade", "spotdl"],
+                        "Installing spotDL",
+                    )
                     self.resolver.invalidate()
                     status = self.resolver.dependency_status()
                 elif install_spotdl:
-                    emit("dependency-output", {"line": "spotDL is already available; keeping the existing installation."})
+                    emit(
+                        "dependency-output",
+                        {
+                            "line": "spotDL is already available; keeping the existing installation."
+                        },
+                    )
                 command = list(self.resolver.resolve())
                 if install_ffmpeg and status.ffmpeg:
-                    emit("dependency-output", {"line": "FFmpeg is already available; skipping overwrite."})
+                    emit(
+                        "dependency-output",
+                        {"line": "FFmpeg is already available; skipping overwrite."},
+                    )
                 elif install_ffmpeg:
                     run_command([*command, "--download-ffmpeg"], "Installing FFmpeg")
                 if install_deno and status.deno:
-                    emit("dependency-output", {"line": "Deno is already available; skipping overwrite."})
+                    emit(
+                        "dependency-output",
+                        {"line": "Deno is already available; skipping overwrite."},
+                    )
                 elif install_deno:
                     run_command([*command, "--download-deno"], "Installing Deno")
-                emit("dependency-installed", {"ffmpeg": install_ffmpeg, "deno": install_deno, "spotdl": True})
+                emit(
+                    "dependency-installed",
+                    {"ffmpeg": install_ffmpeg, "deno": install_deno, "spotdl": True},
+                )
             except InterruptedError:
                 emit("dependency-cancelled", {})
             except Exception as error:
@@ -388,7 +546,9 @@ class DownloadManager:
                 self._dependency_process = None
                 self._dependency_cancel_requested = False
 
-        threading.Thread(target=worker, daemon=True, name="groovia-dependency-install").start()
+        threading.Thread(
+            target=worker, daemon=True, name="groovia-dependency-install"
+        ).start()
 
     def cancel_dependency_installation(self) -> bool:
         if self._dependency_process is None:

@@ -9,7 +9,6 @@ import gi
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib
 
-
 BUS_NAME = "org.mpris.MediaPlayer2.groovia"
 OBJECT_PATH = "/org/mpris/MediaPlayer2"
 ROOT_INTERFACE = "org.mpris.MediaPlayer2"
@@ -74,7 +73,9 @@ class MprisService:
         window.player.connect("track-changed", lambda *_: self.sync())
         window.player.connect("state-changed", lambda *_: self.sync())
         window.player.connect("position-changed", lambda *_: self.sync_position())
-        window.player.connect("volume-changed", lambda *_: self.sync_properties(["Volume"]))
+        window.player.connect(
+            "volume-changed", lambda *_: self.sync_properties(["Volume"])
+        )
 
     def _on_bus_acquired(self, connection, _name):
         self.connection = connection
@@ -96,7 +97,9 @@ class MprisService:
     def _on_name_lost(self, _connection, _name):
         self.connection = None
 
-    def _method_call(self, _connection, _sender, _path, interface, method, parameters, invocation):
+    def _method_call(
+        self, _connection, _sender, _path, interface, method, parameters, invocation
+    ):
         try:
             if interface == ROOT_INTERFACE:
                 if method == "Raise":
@@ -121,7 +124,9 @@ class MprisService:
                 elif method == "Previous":
                     self.window._previous()
                 elif method == "Seek":
-                    self.window.player.seek(self.window.player.position + args[0] / 1_000_000)
+                    self.window.player.seek(
+                        self.window.player.position + args[0] / 1_000_000
+                    )
                 elif method == "SetPosition":
                     self.window.player.seek(args[1] / 1_000_000)
                 elif method == "OpenUri":
@@ -130,11 +135,15 @@ class MprisService:
                     return self._not_supported(invocation, method)
             invocation.return_value(GLib.Variant("()", ()))
         except Exception as error:
-            invocation.return_dbus_error("org.mpris.MediaPlayer2.Error.Failed", str(error))
+            invocation.return_dbus_error(
+                "org.mpris.MediaPlayer2.Error.Failed", str(error)
+            )
 
     @staticmethod
     def _not_supported(invocation, method):
-        invocation.return_dbus_error("org.mpris.MediaPlayer2.Error.NotSupported", method)
+        invocation.return_dbus_error(
+            "org.mpris.MediaPlayer2.Error.NotSupported", method
+        )
 
     def _get_property(self, _connection, _sender, _path, interface, prop):
         if interface == ROOT_INTERFACE:
@@ -145,13 +154,24 @@ class MprisService:
                 "Identity": GLib.Variant("s", "Groovia"),
                 "DesktopEntry": GLib.Variant("s", "io.github.Lluciocc.Groovia"),
                 "SupportedUriSchemes": GLib.Variant("as", ["file", "http", "https"]),
-                "SupportedMimeTypes": GLib.Variant("as", ["audio/mpeg", "audio/flac", "audio/ogg", "audio/mp4"]),
+                "SupportedMimeTypes": GLib.Variant(
+                    "as", ["audio/mpeg", "audio/flac", "audio/ogg", "audio/mp4"]
+                ),
             }
         else:
             player = self.window.player
             values = {
-                "PlaybackStatus": GLib.Variant("s", "Playing" if player.playing else ("Paused" if player.track else "Stopped")),
-                "LoopStatus": GLib.Variant("s", "Playlist" if self.window.repeat_all else "None"),
+                "PlaybackStatus": GLib.Variant(
+                    "s",
+                    (
+                        "Playing"
+                        if player.playing
+                        else ("Paused" if player.track else "Stopped")
+                    ),
+                ),
+                "LoopStatus": GLib.Variant(
+                    "s", "Playlist" if self.window.repeat_all else "None"
+                ),
                 "Rate": GLib.Variant("d", 1.0),
                 "Shuffle": GLib.Variant("b", bool(self.window.shuffle)),
                 "Metadata": GLib.Variant("a{sv}", self._metadata()),
@@ -159,7 +179,9 @@ class MprisService:
                 "Position": GLib.Variant("x", int(player.position * 1_000_000)),
                 "MinimumRate": GLib.Variant("d", 1.0),
                 "MaximumRate": GLib.Variant("d", 1.0),
-                "CanGoNext": GLib.Variant("b", bool(self.window.queue or self.window.repeat_all)),
+                "CanGoNext": GLib.Variant(
+                    "b", bool(self.window.queue or self.window.repeat_all)
+                ),
                 "CanGoPrevious": GLib.Variant("b", True),
                 "CanPlay": GLib.Variant("b", True),
                 "CanPause": GLib.Variant("b", True),
@@ -189,9 +211,14 @@ class MprisService:
         if not track:
             return {}
         return {
-            "mpris:trackid": GLib.Variant("o", f"/org/mpris/MediaPlayer2/track/{track.id or abs(hash(track.path))}"),
+            "mpris:trackid": GLib.Variant(
+                "o",
+                f"/org/mpris/MediaPlayer2/track/{track.id or abs(hash(track.path))}",
+            ),
             "mpris:length": GLib.Variant("x", int(track.duration * 1_000_000)),
-            "mpris:artUrl": GLib.Variant("s", self._uri(track.cover_path) if track.cover_path else ""),
+            "mpris:artUrl": GLib.Variant(
+                "s", self._uri(track.cover_path) if track.cover_path else ""
+            ),
             "xesam:title": GLib.Variant("s", track.title),
             "xesam:artist": GLib.Variant("as", [track.artist]),
             "xesam:album": GLib.Variant("s", track.album),
@@ -199,11 +226,13 @@ class MprisService:
         }
 
     def sync(self):
-        self.sync_properties(["PlaybackStatus", "Metadata", "CanGoNext", "LoopStatus", "Shuffle"])
+        self.sync_properties(
+            ["PlaybackStatus", "Metadata", "CanGoNext", "LoopStatus", "Shuffle"]
+        )
 
     def sync_position(self):
         now = time.monotonic()
-        if now - self._last_position_signal >= .18:
+        if now - self._last_position_signal >= 0.18:
             self._last_position_signal = now
             self.sync_properties(["Position"])
 

@@ -25,28 +25,52 @@ class TransitionPlan:
 class TransitionPlanner:
     """Choose a safe plan from available evidence, never inventing beats."""
 
-    def plan(self, current, following, left: TrackAnalysis, right: TrackAnalysis, options: dict) -> TransitionPlan:
+    def plan(
+        self,
+        current,
+        following,
+        left: TrackAnalysis,
+        right: TrackAnalysis,
+        options: dict,
+    ) -> TransitionPlan:
         style = options.get("style", "balanced")
         if style not in {"subtle", "balanced", "energetic"}:
             style = "balanced"
 
         description = " ".join(
-            str(value or "") for value in (
-                getattr(current, "genre", ""), getattr(current, "album", ""),
-                getattr(following, "genre", ""), getattr(following, "album", ""),
+            str(value or "")
+            for value in (
+                getattr(current, "genre", ""),
+                getattr(current, "album", ""),
+                getattr(following, "genre", ""),
+                getattr(following, "album", ""),
             )
         ).lower()
         if any(word in description for word in ("podcast", "audiobook", "spoken word")):
             return self._fallback(left, right, "spoken content")
-        if any(word in description for word in ("classical", "live", "continuous", "dj mix", "mixtape")):
+        if any(
+            word in description
+            for word in ("classical", "live", "continuous", "dj mix", "mixtape")
+        ):
             return self._fallback(left, right, "gapless/live material")
 
-        durations = {"subtle": (2.0, 4.0), "balanced": (4.0, 8.0), "energetic": (8.0, 12.0)}
+        durations = {
+            "subtle": (2.0, 4.0),
+            "balanced": (4.0, 8.0),
+            "energetic": (8.0, 12.0),
+        }
         minimum, maximum = durations[style]
-        available = min(value for value in (left.duration, right.duration) if value > 0) if left.duration and right.duration else maximum
-        duration = min(maximum, max(minimum, available * .22))
+        available = (
+            min(value for value in (left.duration, right.duration) if value > 0)
+            if left.duration and right.duration
+            else maximum
+        )
+        duration = min(maximum, max(minimum, available * 0.22))
         if options.get("silence_detection", True):
-            duration = max(2.0, duration - min(left.outro_silence, .8) + min(right.intro_silence, .8))
+            duration = max(
+                2.0,
+                duration - min(left.outro_silence, 0.8) + min(right.intro_silence, 0.8),
+            )
         requested_length = options.get("length", "automatic")
         if requested_length != "automatic":
             try:
@@ -55,10 +79,18 @@ class TransitionPlanner:
                 pass
             duration = min(duration, max(2.0, available))
 
-        if left.bpm and right.bpm and left.beat_confidence >= .8 and right.beat_confidence >= .8:
+        if (
+            left.bpm
+            and right.bpm
+            and left.beat_confidence >= 0.8
+            and right.beat_confidence >= 0.8
+        ):
             ratio = right.bpm / left.bpm
-            if (options.get("beat_matching", True) and options.get("tempo_matching", True)
-                    and .96 <= ratio <= 1.04):
+            if (
+                options.get("beat_matching", True)
+                and options.get("tempo_matching", True)
+                and 0.96 <= ratio <= 1.04
+            ):
                 mode = "beat"
                 reason = "confident BPM metadata"
             else:
@@ -91,9 +123,13 @@ class TransitionPlanner:
     @staticmethod
     def _fallback(left, right, reason):
         return TransitionPlan(
-            current_path=left.path, next_path=right.path,
-            duration=2.0, mode="fallback", smart_eq=False,
-            reason=reason, auto_dj=False,
+            current_path=left.path,
+            next_path=right.path,
+            duration=2.0,
+            mode="fallback",
+            smart_eq=False,
+            reason=reason,
+            auto_dj=False,
         )
 
     @staticmethod
@@ -102,4 +138,4 @@ class TransitionPlanner:
             return 1.0
         # Keep normalization deliberately restrained; it must never clip a
         # track just to make two analyses numerically identical.
-        return max(.72, min(1.28, 10 ** ((-14.0 - lufs) / 20.0)))
+        return max(0.72, min(1.28, 10 ** ((-14.0 - lufs) / 20.0)))

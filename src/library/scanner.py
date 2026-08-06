@@ -13,20 +13,27 @@ Gst.init(None)
 
 from ..models import Track
 
-
 FORMATS = {".mp3", ".flac", ".ogg", ".oga", ".opus", ".wav", ".aac", ".m4a", ".mp4"}
 
 
 class LibraryScanner:
     def __init__(self, database):
         self.database = database
-        self.artwork_dir = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "groovia" / "artwork"
+        self.artwork_dir = (
+            Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+            / "groovia"
+            / "artwork"
+        )
         self.artwork_dir.mkdir(parents=True, exist_ok=True)
 
     def scan_async(self, folders: list[str], callback):
         def worker():
-            paths = [p for folder in folders for p in Path(folder).rglob("*")
-                     if p.is_file() and p.suffix.lower() in FORMATS]
+            paths = [
+                p
+                for folder in folders
+                for p in Path(folder).rglob("*")
+                if p.is_file() and p.suffix.lower() in FORMATS
+            ]
             total = len(paths)
             tracks = []
             for index, path in enumerate(paths, 1):
@@ -44,9 +51,14 @@ class LibraryScanner:
         parts = path.stem.split(" - ", 1)
         if len(parts) == 2:
             artist, title = parts[0].strip(), parts[1].strip()
-        cover = next((str(path.parent / name) for name in
-                      ("cover.jpg", "cover.png", "folder.jpg", "folder.png")
-                      if (path.parent / name).exists()), None)
+        cover = next(
+            (
+                str(path.parent / name)
+                for name in ("cover.jpg", "cover.png", "folder.jpg", "folder.png")
+                if (path.parent / name).exists()
+            ),
+            None,
+        )
         duration = 0.0
         try:
             discoverer = GstPbutils.Discoverer.new(2 * Gst.SECOND)
@@ -54,15 +66,23 @@ class LibraryScanner:
             duration = info.get_duration() / Gst.SECOND
             tags = info.get_tags()
             if tags:
+
                 def tag(name, default):
                     ok, value = tags.get_string(name)
                     return value if ok and value else default
-                title, artist, album = tag("title", title), tag("artist", artist), tag("album", album)
+
+                title, artist, album = (
+                    tag("title", title),
+                    tag("artist", artist),
+                    tag("album", album),
+                )
                 if not cover:
                     cover = self._extract_embedded_cover(tags, path)
         except Exception:
             pass
-        return Track(None, title, artist, album, artist, "", "", 0, 1, duration, str(path), cover)
+        return Track(
+            None, title, artist, album, artist, "", "", 0, 1, duration, str(path), cover
+        )
 
     def read_track(self, path: str) -> Track:
         """Read one file on demand, useful for libraries imported before artwork support."""
@@ -152,8 +172,15 @@ class LibraryScanner:
                 ok, mapped = buffer.map(Gst.MapFlags.READ)
                 if not ok:
                     continue
-                digest = hashlib.sha1(f"{path}:{path.stat().st_mtime_ns}".encode()).hexdigest()
-                suffix = ".png" if "png" in (sample.get_caps().to_string() if sample.get_caps() else "") else ".jpg"
+                digest = hashlib.sha1(
+                    f"{path}:{path.stat().st_mtime_ns}".encode()
+                ).hexdigest()
+                suffix = (
+                    ".png"
+                    if "png"
+                    in (sample.get_caps().to_string() if sample.get_caps() else "")
+                    else ".jpg"
+                )
                 destination = self.artwork_dir / f"{digest}{suffix}"
                 if not destination.exists():
                     destination.write_bytes(mapped.data)

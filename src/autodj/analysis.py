@@ -39,7 +39,9 @@ class AnalysisCache:
     """JSON cache keyed by canonical path and file signature."""
 
     def __init__(self, data_dir: str | Path | None = None):
-        base = Path(data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+        base = Path(
+            data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")
+        )
         self.path = base / "groovia" / "autodj" / "analysis.json"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
@@ -75,10 +77,15 @@ class AnalysisCache:
     def put(self, analysis: TrackAnalysis) -> None:
         with self._lock:
             self._items[analysis.signature] = asdict(analysis)
-            self._items[analysis.signature]["phrase_boundaries"] = list(analysis.phrase_boundaries)
+            self._items[analysis.signature]["phrase_boundaries"] = list(
+                analysis.phrase_boundaries
+            )
             try:
                 temporary = self.path.with_suffix(".tmp")
-                temporary.write_text(json.dumps(self._items, ensure_ascii=False, indent=2), encoding="utf-8")
+                temporary.write_text(
+                    json.dumps(self._items, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
                 temporary.replace(self.path)
             except OSError:
                 # Analysis remains useful for this session even if the cache is
@@ -145,14 +152,25 @@ class TrackAnalyzer:
         if not self.ffprobe or not Path(path).is_file():
             return {}
         command = [
-            self.ffprobe, "-v", "error", "-show_entries",
-            "format=duration:format_tags=BPM,TBPM,KEY", "-of", "json", path,
+            self.ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:format_tags=BPM,TBPM,KEY",
+            "-of",
+            "json",
+            path,
         ]
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=12, check=False)
+            result = subprocess.run(
+                command, capture_output=True, text=True, timeout=12, check=False
+            )
             payload = json.loads(result.stdout or "{}")
             format_data = payload.get("format") or {}
-            tags = {str(k).lower(): str(v) for k, v in (format_data.get("tags") or {}).items()}
+            tags = {
+                str(k).lower(): str(v)
+                for k, v in (format_data.get("tags") or {}).items()
+            }
             if format_data.get("duration"):
                 tags["duration"] = str(format_data["duration"])
             tags["bpm"] = tags.get("bpm") or tags.get("tbpm") or ""
@@ -165,11 +183,21 @@ class TrackAnalyzer:
         if not self.ffmpeg or not Path(path).is_file():
             return 0.0, 0.0
         command = [
-            self.ffmpeg, "-hide_banner", "-nostats", "-i", path,
-            "-af", "silencedetect=noise=-45dB:d=0.35", "-f", "null", "-",
+            self.ffmpeg,
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            path,
+            "-af",
+            "silencedetect=noise=-45dB:d=0.35",
+            "-f",
+            "null",
+            "-",
         ]
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=45, check=False)
+            result = subprocess.run(
+                command, capture_output=True, text=True, timeout=45, check=False
+            )
             output = f"{result.stdout}\n{result.stderr}"
             starts = [float(value) for value in self._silence_start.findall(output)]
             ends = [float(value) for value in self._silence_end.findall(output)]
@@ -184,16 +212,28 @@ class TrackAnalyzer:
         if not self.ffmpeg or not Path(path).is_file():
             return None, None
         command = [
-            self.ffmpeg, "-hide_banner", "-nostats", "-i", path,
-            "-af", "ebur128=framelog=verbose", "-f", "null", "-",
+            self.ffmpeg,
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            path,
+            "-af",
+            "ebur128=framelog=verbose",
+            "-f",
+            "null",
+            "-",
         ]
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=60, check=False)
+            result = subprocess.run(
+                command, capture_output=True, text=True, timeout=60, check=False
+            )
             output = f"{result.stdout}\n{result.stderr}"
             loudness = self._loudness.findall(output)
             peaks = self._peak.findall(output)
-            return (float(loudness[-1]) if loudness else None,
-                    float(peaks[-1]) if peaks else None)
+            return (
+                float(loudness[-1]) if loudness else None,
+                float(peaks[-1]) if peaks else None,
+            )
         except (OSError, ValueError, subprocess.TimeoutExpired):
             return None, None
 

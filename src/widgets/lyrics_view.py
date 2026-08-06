@@ -54,10 +54,12 @@ class WordSyncedLyricsRenderer(Gtk.DrawingArea):
                 self._word_ranges.append(None)
                 continue
             end = start + len(word_text)
-            self._word_ranges.append((
-                self._byte_length(self._text[:start]),
-                self._byte_length(self._text[:end]),
-            ))
+            self._word_ranges.append(
+                (
+                    self._byte_length(self._text[:start]),
+                    self._byte_length(self._text[:end]),
+                )
+            )
             cursor = end
 
     def _rebuild_layout(self):
@@ -117,12 +119,14 @@ class WordSyncedLyricsRenderer(Gtk.DrawingArea):
                     x_start = x_origin + line.index_to_x(start, False) / Pango.SCALE
                     x_end = x_origin + line.index_to_x(end, True) / Pango.SCALE
                     _ink, logical = line.get_pixel_extents()
-                    word_regions.append((
-                        min(x_start, x_end),
-                        line_origin.y / Pango.SCALE,
-                        max(1.0, abs(x_end - x_start)),
-                        max(1.0, logical.height),
-                    ))
+                    word_regions.append(
+                        (
+                            min(x_start, x_end),
+                            line_origin.y / Pango.SCALE,
+                            max(1.0, abs(x_end - x_start)),
+                            max(1.0, logical.height),
+                        )
+                    )
             regions.append(word_regions)
         return regions
 
@@ -187,7 +191,7 @@ class WordSyncedLyricsRenderer(Gtk.DrawingArea):
 
         # Upcoming words remain visible in the same translucent gray used by
         # inactive synchronized lines.
-        self._draw_layout(context, color, .58)
+        self._draw_layout(context, color, 0.58)
 
         if not self._active or not self._word_regions:
             return
@@ -209,15 +213,15 @@ class WordSyncedLyricsRenderer(Gtk.DrawingArea):
         )
 
         if current and current_progress > 0.0:
-            glow_alpha = .11 * (current_progress * (1.0 - current_progress) * 4.0)
+            glow_alpha = 0.11 * (current_progress * (1.0 - current_progress) * 4.0)
             if glow_alpha > 0.0:
                 context.save()
                 self._clip_regions(context, current, current_progress, inflate=2.0)
                 for x_offset, y_offset, alpha in (
-                    (-1.0, 0.0, glow_alpha * .45),
-                    (1.0, 0.0, glow_alpha * .45),
-                    (0.0, -1.0, glow_alpha * .55),
-                    (0.0, 1.0, glow_alpha * .55),
+                    (-1.0, 0.0, glow_alpha * 0.45),
+                    (1.0, 0.0, glow_alpha * 0.45),
+                    (0.0, -1.0, glow_alpha * 0.55),
+                    (0.0, 1.0, glow_alpha * 0.55),
                 ):
                     context.save()
                     context.translate(x_offset, y_offset)
@@ -265,8 +269,10 @@ class LyricsView(Gtk.ScrolledWindow):
         self._scroll_animation = None
         self._animations_enabled = self._read_animation_preference()
         self._content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        self._content.set_margin_top(36); self._content.set_margin_bottom(36)
-        self._content.set_margin_start(24); self._content.set_margin_end(24)
+        self._content.set_margin_top(36)
+        self._content.set_margin_bottom(36)
+        self._content.set_margin_start(24)
+        self._content.set_margin_end(24)
         self._content.set_halign(Gtk.Align.CENTER)
         self._content.set_valign(Gtk.Align.START)
         self._content.set_size_request(360, -1)
@@ -281,26 +287,40 @@ class LyricsView(Gtk.ScrolledWindow):
         system_enabled = True
         if gtk_settings is not None:
             system_enabled = bool(gtk_settings.get_property("gtk-enable-animations"))
-            gtk_settings.connect("notify::gtk-enable-animations", self._on_animation_setting_changed)
+            gtk_settings.connect(
+                "notify::gtk-enable-animations", self._on_animation_setting_changed
+            )
         self._app_settings = None
         app_enabled = True
         try:
             schema_source = Gio.SettingsSchemaSource.get_default()
-            schema = schema_source.lookup("io.github.Lluciocc.Groovia", True) if schema_source else None
+            schema = (
+                schema_source.lookup("io.github.Lluciocc.Groovia", True)
+                if schema_source
+                else None
+            )
             if schema is not None:
                 self._app_settings = Gio.Settings.new_full(schema, None, None)
                 app_enabled = self._app_settings.get_boolean("animations")
-                self._app_settings.connect("changed::animations", self._on_animation_setting_changed)
+                self._app_settings.connect(
+                    "changed::animations", self._on_animation_setting_changed
+                )
         except (GLib.Error, TypeError):
             pass
         return system_enabled and app_enabled
 
     def _on_animation_setting_changed(self, *_args):
         gtk_settings = Gtk.Settings.get_default()
-        system_enabled = True if gtk_settings is None else bool(
-            gtk_settings.get_property("gtk-enable-animations")
+        system_enabled = (
+            True
+            if gtk_settings is None
+            else bool(gtk_settings.get_property("gtk-enable-animations"))
         )
-        app_enabled = True if self._app_settings is None else self._app_settings.get_boolean("animations")
+        app_enabled = (
+            True
+            if self._app_settings is None
+            else self._app_settings.get_boolean("animations")
+        )
         self._animations_enabled = system_enabled and app_enabled
         if not self._animations_enabled:
             for animation in self._animations.values():
@@ -368,8 +388,10 @@ class LyricsView(Gtk.ScrolledWindow):
             return GLib.SOURCE_REMOVE
         adjustment = self.get_vadjustment()
         allocation = self._buttons[index].get_allocation()
-        target = max(0.0, allocation.y - adjustment.get_page_size() * .42)
-        target = min(target, max(0.0, adjustment.get_upper() - adjustment.get_page_size()))
+        target = max(0.0, allocation.y - adjustment.get_page_size() * 0.42)
+        target = min(
+            target, max(0.0, adjustment.get_upper() - adjustment.get_page_size())
+        )
         current = adjustment.get_value()
         if not animated or not self._animations_enabled or abs(target - current) < 1:
             adjustment.set_value(target)
@@ -382,7 +404,9 @@ class LyricsView(Gtk.ScrolledWindow):
         def update(value):
             adjustment.set_value(current + (target - current) * float(value))
 
-        animation = Adw.TimedAnimation.new(self, 0.0, 1.0, 360, Adw.CallbackAnimationTarget.new(update))
+        animation = Adw.TimedAnimation.new(
+            self, 0.0, 1.0, 360, Adw.CallbackAnimationTarget.new(update)
+        )
         animation.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
         holder["animation"] = animation
         self._scroll_animation = animation
@@ -404,10 +428,13 @@ class LyricsView(Gtk.ScrolledWindow):
             renderer = self._word_renderers.get(previous)
             if renderer is not None:
                 renderer.set_active(False)
-            self._animate_line(previous, 1.08, 1.0, 1.0, .58)
+            self._animate_line(previous, 1.08, 1.0, 1.0, 0.58)
 
-        if 0 <= old_upcoming < len(self._buttons) and old_upcoming not in (previous, index):
-            self._animate_line(old_upcoming, 1.0, 1.0, .70, .58)
+        if 0 <= old_upcoming < len(self._buttons) and old_upcoming not in (
+            previous,
+            index,
+        ):
+            self._animate_line(old_upcoming, 1.0, 1.0, 0.70, 0.58)
 
         self._active_index = index
         if 0 <= index < len(self._buttons):
@@ -415,11 +442,11 @@ class LyricsView(Gtk.ScrolledWindow):
             renderer = self._word_renderers.get(index)
             if renderer is not None:
                 renderer.set_active(True)
-            self._animate_line(index, 1.0, 1.08, .58, 1.0)
+            self._animate_line(index, 1.0, 1.08, 0.58, 1.0)
 
         self._upcoming_index = index + 1 if index + 1 < len(self._buttons) else -1
         if self._upcoming_index >= 0:
-            self._animate_line(self._upcoming_index, 1.0, 1.0, .58, .70)
+            self._animate_line(self._upcoming_index, 1.0, 1.0, 0.58, 0.70)
         self._follow_index(index)
 
     def _on_scroll(self, _controller, _dx, _dy):
@@ -476,15 +503,19 @@ class LyricsView(Gtk.ScrolledWindow):
                         ),
                     )
                     self._buttons.append(button)
-                    self._set_line_visuals(index, 1.0, .58)
+                    self._set_line_visuals(index, 1.0, 0.58)
                     self._content.append(button)
                 else:
                     button = Gtk.Button(has_frame=False, focusable=True)
                     text = line.text or ""
                     if text.strip():
-                        content = Gtk.Label(label=text, wrap=True, justify=Gtk.Justification.CENTER)
+                        content = Gtk.Label(
+                            label=text, wrap=True, justify=Gtk.Justification.CENTER
+                        )
                     else:
-                        content = Gtk.Image.new_from_icon_name("audio-x-generic-symbolic")
+                        content = Gtk.Image.new_from_icon_name(
+                            "audio-x-generic-symbolic"
+                        )
                         content.set_pixel_size(self._music_icon_size)
                         content.add_css_class("lyrics-music-icon")
                     button.set_child(content)
@@ -498,7 +529,7 @@ class LyricsView(Gtk.ScrolledWindow):
                         ),
                     )
                     self._buttons.append(button)
-                    self._set_line_visuals(index, 1.0, .58)
+                    self._set_line_visuals(index, 1.0, 0.58)
                     self._content.append(button)
 
             else:
@@ -535,9 +566,17 @@ class LyricsView(Gtk.ScrolledWindow):
             self._mode = None
             self.set_document(None)
             return
-        mode = preferred_mode if preferred_mode in self._documents else next(
-            (candidate for candidate in ("line", "word", "plain") if candidate in self._documents),
-            None,
+        mode = (
+            preferred_mode
+            if preferred_mode in self._documents
+            else next(
+                (
+                    candidate
+                    for candidate in ("line", "word", "plain")
+                    if candidate in self._documents
+                ),
+                None,
+            )
         )
         self._mode = mode
         self._setting_documents = True
@@ -604,7 +643,9 @@ class LyricsView(Gtk.ScrolledWindow):
 
     @property
     def available_modes(self):
-        return tuple(mode for mode in ("line", "word", "plain") if mode in self._documents)
+        return tuple(
+            mode for mode in ("line", "word", "plain") if mode in self._documents
+        )
 
     @property
     def selected_row(self):
@@ -612,4 +653,8 @@ class LyricsView(Gtk.ScrolledWindow):
 
     @property
     def variant_rows(self):
-        return tuple(row for row in self._document_rows.values() if row and row.get("id") is not None)
+        return tuple(
+            row
+            for row in self._document_rows.values()
+            if row and row.get("id") is not None
+        )

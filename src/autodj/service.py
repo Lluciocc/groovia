@@ -16,7 +16,9 @@ class AutoDJService:
         self.callback = callback
         self.analyzer = TrackAnalyzer(AnalysisCache(data_dir))
         self.planner = TransitionPlanner()
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="groovia-autodj")
+        self._executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="groovia-autodj"
+        )
         self._lock = threading.Lock()
         self._generation = 0
 

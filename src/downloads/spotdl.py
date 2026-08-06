@@ -12,14 +12,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
-
 SPOTIFY_ID = re.compile(r"^[A-Za-z0-9]{22}$")
 SPOTIFY_URL = re.compile(
     r"^https?://open\.spotify\.com/(?:intl-[^/]+/)?(?P<kind>track|playlist|album)/(?P<id>[A-Za-z0-9]{22})(?:[/?#].*)?$",
     re.IGNORECASE,
 )
 SYNC_SUFFIX = ".spotdl"
-AUDIO_SUFFIXES = {".mp3", ".flac", ".ogg", ".oga", ".opus", ".wav", ".aac", ".m4a", ".mp4"}
+AUDIO_SUFFIXES = {
+    ".mp3",
+    ".flac",
+    ".ogg",
+    ".oga",
+    ".opus",
+    ".wav",
+    ".aac",
+    ".m4a",
+    ".mp4",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +77,9 @@ class SpotDLCommandResolver:
     """Resolve one working spotDL command and cache it for the session."""
 
     def __init__(self, data_dir: str | Path | None = None):
-        base = Path(data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+        base = Path(
+            data_dir or os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")
+        )
         self.data_dir = base / "groovia"
         self._command: tuple[str, ...] | None = None
         self._supported_options: set[str] | None = None
@@ -158,8 +169,12 @@ class SpotDLCommandResolver:
             return self._supported_options
         try:
             result = subprocess.run(
-                [*self.resolve(), "--help"], stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, text=True, timeout=8, check=False,
+                [*self.resolve(), "--help"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=8,
+                check=False,
                 env=self.process_environment(),
             )
             self._supported_options = set(re.findall(r"--[a-z0-9-]+", result.stdout))
@@ -194,7 +209,9 @@ def read_sync_metadata(path: str | Path) -> list[dict]:
         return []
     entries = []
     for item in _walk_dicts(payload):
-        spotify_id = item.get("song_id") or item.get("spotify_id") or item.get("track_id")
+        spotify_id = (
+            item.get("song_id") or item.get("spotify_id") or item.get("track_id")
+        )
         if isinstance(spotify_id, str) and spotify_id.startswith("spotify:"):
             spotify_id = spotify_id.rsplit(":", 1)[-1]
         if not isinstance(spotify_id, str) or not SPOTIFY_ID.match(spotify_id):
@@ -205,15 +222,19 @@ def read_sync_metadata(path: str | Path) -> list[dict]:
         artist = item.get("artist") or item.get("artists") or ""
         if isinstance(artist, list):
             artist = ", ".join(str(value) for value in artist)
-        entries.append({
-            "spotify_id": spotify_id,
-            "isrc": item.get("isrc"),
-            "title": item.get("name") or item.get("title") or "",
-            "artist": artist,
-            "album": item.get("album") or item.get("album_name") or "",
-            "list_name": item.get("list_name") or item.get("playlist_name") or "",
-            "cover_url": item.get("cover_url") or item.get("album_art") or item.get("image"),
-        })
+        entries.append(
+            {
+                "spotify_id": spotify_id,
+                "isrc": item.get("isrc"),
+                "title": item.get("name") or item.get("title") or "",
+                "artist": artist,
+                "album": item.get("album") or item.get("album_name") or "",
+                "list_name": item.get("list_name") or item.get("playlist_name") or "",
+                "cover_url": item.get("cover_url")
+                or item.get("album_art")
+                or item.get("image"),
+            }
+        )
     unique = {}
     for entry in entries:
         unique.setdefault(entry["spotify_id"], entry)

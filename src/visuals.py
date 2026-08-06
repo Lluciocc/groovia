@@ -70,13 +70,21 @@ def load_scaled_pixbuf(path: str, width: int = 64, height: int = 64):
         finally:
             buffer.unmap(mapped)
         return GdkPixbuf.Pixbuf.new_from_bytes(
-            GLib.Bytes.new(pixels), GdkPixbuf.Colorspace.RGB, False, 8,
-            decoded_width, decoded_height, decoded_width * 3
+            GLib.Bytes.new(pixels),
+            GdkPixbuf.Colorspace.RGB,
+            False,
+            8,
+            decoded_width,
+            decoded_height,
+            decoded_width * 3,
         )
     finally:
         pipeline.set_state(Gst.State.NULL)
 
-def palette_for(path: str | None, cache: dict) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+
+def palette_for(
+    path: str | None, cache: dict
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
     """Return an accent/background pair, cached so album changes do not resample every frame."""
     if not path or not Path(path).exists():
         print("No album art found, using fallback palette.")
@@ -103,20 +111,24 @@ def palette_for(path: str | None, cache: dict) -> tuple[tuple[float, float, floa
                 brightness = (r + g + b) / 3
                 saturation = max(r, g, b) - min(r, g, b)
                 if 0.08 < brightness < 0.94:
-                    candidates.append((saturation * (1 - abs(brightness - .5)), r, g, b))
+                    candidates.append(
+                        (saturation * (1 - abs(brightness - 0.5)), r, g, b)
+                    )
         if not candidates:
             print("No suitable colors found, using fallback palette.")
             return FALLBACK_PALETTE
         candidates.sort(reverse=True)
         _, r, g, b = candidates[min(3, len(candidates) - 1)]
         # Keep accents legible on dark GNOME surfaces.
-        lift = max(0.0, .42 - (r + g + b) / 3)
+        lift = max(0.0, 0.42 - (r + g + b) / 3)
         accent = (min(1, r + lift), min(1, g + lift), min(1, b + lift))
-        background = tuple(max(0.035, value * .22) for value in (r, g, b))
+        background = tuple(max(0.035, value * 0.22) for value in (r, g, b))
         cache[key] = (accent, background)
         return cache[key]
     except Exception as e:
-        print(f"An error occurred while sampling the palette, using fallback palette: {e}")
+        print(
+            f"An error occurred while sampling the palette, using fallback palette: {e}"
+        )
         return FALLBACK_PALETTE
 
 
@@ -128,4 +140,6 @@ def mix(first, second, progress: float):
 
 
 def css_rgb(color):
-    return "rgb(%d,%d,%d)" % tuple(round(max(0, min(1, value)) * 255) for value in color)
+    return "rgb(%d,%d,%d)" % tuple(
+        round(max(0, min(1, value)) * 255) for value in color
+    )
