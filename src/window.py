@@ -971,6 +971,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._lyrics_fullscreen_window = window
         self._lyrics_fullscreen_view = view
         self._lyrics_fullscreen_background = background
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self._fullscreen_lyrics_key_pressed, window)
+        window.add_controller(keys)
         window.connect(
             "close-request", lambda current: self._close_lyrics_fullscreen(current)
         )
@@ -984,6 +988,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._lyrics_fullscreen_window = None
         self._lyrics_fullscreen_view = None
         self._lyrics_fullscreen_background = None
+        return False
+
+    @staticmethod
+    def _fullscreen_lyrics_key_pressed(
+        _controller, keyval, _keycode, _state, window
+    ):
+        if keyval == Gdk.KEY_Escape:
+            window.close()
+            return True
         return False
 
     def _set_fullscreen_lyrics_cover(self, track):
