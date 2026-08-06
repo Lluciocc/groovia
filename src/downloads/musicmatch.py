@@ -235,11 +235,7 @@ class MusixmatchRichsync:
         duration: float = 0,
         words_only: bool = False,
     ) -> Optional[LyricsResult]:
-        """Match a track and return its best synced lyrics.
-
-        Prefers word-by-word (richsync); falls back to Musixmatch's line-level
-        subtitle unless ``words_only`` is set. Returns ``None`` on no trustworthy match.
-        """
+        """Match a track and return only Musixmatch richsync lyrics."""
         if not title or not artist:
             return None
         token = self.get_token()
@@ -264,8 +260,4 @@ class MusixmatchRichsync:
             lrc = self.get_richsync(ctid)
             if lrc:
                 return LyricsResult(lrc=lrc, kind="word", **meta)
-        if not words_only:
-            sub = _deep_find(macro, "subtitle_body")
-            if isinstance(sub, str) and "[" in sub and sub.strip():
-                return LyricsResult(lrc=sub.strip(), kind="line", **meta)
         return None

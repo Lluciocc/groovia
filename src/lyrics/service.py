@@ -5,9 +5,25 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 
 from .parser import LyricsTimeline, parse_lyrics
+
+
+@dataclass(slots=True)
+class LyricsBundle:
+    """The available synced forms for one track."""
+
+    word: LyricsTimeline | None = None
+    line: LyricsTimeline | None = None
+
+    @property
+    def preferred(self) -> LyricsTimeline | None:
+        return self.line or self.word
+
+    def __bool__(self):
+        return bool(self.word or self.line)
 
 
 class LyricsService:
@@ -50,18 +66,24 @@ class LyricsService:
         content = path.read_text(encoding="utf-8-sig")
         kind = self._kind(path, timeline)
         existing = self.database.lyrics_for_track(track.id)
-        if not replace and any(item["user_edited"] and item["kind"] == kind for item in existing):
+        if not replace and any(
+            item["user_edited"] and item.get("file_path") == str(path)
+            for item in existing
+        ):
             return
         self.database.save_lyrics(
             track.id, kind, str(path), provider or timeline.provider,
             timeline.language, content, user_edited=user_edited,
-            timing_offset_ms=timeline.offset_ms, checksum=self._checksum(content),
+            # The LRC metadata offset is already part of the parsed timeline.
+            # Store only the user-adjustable offset here so it is not applied
+            # a second time when the document is loaded again.
+            timing_offset_ms=0, checksum=self._checksum(content),
             source_id=source_id,
         )
 
     def ingest_content(self, track, content: str, *, provider: str,
                        source_id: str | None = None, replace: bool = False,
-                       user_edited: bool = False):
+                       user_edited: bool = False, variant: str | None = None):
         """Persist provider output through the same repository as LRC files."""
         if track.id is None or not content or not content.strip():
             return None
@@ -69,12 +91,11 @@ class LyricsService:
         if not timeline.lines:
             return None
         kind = "synced" if timeline.synchronized else "plain"
-        if not replace and any(item.get("user_edited") and item.get("kind") == kind
-                               for item in self.database.lyrics_for_track(track.id)):
-            return None
         suffix = ".lrc" if timeline.synchronized else ".txt"
         safe_provider = "".join(char for char in provider.lower() if char.isalnum() or char in "-_" ) or "lyrics"
-        destination = self.root / f"track-{track.id}-{safe_provider}{suffix}"
+        safe_variant = "".join(char for char in (variant or "").lower() if char.isalnum() or char in "-_")
+        variant_suffix = f"-{safe_variant}" if safe_variant else ""
+        destination = self.root / f"track-{track.id}-{safe_provider}{variant_suffix}{suffix}"
         try:
             destination.write_text(content, encoding="utf-8")
             self._save_mapping(track, destination, timeline, provider=provider,
@@ -83,23 +104,26 @@ class LyricsService:
             return None
         return self._read_file(destination, provider)
 
-    def fetch_musixmatch(self, track, *, replace: bool = False):
-        """Fetch richsync first, falling back to Musixmatch line subtitles."""
+    def fetch_musixmatch(self, track, *, replace: bool = False) -> LyricsBundle | None:
+        """Fetch and persist only Musixmatch richsync lyrics."""
         if not self.musixmatch or track.id is None:
             return None
         try:
             result = self.musixmatch.get_lyrics(
                 track.title, track.artist, getattr(track, "album", "") or "",
-                getattr(track, "duration", 0) or 0,
+                getattr(track, "duration", 0) or 0, words_only=True,
             )
         except Exception:
             return None
-        if not result:
+        if not result or not result.is_word_synced:
             return None
-        return self.ingest_content(
+        bundle = LyricsBundle()
+        bundle.word = self.ingest_content(
             track, result.lrc, provider="musixmatch",
-            source_id=str(result.commontrack_id), replace=replace,
+            source_id=f"{result.commontrack_id}:word", replace=replace,
+            variant="word",
         )
+        return bundle if bundle else None
 
     def ingest_download(self, track, lrc_path: str | Path | None, *, provider="spotdl", replace=False):
         if track.id is None or not lrc_path:
@@ -140,9 +164,37 @@ class LyricsService:
         self._save_mapping(track, destination, timeline, provider="manual", user_edited=user_edited, replace=True)
         return timeline
 
-    def find(self, track) -> tuple[LyricsTimeline | None, dict | None]:
+    @staticmethod
+    def _mode(timeline: LyricsTimeline) -> str:
+        if timeline.word_synchronized:
+            return "word"
+        if timeline.synchronized:
+            return "line"
+        return "plain"
+
+    @staticmethod
+    def _displayable(timeline: LyricsTimeline, row: dict) -> bool:
+        # Older builds stored Musixmatch's subtitle response as a line lyric.
+        # Line mode now belongs exclusively to the fallback provider, so do
+        # not resurrect those stale entries after upgrading.
+        return not (
+            LyricsService._mode(timeline) == "line"
+            and str(row.get("provider") or "").lower() == "musixmatch"
+        )
+
+    @staticmethod
+    def _candidate_priority(item) -> tuple[int, int]:
+        timeline, row = item
+        return (
+            0 if LyricsService._mode(timeline) == "line" else (
+                1 if LyricsService._mode(timeline) == "word" else 2
+            ),
+            0 if row.get("user_edited") else 1,
+        )
+
+    def _load_candidates(self, track):
         if track.id is None:
-            return None, None
+            return []
         rows = self.database.lyrics_for_track(track.id)
         candidates = []
         for row in rows:
@@ -152,22 +204,18 @@ class LyricsService:
                 if timeline:
                     timeline.apply_offset(timeline.offset_ms + int(row.get("timing_offset_ms") or 0))
                     timeline.user_edited = bool(row.get("user_edited"))
-                    candidates.append((timeline, row))
+                    if self._displayable(timeline, row):
+                        candidates.append((timeline, row))
                     continue
             if row.get("content"):
                 timeline = parse_lyrics(row["content"], provider=row.get("provider"))
                 timeline.apply_offset(timeline.offset_ms + int(row.get("timing_offset_ms") or 0))
                 timeline.user_edited = bool(row.get("user_edited"))
-                candidates.append((timeline, row))
+                if self._displayable(timeline, row):
+                    candidates.append((timeline, row))
 
         if candidates:
-            def priority(item):
-                timeline, row = item
-                return (
-                    0 if row.get("user_edited") else 1,
-                    0 if timeline.word_synchronized else (1 if timeline.synchronized else 2),
-                )
-            return min(candidates, key=priority)
+            return candidates
 
         if not track.path.startswith(("http://", "https://")):
             audio = Path(track.path)
@@ -176,11 +224,36 @@ class LyricsService:
                     timeline = self._read_file(candidate)
                     if timeline:
                         self._save_mapping(track, candidate, timeline, provider="external")
-                        return timeline, self.database.lyrics_for_track(track.id)[-1]
+                        return self._load_candidates(track)
             embedded = self.scanner.read_embedded_lyrics(track.path)
             if embedded:
-                return parse_lyrics(embedded, provider="embedded"), {"kind": "plain", "provider": "embedded", "user_edited": False}
-        return None, None
+                return [(parse_lyrics(embedded, provider="embedded"), {
+                    "kind": "plain", "provider": "embedded", "user_edited": False,
+                })]
+        return []
+
+    def find_variants(self, track) -> list[tuple[LyricsTimeline, dict]]:
+        """Return one best candidate per display mode.
+
+        When synchronized lyrics exist, plain lyrics are deliberately omitted;
+        the view then exposes line and word modes only.
+        """
+        candidates = self._load_candidates(track)
+        best: dict[str, tuple[LyricsTimeline, dict]] = {}
+        for candidate in candidates:
+            timeline, _row = candidate
+            mode = self._mode(timeline)
+            if mode not in best or self._candidate_priority(candidate) < self._candidate_priority(best[mode]):
+                best[mode] = candidate
+        if "line" in best or "word" in best:
+            return [best[mode] for mode in ("line", "word") if mode in best]
+        return [best["plain"]] if "plain" in best else []
+
+    def find(self, track) -> tuple[LyricsTimeline | None, dict | None]:
+        variants = self.find_variants(track)
+        if not variants:
+            return None, None
+        return min(variants, key=self._candidate_priority)
 
     def remove(self, track, *, include_user_edited=False):
         rows = self.database.lyrics_for_track(track.id)

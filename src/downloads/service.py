@@ -177,12 +177,14 @@ class SpotDLService:
         selected = tuple(providers or ("synced", "genius", "musixmatch", "azlyrics"))
         if "musixmatch" in {provider.lower() for provider in selected}:
             def worker():
-                timeline = self.lyrics.fetch_musixmatch(track)
-                if timeline:
+                bundle = self.lyrics.fetch_musixmatch(track)
+                if bundle:
                     GLib.idle_add(
                         self._emit, "lyrics-completed", None,
-                        {"track": track, "timeline": timeline},
+                        {"track": track, "timeline": bundle.preferred, "bundle": bundle},
                     )
+                    if fallback:
+                        self._submit_lyrics_fallback(track, source, destination, selected)
                     return
                 if fallback:
                     self._submit_lyrics_fallback(track, source, destination, selected)

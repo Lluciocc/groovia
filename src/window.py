@@ -517,6 +517,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
         fullscreen = Gtk.Button(icon_name="view-fullscreen-symbolic", tooltip_text="Fullscreen lyrics")
         fullscreen.connect("clicked", lambda *_: self._open_lyrics_fullscreen())
         header.append(fullscreen)
+        mode_switch = Gtk.Box(spacing=4)
+        line_mode = Gtk.ToggleButton(label="Lines")
+        word_mode = Gtk.ToggleButton(label="Words")
+        word_mode.set_group(line_mode)
+        line_mode.set_active(True)
+        mode_switch.append(line_mode); mode_switch.append(word_mode)
+        mode_switch.set_visible(False)
+        header.append(mode_switch)
         root.append(header)
 
         content = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE)
@@ -549,6 +557,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         manual_button.connect("clicked", lambda *_: self._add_manual_lyrics())
         view.connect("seek-requested", lambda _view, seconds: self.player.seek(seconds))
         view.connect("manual-scroll", lambda *_: return_current.set_visible(True))
+        view.connect("mode-changed", lambda current, _mode: self._lyrics_mode_changed(current))
+        line_mode.connect("toggled", lambda button: view.set_mode("line") if button.get_active() else None)
+        word_mode.connect("toggled", lambda button: view.set_mode("word") if button.get_active() else None)
         return_current.connect("clicked", lambda *_: (view.return_to_current(), return_current.set_visible(False)))
         minus.connect("clicked", lambda *_: self._adjust_lyrics_offset(-500))
         plus.connect("clicked", lambda *_: self._adjust_lyrics_offset(500))
@@ -558,6 +569,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             "return": return_current, "find": find, "import": import_button,
             "manual": manual_button,
             "background": background,
+            "mode_switch": mode_switch, "line_mode": line_mode, "word_mode": word_mode,
         }
         return root
 
@@ -567,16 +579,24 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._toast("Nothing is playing")
             return
         self._resolve_cover(track)
-        timeline, row = self.download_service.lyrics.find(track)
+        variants = self.download_service.lyrics.find_variants(track)
         widgets = self._lyrics_widgets
+        same_track = getattr(self, "_lyrics_track", None) is track
+        preferred_mode = widgets["view"].mode if same_track else "line"
         if track.cover_path and Path(track.cover_path).is_file():
             widgets["background"].set_filename(track.cover_path)
         else:
             widgets["background"].set_filename(None)
         widgets["title"].set_label(track.title)
         widgets["subtitle"].set_label(f"{track.artist} · {track.album}")
-        widgets["view"].set_document(timeline)
+        widgets["view"].set_documents(variants, preferred_mode=preferred_mode)
+        timeline = widgets["view"].document
+        row = widgets["view"].selected_row
         widgets["content"].set_visible_child_name("lyrics" if timeline else "empty")
+        available_modes = widgets["view"].available_modes
+        widgets["mode_switch"].set_visible(len(available_modes) > 1)
+        widgets["line_mode"].set_active(widgets["view"].mode == "line")
+        widgets["word_mode"].set_active(widgets["view"].mode == "word")
         if timeline:
             widgets["status"].set_label("Synchronized lyrics" if timeline.synchronized else "Unsynchronized lyrics")
             widgets["find"].set_visible(False)
@@ -589,8 +609,22 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if timeline and self.current is track:
             widgets["view"].update_position(int(self.player.position * 1000))
         if getattr(self, "_lyrics_fullscreen_view", None):
-            self._lyrics_fullscreen_view.set_document(timeline)
+            self._lyrics_fullscreen_view.set_documents(
+                variants, preferred_mode=widgets["view"].mode or "line"
+            )
             self._set_fullscreen_lyrics_cover(track)
+
+    def _lyrics_mode_changed(self, view):
+        if not hasattr(self, "_lyrics_widgets") or view is not self._lyrics_widgets["view"]:
+            return
+        self._lyrics_row = view.selected_row
+        mode_label = {"line": "Line-by-line", "word": "Word-by-word", "plain": "Plain"}.get(view.mode)
+        timeline = view.document
+        if timeline and mode_label:
+            self._lyrics_widgets["status"].set_label(f"{mode_label} lyrics")
+        fullscreen_view = getattr(self, "_lyrics_fullscreen_view", None)
+        if fullscreen_view is not None and view.mode in fullscreen_view.available_modes:
+            fullscreen_view.set_mode(view.mode)
 
     def _update_lyrics_for_current(self):
         if not hasattr(self, "_lyrics_widgets"):
@@ -656,9 +690,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _adjust_lyrics_offset(self, amount):
         if not getattr(self, "_lyrics_row", None) or self._lyrics_row.get("id") is None:
             return
-        row = self._lyrics_row
-        offset = int(row.get("timing_offset_ms") or 0) + amount
-        self.database.update_lyrics_offset(row["id"], offset)
+        view = self._lyrics_widgets["view"]
+        for row in view.variant_rows:
+            offset = int(row.get("timing_offset_ms") or 0) + amount
+            self.database.update_lyrics_offset(row["id"], offset)
         self._show_lyrics(self._lyrics_track)
 
     def _open_lyrics_fullscreen(self):
@@ -668,7 +703,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._lyrics_fullscreen_window.present()
             return
         self._resolve_cover(self.current)
-        timeline, _row = self.download_service.lyrics.find(self.current)
+        variants = self.download_service.lyrics.find_variants(self.current)
         window = Gtk.Window(title=f"Lyrics — {self.current.title}", transient_for=self)
         window.set_default_size(1000, 720)
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -676,7 +711,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         top.append(Gtk.Label(label=self.current.title, xalign=0, css_classes=["title-2"], hexpand=True))
         close = Gtk.Button(icon_name="view-restore-symbolic", tooltip_text="Exit fullscreen")
         close.connect("clicked", lambda *_: window.close())
-        top.append(close); root.append(top)
+        top.append(close)
 
         background = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, opacity=0.22)
         background.set_can_shrink(True)
@@ -684,8 +719,19 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if cover_path:
             background.set_filename(cover_path)
         view = LyricsView()
-        view.set_document(timeline)
+        main_view = self._lyrics_widgets["view"] if hasattr(self, "_lyrics_widgets") else None
+        view.set_documents(variants, preferred_mode=main_view.mode if main_view else "line")
+        timeline = view.document
         view.connect("seek-requested", lambda _view, seconds: self.player.seek(seconds))
+        if len(view.available_modes) > 1:
+            line_mode = Gtk.ToggleButton(label="Lines")
+            word_mode = Gtk.ToggleButton(label="Words")
+            word_mode.set_group(line_mode)
+            line_mode.set_active(view.mode == "line")
+            word_mode.set_active(view.mode == "word")
+            line_mode.connect("toggled", lambda button: view.set_mode("line") if button.get_active() else None)
+            word_mode.connect("toggled", lambda button: view.set_mode("word") if button.get_active() else None)
+            top.append(line_mode); top.append(word_mode)
         lyrics_overlay = Gtk.Overlay()
         lyrics_overlay.set_child(background)
         lyrics_overlay.add_overlay(view)
@@ -2108,8 +2154,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._update_lyrics_for_current()
         if getattr(self, "_lyrics_fullscreen_window", None):
             self._lyrics_fullscreen_window.set_title(f"Lyrics — {track.title}")
-            timeline, _row = self.download_service.lyrics.find(track)
-            self._lyrics_fullscreen_view.set_document(timeline)
+            variants = self.download_service.lyrics.find_variants(track)
+            self._lyrics_fullscreen_view.set_documents(variants, preferred_mode="line")
             self._set_fullscreen_lyrics_cover(track)
         self._notify_track(track, cover_path)
 
@@ -2181,6 +2227,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._lyrics_fullscreen_view.update_position(int(position * 1000))
 
     def _on_player_seeked(self, _player, _position):
+        position_ms = int(_position * 1000)
+        if hasattr(self, "_lyrics_widgets"):
+            view = self._lyrics_widgets["view"]
+            if view.word_synchronized:
+                view.update_position(position_ms)
+        fullscreen_view = getattr(self, "_lyrics_fullscreen_view", None)
+        if fullscreen_view is not None and fullscreen_view.word_synchronized:
+            fullscreen_view.update_position(position_ms)
         if self._auto_dj_enabled and self.current:
             # A seek invalidates the old overlap position. Keep the same queue
             # candidate, but recreate its stream and its analysis plan.

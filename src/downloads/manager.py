@@ -88,7 +88,7 @@ class ProgressParser:
         return data
 
 
-LYRICS_PROVIDERS = {"synced", "genius", "musixmatch", "azlyrics"}
+LYRICS_PROVIDERS = {"synced", "genius", "azlyrics"}
 
 
 class DownloadManager:

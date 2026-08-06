@@ -28,11 +28,15 @@ class DownloadedTrackImporter:
         self.lyrics_counts = {"synced": 0, "plain": 0, "failed": 0}
 
     def import_files(self, files: set[str], metadata: list[dict] | None = None,
-                     job=None, progress_callback=None) -> list[Track]:
+                     job=None, progress_callback=None,
+                     existing_files: set[str] | None = None) -> list[Track]:
         metadata = metadata or []
         self.lyrics_counts = {"synced": 0, "plain": 0, "failed": 0}
         unused = list(metadata)
         imported: list[Track] = []
+        existing_files = {
+            str(Path(path).resolve()) for path in (existing_files or ())
+        }
         audio_paths = [
             Path(raw_path) for raw_path in sorted(files)
             if Path(raw_path).is_file() and Path(raw_path).suffix.lower() in AUDIO_SUFFIXES
@@ -42,6 +46,11 @@ class DownloadedTrackImporter:
         if progress_callback:
             progress_callback(0, total, "Preparing library import", "Preparing")
         for path in audio_paths:
+            # A safe playlist sync may report no new files because spotDL
+            # skipped every download as a duplicate.  Those existing files
+            # are useful only when they match an entry from the sync manifest;
+            # do not accidentally add unrelated audio from the same folder.
+            is_reused_file = str(path.resolve()) in existing_files
             try:
                 scanned = self.scanner.read_track(str(path))
             except Exception:
@@ -50,6 +59,11 @@ class DownloadedTrackImporter:
                     progress_callback(processed, total, path.name, "Skipped")
                 continue
             match = self._match_metadata(scanned, unused)
+            if is_reused_file and not match:
+                processed += 1
+                if progress_callback:
+                    progress_callback(processed, total, path.name, "Skipped")
+                continue
             if match:
                 scanned.spotify_id = match.get("spotify_id")
                 scanned.isrc = match.get("isrc")
@@ -104,11 +118,12 @@ class DownloadedTrackImporter:
             for track in imported:
                 if not track.id:
                     continue
-                current, _row = self.lyrics_service.find(track)
-                if current is None:
-                    timeline = self.lyrics_service.fetch_musixmatch(track)
-                    if timeline:
-                        self.lyrics_counts["synced" if timeline.synchronized else "plain"] += 1
+                variants = self.lyrics_service.find_variants(track)
+                modes = {self.lyrics_service._mode(timeline) for timeline, _row in variants}
+                if "word" not in modes:
+                    bundle = self.lyrics_service.fetch_musixmatch(track)
+                    if bundle:
+                        self.lyrics_counts["synced"] += 1
                     else:
                         self.lyrics_counts["failed"] += 1
         return imported
@@ -125,13 +140,14 @@ class DownloadedTrackImporter:
         if not self.lyrics_service:
             return
         if job and self._uses_musixmatch(job):
-            existing, existing_row = self.lyrics_service.find(track)
-            if existing is not None and existing_row and existing_row.get("provider") == "musixmatch":
+            variants = self.lyrics_service.find_variants(track)
+            modes = {self.lyrics_service._mode(timeline) for timeline, _row in variants}
+            providers = {row.get("provider") for _timeline, row in variants}
+            if {"line", "word"}.issubset(modes) and "musixmatch" in providers:
                 return
-            timeline = self.lyrics_service.fetch_musixmatch(track)
-            if timeline:
-                self.lyrics_counts["synced" if timeline.synchronized else "plain"] += 1
-                return
+            bundle = self.lyrics_service.fetch_musixmatch(track)
+            if bundle:
+                self.lyrics_counts["synced"] += 1
         for candidate in (audio_path.with_suffix(".lrc"), audio_path.with_suffix(".txt")):
             if not candidate.is_file():
                 continue
@@ -180,9 +196,23 @@ class SpotDLImportService:
         self._emit("import-started", job, {})
         sync_file = job.sync_file if job.sync_file and job.sync_file.exists() else None
         metadata = read_sync_metadata(sync_file) if sync_file else []
-        files = payload.get("files", set())
+        new_files = {
+            str(Path(path).resolve()) for path in payload.get("files", set())
+        }
+        existing_files = set()
+        if job.job_type in {"sync", "playlist"} and metadata:
+            # DownloadManager intentionally reports only files created during
+            # this run.  Include the already-present audio files for playlist
+            # imports so an all-duplicates run can rebuild the DB/playlist
+            # association from the authoritative .spotdl manifest.
+            existing_files = {
+                str(path.resolve()) for path in job.destination.rglob("*")
+                if path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES
+            } - new_files
+        files = new_files | existing_files
         tracks = self.importer.import_files(
             files, metadata, job=job,
+            existing_files=existing_files,
             progress_callback=lambda current, total, title, phase: self._emit(
                 "import-progress", job,
                 {"current": current, "total": total, "title": title, "phase": phase},
