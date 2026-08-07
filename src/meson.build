@@ -10,9 +10,14 @@ gnome.compile_resources('groovia',
 )
 
 python = import('python')
+python_exe = python.find_installation('python3', required: true)
+python_check = run_command(python_exe, '-c', 'import numpy, scipy', check: false)
+if python_check.returncode() != 0
+  error('Auto DJ requires NumPy and SciPy. Install the platform DSP packages before configuring Groovia.')
+endif
 
 conf = configuration_data()
-conf.set('PYTHON', python.find_installation('python3').full_path())
+conf.set('PYTHON', python_exe.full_path())
 conf.set('VERSION', meson.project_version())
 conf.set('localedir', get_option('prefix') / get_option('localedir'))
 conf.set('pkgdatadir', pkgdatadir)

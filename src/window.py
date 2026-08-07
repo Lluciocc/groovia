@@ -115,7 +115,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self.database, self.scanner, callback=self._download_event
         )
         self.player = AudioPlayer()
-        self.auto_dj = AutoDJService(self._on_auto_dj_plan)
+        # Auto DJ may inspect already persisted lyrics, but the analyzer never
+        # performs network work.  Missing lyrics simply remove that signal.
+        self.auto_dj = AutoDJService(
+            self._on_auto_dj_plan,
+            lyrics_provider=lambda track: self.download_service.lyrics.find(track),
+        )
         self.style_manager = Adw.StyleManager.get_default()
         self.style_manager.connect(
             "notify::accent-color", self._on_system_style_changed
@@ -206,6 +211,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 "tempo_matching": True,
                 "smart_eq": True,
                 "silence_detection": True,
+                "tempo_matching_available": getattr(self.player, "tempo_matching_available", False),
             }
         return {
             "style": settings.get_string("auto-dj-style"),
@@ -215,6 +221,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             "tempo_matching": settings.get_boolean("auto-dj-tempo-matching"),
             "smart_eq": settings.get_boolean("auto-dj-smart-eq"),
             "silence_detection": settings.get_boolean("auto-dj-silence-detection"),
+            "tempo_matching_available": getattr(self.player, "tempo_matching_available", False),
         }
 
     def _on_auto_dj_plan(self, plan):

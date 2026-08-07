@@ -25,6 +25,13 @@ Linux is Groovia's primary supported platform. The Meson, GNOME and Flatpak
 builds remain the reference implementations and retain XDG paths, GSettings,
 GTK resources and MPRIS integration.
 
+For a native Linux development environment, install the distribution's
+PyGObject/GTK/GStreamer packages plus `python3-numpy` and `python3-scipy` (or
+the equivalent packages for the distribution). Meson checks both modules at
+configure time. The optional GStreamer `pitch`/Rubber Band element enables
+pitch-preserving tempo matching; without it, Auto DJ falls back to
+phrase-aware transitions.
+
 ## Windows development and packaging
 
 Windows support targets a native MSYS2 UCRT64 environment. Install the
@@ -37,8 +44,16 @@ pacman -S mingw-w64-ucrt-x86_64-python \
   mingw-w64-ucrt-x86_64-gtk4 mingw-w64-ucrt-x86_64-libadwaita \
   mingw-w64-ucrt-x86_64-gstreamer mingw-w64-ucrt-x86_64-gst-plugins-base \
   mingw-w64-ucrt-x86_64-gst-plugins-good mingw-w64-ucrt-x86_64-gst-plugins-bad \
+  mingw-w64-ucrt-x86_64-python-numpy mingw-w64-ucrt-x86_64-python-scipy \
   mingw-w64-ucrt-x86_64-glib2 mingw-w64-ucrt-x86_64-python-pip
 ```
+
+NumPy and SciPy are official Auto DJ runtime dependencies. The analyzer uses
+them for onset envelopes, autocorrelation, filtering, FFT and feature
+statistics. The `gst-plugins-bad` package supplies the optional `pitch`
+time-stretch element (a Rubber Band element is preferred when that plugin is
+available). If no pitch-preserving element is installed, Auto DJ remains
+usable and disables tempo matching for that transition.
 
 Then install the pinned build tool into that UCRT64 Python environment with
 `python -m pip install pyinstaller`.
@@ -63,6 +78,14 @@ PyInstaller directory is needed. Pass `-Console` to the PowerShell script, or
 installed application uses
 `%LOCALAPPDATA%\Programs\Groovia`; user music, database, lyrics, cache and
 settings are outside that directory and survive upgrades and uninstall.
+
+Before PyInstaller runs, the Windows build imports NumPy and SciPy and the
+finished bundle runs `Groovia.exe --smoke-test`. This verifies the packaged
+versions, SciPy DSP, GStreamer and a pitch-preserving tempo element.
+
+The Flatpak manifest installs pinned CPython 3.13 NumPy/SciPy wheels from
+declared, SHA-256-verified sources with `pip --no-index`; it never contacts
+PyPI during the module build. Both x86_64 and aarch64 wheels are declared.
 
 The bundled runtime includes the GStreamer core libraries, plugin DLLs,
 plugin scanner, selected GObject typelibs, schemas and resources. The plugin

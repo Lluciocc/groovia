@@ -45,3 +45,4 @@ Thumbs.db
 install
 pip
 dist/
+tests

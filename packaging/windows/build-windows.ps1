@@ -19,6 +19,10 @@ function Require-Command([string]$Name, [string]$Hint) {
 }
 
 Require-Command "pyinstaller" "Install it in the MSYS2 UCRT64 Python environment."
+& python -c "import numpy, scipy; print('NumPy', numpy.__version__, 'SciPy', scipy.__version__)"
+if ($LASTEXITCODE -ne 0) {
+    throw "NumPy and SciPy are required in the MSYS2 UCRT64 Python environment. Install mingw-w64-ucrt-x86_64-python-numpy and mingw-w64-ucrt-x86_64-python-scipy."
+}
 Require-Command "glib-compile-resources" "Install mingw-w64-ucrt-x86_64-glib2."
 Require-Command "glib-compile-schemas" "Install mingw-w64-ucrt-x86_64-glib2."
 if (-not $SkipInstaller) {
@@ -78,6 +82,9 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 $Exe = Join-Path $AppRoot "Groovia.exe"
 if (-not (Test-Path -LiteralPath $Exe)) { throw "PyInstaller output is missing: $Exe" }
 Write-Host "Validated standalone application: $Exe"
+
+& $Exe --smoke-test
+if ($LASTEXITCODE -ne 0) { throw "Packaged Auto DJ NumPy/SciPy/GStreamer smoke test failed" }
 
 $IconRoot = Join-Path $AppRoot "_internal\share\icons"
 $AdwaitaIconRoot = Join-Path $IconRoot "Adwaita"

@@ -102,6 +102,23 @@ def main() -> int:
     try:
         _configure_frozen_environment()
 
+        if "--smoke-test" in sys.argv[1:]:
+            import numpy
+            import scipy
+            from scipy import signal
+            import gi
+            gi.require_version("Gst", "1.0")
+            from gi.repository import Gst
+            Gst.init(None)
+            tempo_factory = Gst.ElementFactory.find("rubberband") or Gst.ElementFactory.find("pitch")
+            if tempo_factory is None:
+                raise RuntimeError("No GStreamer pitch-preserving tempo element is bundled")
+            transformed = signal.savgol_filter(numpy.arange(9, dtype=float), 5, 2)
+            if transformed.shape != (9,):
+                raise RuntimeError("SciPy DSP smoke test failed")
+            print(f"Groovia Auto DJ smoke test: numpy={numpy.__version__} scipy={scipy.__version__} tempo={tempo_factory.get_name()}")
+            return 0
+
         # GTK 4's DrawingArea callbacks hand PyGObject a Cairo context.  The
         # MSYS2 bindings require the PyCairo foreign converter to be loaded
         # explicitly before any GTK/PangoCairo drawing code is imported.

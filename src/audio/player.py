@@ -54,6 +54,19 @@ class AudioPlayer(GObject.Object):
         self.auto_dj_plan = None
         self._crossfading = False
         self._auto_dj_transition = False
+        self._tempo_filters = {}
+        self._eq_filters = {}
+        self.tempo_matching_available = bool(
+            Gst.ElementFactory.find("rubberband") or Gst.ElementFactory.find("pitch")
+        )
+        self.tempo_filter_name = (
+            "rubberband" if Gst.ElementFactory.find("rubberband") else
+            ("pitch" if Gst.ElementFactory.find("pitch") else None)
+        )
+        LOGGER.info(
+            "tempo matching filter=%s available=%s",
+            self.tempo_filter_name or "none", self.tempo_matching_available,
+        )
         GLib.timeout_add(200, self._tick)
 
     def _new_pipeline(self, track, volume, auto_dj=False):
@@ -68,13 +81,41 @@ class AudioPlayer(GObject.Object):
         )
         pipeline.props.volume = volume
         if auto_dj:
-            equalizer = Gst.ElementFactory.make("equalizer-3bands", None)
-            if equalizer:
-                pipeline.props.audio_filter = equalizer
+            audio_filter, tempo_filter, equalizer = self._make_audio_filter()
+            if audio_filter:
+                pipeline.props.audio_filter = audio_filter
+                self._tempo_filters[id(pipeline)] = tempo_filter
+                self._eq_filters[id(pipeline)] = equalizer
         bus = pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message", self._on_message, pipeline)
         return pipeline
+
+    def _make_audio_filter(self):
+        """Build the temporary Auto DJ filter chain, if GStreamer supports it."""
+        equalizer = Gst.ElementFactory.make("equalizer-3bands", None)
+        tempo_filter = (
+            Gst.ElementFactory.make(self.tempo_filter_name, None)
+            if self.tempo_filter_name else None
+        )
+        elements = [item for item in (tempo_filter, equalizer) if item]
+        if not elements:
+            return None, None, None
+        if len(elements) == 1:
+            return elements[0], tempo_filter, equalizer
+        chain = Gst.Bin.new(None)
+        for element in elements:
+            chain.add(element)
+        for first, second in zip(elements, elements[1:]):
+            if not first.link(second):
+                return None, None, None
+        sink_pad = elements[0].get_static_pad("sink")
+        source_pad = elements[-1].get_static_pad("src")
+        if not sink_pad or not source_pad:
+            return None, None, None
+        chain.add_pad(Gst.GhostPad.new("sink", sink_pad))
+        chain.add_pad(Gst.GhostPad.new("src", source_pad))
+        return chain, tempo_filter, equalizer
 
     def set_track(self, track, autoplay=True):
         if self._crossfading:
@@ -94,6 +135,10 @@ class AudioPlayer(GObject.Object):
         self.emit("state-changed", self.playing)
 
     def play(self):
+        if self.auto_dj_enabled and self.next_track and not self.next_pipeline:
+            self.next_pipeline = self._new_pipeline(self.next_track, 0.0, True)
+            if self.next_pipeline:
+                self.next_pipeline.set_state(Gst.State.PAUSED)
         if self.pipeline:
             self.pipeline.set_state(Gst.State.PLAYING)
             self.playing = True
@@ -171,7 +216,7 @@ class AudioPlayer(GObject.Object):
                         self.next_pipeline = None
                     self._start_crossfade()
         except Exception:
-            pass
+            LOGGER.exception("Audio position tick failed")
         return True
 
     def _start_crossfade(self):
@@ -249,11 +294,11 @@ class AudioPlayer(GObject.Object):
             round(duration, 2),
             plan.mode,
         )
-        print(
-            f"[Groovia Auto DJ] transition started "
-            f"{self.track.title if self.track else 'Unknown track'!r} -> {self.next_track.title!r} "
-            f"mode={plan.mode} duration={duration:.2f}s",
-            flush=True,
+        LOGGER.info(
+            "AutoDJ transition started %r -> %r mode=%s duration=%.3fs "
+            "outgoing_start=%.3f incoming_start=%.3f confidence=%.2f",
+            self.track.title if self.track else "Unknown track", self.next_track.title,
+            plan.mode, duration, plan.outgoing_start, plan.incoming_start, plan.confidence,
         )
         self._crossfading = True
         self._auto_dj_transition = True
@@ -268,12 +313,11 @@ class AudioPlayer(GObject.Object):
     def _clamp_volume(value):
         return max(0.0, min(1.0, float(value)))
 
-    @staticmethod
-    def _set_bass(pipeline, gain_db):
+    def _set_bass(self, pipeline, gain_db):
         if not pipeline:
             return
         try:
-            equalizer = pipeline.props.audio_filter
+            equalizer = self._eq_filters.get(id(pipeline))
             if equalizer and equalizer.find_property("band0"):
                 equalizer.props.band0 = max(-8.0, min(0.0, float(gain_db)))
         except (AttributeError, TypeError, ValueError):
@@ -293,8 +337,9 @@ class AudioPlayer(GObject.Object):
             self.volume * incoming_gain * math.sin(amount * math.pi / 2)
         )
         if getattr(plan, "smart_eq", False):
-            self._set_bass(self.pipeline, -6.0 * amount)
-            self._set_bass(self.next_pipeline, -6.0 * (1.0 - amount))
+            strength = max(0.0, min(1.0, getattr(plan, "eq_strength", 0.55)))
+            self._set_bass(self.pipeline, -8.0 * strength * amount)
+            self._set_bass(self.next_pipeline, -8.0 * strength * (1.0 - amount))
         if amount >= 1.0:
             previous_track = self.track
             self._stop_pipeline(self.pipeline)
@@ -303,12 +348,12 @@ class AudioPlayer(GObject.Object):
             self._crossfading = False
             self._auto_dj_transition = False
             self.auto_dj_plan = None
+            self._reset_dsp(self.pipeline)
             self.position = 0.0
             self.duration = self.track.duration
-            print(
-                f"[Groovia Auto DJ] transition finished "
-                f"{previous_track.title if previous_track else 'Unknown track'!r} -> {self.track.title!r}",
-                flush=True,
+            LOGGER.info(
+                "AutoDJ transition finished %r -> %r",
+                previous_track.title if previous_track else "Unknown track", self.track.title,
             )
             self.emit("track-changed", self.track)
             self.emit("track-transitioned", previous_track, self.track)
@@ -364,6 +409,7 @@ class AudioPlayer(GObject.Object):
             if self._auto_dj_transition:
                 self._cancel_crossfade("Auto DJ disabled", preserve_next=False)
             else:
+                self._reset_dsp(self.pipeline)
                 self._stop_pipeline(self.next_pipeline)
                 self.next_pipeline = None
                 self.next_track = None
@@ -378,6 +424,7 @@ class AudioPlayer(GObject.Object):
             self.track, "path", None
         ):
             self.auto_dj_plan = plan
+            self._configure_next_pipeline(plan)
             LOGGER.info(
                 "Auto DJ plan ready: %s -> %s (%ss, %s)",
                 self.track.title if self.track else "Unknown track",
@@ -401,10 +448,7 @@ class AudioPlayer(GObject.Object):
         if self._crossfading:
             LOGGER.info("Crossfade cancelled (%s)", reason)
             if self._auto_dj_transition:
-                print(
-                    f"[Groovia Auto DJ] transition cancelled reason={reason}",
-                    flush=True,
-                )
+                LOGGER.info("AutoDJ transition cancelled reason=%s", reason)
         pending_track = self.next_track if preserve_next else None
         if self.next_pipeline:
             self._stop_pipeline(self.next_pipeline)
@@ -414,6 +458,56 @@ class AudioPlayer(GObject.Object):
         self._auto_dj_plan = None
         if self.pipeline:
             self.pipeline.props.volume = self.volume
+            self._reset_dsp(self.pipeline)
+        if self.next_pipeline:
+            self._reset_dsp(self.next_pipeline)
+
+    def _configure_next_pipeline(self, plan):
+        """Apply the plan to the already-prerolled next stream."""
+        if not self.next_pipeline:
+            return
+        tempo = self._tempo_filters.get(id(self.next_pipeline))
+        ratio = float(getattr(plan, "tempo_ratio", 1.0) or 1.0)
+        if tempo and abs(ratio - 1.0) > 0.0001:
+            try:
+                if tempo.find_property("tempo"):
+                    tempo.props.tempo = ratio
+                elif tempo.find_property("rate"):
+                    tempo.props.rate = ratio
+                LOGGER.info("AutoDJ tempo applied filter=%s ratio=%.5f", self.tempo_filter_name, ratio)
+            except (AttributeError, TypeError, ValueError):
+                LOGGER.warning("AutoDJ tempo filter rejected ratio %.5f", ratio)
+        start = max(0.0, float(getattr(plan, "incoming_start", 0.0) or 0.0))
+        if start > 0:
+            success = self.next_pipeline.seek_simple(
+                Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.ACCURATE,
+                int(start * Gst.SECOND),
+            )
+            if not success:
+                LOGGER.warning("AutoDJ incoming seek failed start=%.3f", start)
+
+    def _reset_dsp(self, pipeline):
+        """Restore temporary Auto DJ volume/EQ/tempo controls."""
+        if not pipeline:
+            return
+        try:
+            pipeline.props.volume = self.volume
+        except (AttributeError, TypeError):
+            pass
+        tempo = self._tempo_filters.get(id(pipeline))
+        if tempo:
+            for name in ("tempo", "rate", "pitch"):
+                try:
+                    if tempo.find_property(name):
+                        setattr(tempo.props, name, 1.0)
+                except (AttributeError, TypeError, ValueError):
+                    continue
+        try:
+            equalizer = self._eq_filters.get(id(pipeline))
+            if equalizer and equalizer.find_property("band0"):
+                equalizer.props.band0 = 0.0
+        except (AttributeError, TypeError, ValueError):
+            pass
 
     def _on_message(self, _bus, message, source):
         if message.type == Gst.MessageType.ERROR:
