@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+import shlex
 import shutil
 import time
 from datetime import datetime, timezone
@@ -61,6 +62,9 @@ button.favorite-active { color: #f6d32d; }
 .player-bar { background: @headerbar_bg_color; border-top: 1px solid @window_fg_color; padding: 8px 18px; }
 .player-title { font-weight: 700; }
 .progress { min-width: 220px; }
+.download-workflow { padding: 9px 12px; border-radius: 10px; background: alpha(@window_fg_color, .06); }
+.download-phase { font-weight: 700; }
+.download-current { color: alpha(@window_fg_color, .72); }
 .queue-badge { background: #ff725e; color: white; border-radius: 99px; padding: 2px 7px; }
 .auto-dj-badge { background: alpha(@accent_color, .18); color: @accent_color; border-radius: 99px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
 .empty-state { padding: 80px 24px; }
@@ -3227,6 +3231,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 css_classes=["dim-label"],
             )
         )
+        workflow = Gtk.Label(
+            label=(
+                "Workflow: read source → find matching audio → download/convert → "
+                "write metadata and lyrics → add tracks to your library"
+            ),
+            wrap=True,
+            xalign=0,
+            css_classes=["download-workflow", "dim-label"],
+        )
+        body.append(workflow)
         source_row = Gtk.Box(spacing=8)
         entry = Gtk.Entry(
             placeholder_text="Paste a Spotify track, playlist or .spotdl file",
@@ -3292,11 +3306,24 @@ class GrooviaWindow(Adw.ApplicationWindow):
         progress = Gtk.ProgressBar(show_text=True)
         progress.set_text("Waiting for a source")
         body.append(progress)
+        download_phase = Gtk.Label(
+            label="Waiting for a source",
+            xalign=0,
+            css_classes=["download-phase"],
+        )
+        body.append(download_phase)
         download_status = Gtk.Label(
-            label="Waiting for a source", xalign=0, css_classes=["dim-label"]
+            label="The total will appear as soon as spotDL reports it.",
+            xalign=0,
+            css_classes=["dim-label"],
         )
         body.append(download_status)
-        current = Gtk.Label(label="", xalign=0, ellipsize=3, css_classes=["dim-label"])
+        current = Gtk.Label(
+            label="",
+            xalign=0,
+            ellipsize=3,
+            css_classes=["download-current", "dim-label"],
+        )
         body.append(current)
         log_view = Gtk.TextView(
             editable=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR
@@ -3308,7 +3335,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         body.append(log_scroll)
         dialog.get_content_area().append(body)
         self._download_dialog = dialog
+        self._download_button = download_button
+        self._download_in_progress = False
         self._download_progress = progress
+        self._download_phase = download_phase
         self._download_status = download_status
         self._download_current = current
         self._download_log = log_view.get_buffer()
@@ -3318,6 +3348,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._download_lyrics_synced = lyrics_synced
         self._download_lyrics_fallback = lyrics_fallback
         self._download_lyrics_lrc = lyrics_lrc
+        self._download_permission = permission
+        self._download_pulse_source = 0
+        dialog.connect("close-request", lambda *_: self._stop_download_pulse())
         entry.connect(
             "changed",
             lambda current_entry: self._update_download_detection(
@@ -3381,6 +3414,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         button.set_sensitive(
             classify_input(entry.get_text()).kind != "invalid"
             and permission.get_active()
+            and not getattr(self, "_download_in_progress", False)
         )
 
     def _download_response(self, dialog, response, entry, permission, sync):
@@ -3402,6 +3436,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 "Please acknowledge the legal notice before downloading."
             )
             return
+        # Lock the action before checking dependencies or starting the worker.
+        # This also prevents a second click while the dependency dialog is open.
+        self._set_download_button_busy(True)
         if self._settings:
             self._settings.set_boolean("spotdl-legal-acknowledged", True)
         status = self.download_service.manager.resolver.dependency_status()
@@ -3432,11 +3469,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._start_download(entry.get_text(), sync.get_active())
 
     def _start_download(self, value, sync_enabled=True, existing_action=None):
+        self._set_download_button_busy(True)
         self._append_download_log(f"Starting: {value}")
+        self._append_download_log(
+            "The downloader will search for matching audio, download it, convert it "
+            "to the selected format, write metadata/lyrics, then import it into the library."
+        )
         progress = getattr(self, "_download_progress", None)
         if progress:
             progress.set_fraction(0)
             progress.set_text("Starting spotDL…")
+        self._set_download_phase("Step 1/5 · Preparing downloader")
         settings = self._settings
         synced_widget = getattr(self, "_download_lyrics_synced", None)
         fallback_widget = getattr(self, "_download_lyrics_fallback", None)
@@ -3488,7 +3531,28 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         if job:
             self._download_job = job
+            self._append_download_log(f"Destination: {job.destination}")
+            self._append_download_log(
+                f"Format: {job.output_format.upper()} · bitrate: {job.bitrate} · "
+                f"lyrics mode: {job.lyrics_mode}"
+            )
+            if job.lyrics_mode == "none":
+                self._append_download_log("Lyrics: disabled for this download")
+            else:
+                providers = ", ".join(job.lyrics_providers) or "configured providers"
+                self._append_download_log(
+                    f"Lyrics: enabled · providers: {providers} · "
+                    f"fallback: {'yes' if job.lyrics_fallback else 'no'}"
+                )
+                if "musixmatch" in {
+                    str(provider).lower() for provider in job.lyrics_providers
+                }:
+                    self._append_download_log(
+                        "Lyrics: Musixmatch is queried by Groovia during library import"
+                    )
             self._toast("Import started")
+        else:
+            self._restore_download_button()
 
     def _download_event(self, event, job, payload):
         if event == "output":
@@ -3501,41 +3565,63 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 "phase", getattr(job, "phase", "Downloading") if job else "Downloading"
             )
             failed = getattr(job, "failed", 0) if job else data.get("failed", 0)
-            if data.get("progress") is not None and getattr(
+            overall = data.get("overall_progress")
+            if total and overall is not None and getattr(
                 self, "_download_progress", None
             ):
-                self._download_progress.set_fraction(data["progress"] / 100)
-                progress_text = f"{data['progress']:.0f}%"
-                if total:
-                    progress_text += f" · {completed}/{total} tracks"
-                self._download_progress.set_text(progress_text)
-            elif total and getattr(self, "_download_progress", None):
-                self._download_progress.set_fraction(min(1.0, completed / total))
-                self._download_progress.set_text(f"{completed}/{total} tracks")
+                self._stop_download_pulse()
+                fraction = min(1.0, max(0.0, overall / 100))
+                self._download_progress.set_fraction(fraction)
+                self._download_progress.set_text(
+                    f"Overall {fraction * 100:.0f}% · {completed}/{total} tracks"
+                )
+            elif getattr(self, "_download_progress", None):
+                # A per-file percentage is not an overall playlist percentage.
+                # Keep the bar honest until spotDL gives us a reliable total.
+                self._set_download_progress_indeterminate(
+                    "Downloading current track…"
+                )
+            self._set_download_phase(
+                f"Step {self._download_step_for_phase(phase)}/5 · {phase}"
+            )
             if getattr(self, "_download_status", None):
                 if total:
                     suffix = f" · {failed} failed" if failed else ""
                     self._download_status.set_label(
-                        f"{phase} · Music {completed}/{total} downloaded{suffix}"
+                        f"{completed}/{total} tracks completed{suffix}"
                     )
                 else:
-                    self._download_status.set_label(phase)
+                    self._download_status.set_label(
+                        "Waiting for the downloader to report the playlist total…"
+                    )
             if data.get("current") and getattr(self, "_download_current", None):
                 self._download_current.set_label(data["current"])
             self._append_download_log(data.get("line", ""))
         elif event == "started":
+            self._set_download_phase("Step 1/5 · Starting downloader")
             if getattr(self, "_download_status", None):
-                self._download_status.set_label("Starting download…")
+                self._download_status.set_label("Starting spotDL process…")
             self._append_download_log("spotDL process started")
         elif event == "command":
+            self._set_download_phase("Step 2/5 · Finding matching audio")
             if getattr(self, "_download_status", None):
-                self._download_status.set_label("Preparing download…")
+                self._download_status.set_label(
+                    "Reading the source and finding an audio match…"
+                )
+            command = payload.get("command", [])
+            if command:
+                self._append_download_log(
+                    "Command: " + " ".join(shlex.quote(str(part)) for part in command)
+                )
         elif event == "import-started":
+            self._set_download_phase("Step 5/5 · Adding tracks to library")
+            self._stop_download_pulse()
             if getattr(self, "_download_progress", None):
+                self._download_progress.set_fraction(0)
                 self._download_progress.set_text("Importing into library…")
             if getattr(self, "_download_status", None):
                 self._download_status.set_label(
-                    "Importing downloaded music into your library…"
+                    "Scanning files and associating metadata…"
                 )
         elif event == "import-progress":
             current = payload.get("current", 0)
@@ -3545,11 +3631,21 @@ class GrooviaWindow(Adw.ApplicationWindow):
             if getattr(self, "_download_progress", None) and total:
                 self._download_progress.set_fraction(min(1.0, current / total))
                 self._download_progress.set_text(f"Library {current}/{total} tracks")
+            if "lyric" in phase.lower():
+                self._set_download_phase("Step 4/5 · Lyrics")
+                self._append_download_log(
+                    f"Lyrics: checking {title or 'current track'} ({current}/{total})"
+                )
+            else:
+                self._set_download_phase("Step 5/5 · Adding tracks to library")
             if getattr(self, "_download_status", None):
                 self._download_status.set_label(f"{phase} · {current}/{total} tracks")
             if title and getattr(self, "_download_current", None):
                 self._download_current.set_label(title)
         elif event == "completed":
+            self._restore_download_button()
+            self._stop_download_pulse()
+            self._set_download_phase("Finished · Download and library import complete")
             if getattr(self, "_download_progress", None):
                 self._download_progress.set_fraction(1)
                 self._download_progress.set_text("Completed")
@@ -3581,6 +3677,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         elif event == "lyrics-failed":
             self._toast(f"Lyrics unavailable: {payload.get('error', 'search failed')}")
         elif event in {"failed", "cancelled"}:
+            self._restore_download_button()
+            self._stop_download_pulse()
+            self._set_download_phase(
+                "Cancelled" if event == "cancelled" else "Failed"
+            )
             message = payload.get("error") or (job.error if job else event)
             if payload.get("tracks"):
                 self._refresh_library(self.search_entry.get_text())
@@ -3666,7 +3767,62 @@ class GrooviaWindow(Adw.ApplicationWindow):
         # with non-ASCII downloader output as well.
         buffer.insert(end, f"{line}\n", -1)
 
+    def _set_download_phase(self, message):
+        phase = getattr(self, "_download_phase", None)
+        if phase:
+            phase.set_label(message)
+
+    def _set_download_button_busy(self, busy):
+        self._download_in_progress = busy
+        button = getattr(self, "_download_button", None)
+        if button:
+            button.set_sensitive(not busy)
+
+    def _restore_download_button(self):
+        self._download_in_progress = False
+        button = getattr(self, "_download_button", None)
+        entry = getattr(self, "_download_source_entry", None)
+        permission = getattr(self, "_download_permission", None)
+        if button and entry and permission:
+            self._update_download_button(entry, permission, button)
+        elif button:
+            button.set_sensitive(True)
+
+    @staticmethod
+    def _download_step_for_phase(phase):
+        normalized = str(phase).lower()
+        if any(marker in normalized for marker in ("search", "match")):
+            return 2
+        if any(marker in normalized for marker in ("metadata", "lyric")):
+            return 4
+        return 3
+
+    def _pulse_download_progress(self):
+        progress = getattr(self, "_download_progress", None)
+        if progress is None:
+            self._download_pulse_source = 0
+            return GLib.SOURCE_REMOVE
+        progress.pulse()
+        return GLib.SOURCE_CONTINUE
+
+    def _set_download_progress_indeterminate(self, text):
+        progress = getattr(self, "_download_progress", None)
+        if progress is None:
+            return
+        if not getattr(self, "_download_pulse_source", 0):
+            self._download_pulse_source = GLib.timeout_add(
+                120, self._pulse_download_progress
+            )
+        progress.set_text(text)
+
+    def _stop_download_pulse(self):
+        source = getattr(self, "_download_pulse_source", 0)
+        if source:
+            GLib.source_remove(source)
+            self._download_pulse_source = 0
+
     def _download_error(self, message):
+        self._restore_download_button()
         self._append_download_log(f"ERROR: {message}")
         if getattr(self, "_download_progress", None):
             self._download_progress.set_text(message)
@@ -3690,7 +3846,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 current, response, payload
             ),
         )
-        dialog.present(self)
+        # The import dialog is modal. Presenting the conflict alert on the
+        # main window puts it behind that dialog on some GTK compositors.
+        presenter = getattr(self, "_download_dialog", None) or self
+        dialog.present(presenter)
 
     def _conflict_response(self, dialog, response, payload):
         dialog.close()
@@ -3779,6 +3938,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 self._append_dependency_log("Stopping dependency installation…")
             self._download_resume = None
             self._dependency_dialog = None
+            self._restore_download_button()
             dialog.close()
 
     def _verify_download_tools(self, presenter=None):

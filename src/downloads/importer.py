@@ -86,7 +86,14 @@ class DownloadedTrackImporter:
                     self.database.save_track_source(
                         scanned.spotify_id, existing, scanned.isrc
                     )
-                self._ingest_lyrics(existing, path, job=job)
+                self._ingest_track_lyrics(
+                    existing,
+                    path,
+                    job=job,
+                    progress_callback=progress_callback,
+                    current=processed,
+                    total=total,
+                )
                 if Path(scanned.path).resolve() != Path(existing.path).resolve():
                     try:
                         Path(scanned.path).unlink()
@@ -99,7 +106,14 @@ class DownloadedTrackImporter:
             self.database.upsert_tracks([scanned])
             stored = self.database.track_by_path(scanned.path) or scanned
             imported.append(stored)
-            self._ingest_lyrics(stored, path, job=job)
+            self._ingest_track_lyrics(
+                stored,
+                path,
+                job=job,
+                progress_callback=progress_callback,
+                current=processed,
+                total=total,
+            )
             if scanned.spotify_id:
                 self.database.save_track_source(
                     scanned.spotify_id, stored, scanned.isrc
@@ -132,6 +146,10 @@ class DownloadedTrackImporter:
             for track in imported:
                 if not track.id:
                     continue
+                if progress_callback:
+                    progress_callback(
+                        min(processed, total), total, track.title, "Lyrics"
+                    )
                 variants = self.lyrics_service.find_variants(track)
                 modes = {
                     self.lyrics_service._mode(timeline) for timeline, _row in variants
@@ -155,6 +173,20 @@ class DownloadedTrackImporter:
         return job.lyrics_mode != "none" and "musixmatch" in {
             str(provider).lower() for provider in selected
         }
+
+    def _ingest_track_lyrics(
+        self,
+        track,
+        audio_path: Path,
+        *,
+        job=None,
+        progress_callback=None,
+        current=0,
+        total=0,
+    ):
+        if job and job.lyrics_mode != "none" and progress_callback:
+            progress_callback(current, total, track.title, "Lyrics")
+        self._ingest_lyrics(track, audio_path, job=job)
 
     def _ingest_lyrics(self, track, audio_path: Path, *, job=None):
         if not self.lyrics_service:

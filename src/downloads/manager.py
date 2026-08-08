@@ -34,8 +34,10 @@ class DownloadJob:
     playlist_id: int | None = None
     state: str = "queued"
     progress: float = 0.0
+    track_progress: float = 0.0
     error: str | None = None
     current_track: str = ""
+    current_index: int = 0
     completed: int = 0
     total: int = 0
     failed: int = 0
@@ -57,26 +59,38 @@ class ProgressParser:
         import re
 
         data = {"line": line.rstrip()}
-        match = re.search(r"(\d{1,3})%", line)
+        match = re.search(r"(?<!\d)(\d{1,3}(?:\.\d+)?)\s*%", line)
         if match:
-            data["progress"] = min(100.0, float(match.group(1)))
+            data["track_progress"] = min(100.0, float(match.group(1)))
+            # Keep the original parser key for callers that consume parser
+            # output directly. The manager treats this as per-track progress.
+            data["progress"] = data["track_progress"]
+        # Do not mistake search-result counters such as "Found 1/1 result"
+        # for a playlist total. Only accept counters tied to a download/item
+        # operation; those are the counters that describe the real workload.
         match = re.search(
-            r"(?:track|song|item|file)?\s*(\d+)\s*(?:/|of)\s*(\d+)",
+            r"\b(?:track|song|item|file|download(?:ing|ed)?|processing)\b"
+            r"[^\d]{0,80}(\d+)\s*(?:/|of)\s*(\d+)(?!\d)",
             line,
             re.I,
         )
         if match:
-            data["completed"] = int(match.group(1))
+            data["current_index"] = int(match.group(1))
             data["total"] = int(match.group(2))
         lowered = line.lower()
         phases = (
-            ("downloading", "Downloading"),
-            ("searching", "Searching"),
-            ("processing", "Processing"),
-            ("embedding", "Embedding metadata"),
-            ("found", "Matching audio"),
-            ("skipping", "Reusing existing file"),
             ("already exists", "Reusing existing file"),
+            ("skipping", "Reusing existing file"),
+            ("embedding", "Writing metadata"),
+            ("metadata", "Writing metadata"),
+            ("tagging", "Writing metadata"),
+            ("converting", "Converting audio"),
+            ("processing", "Processing audio"),
+            ("lyrics", "Finding lyrics"),
+            ("downloading", "Downloading audio"),
+            ("searching", "Searching for a match"),
+            ("matching", "Matching audio"),
+            ("found", "Matching audio"),
             ("failed", "Failed"),
             ("error", "Failed"),
         )
@@ -84,9 +98,19 @@ class ProgressParser:
             if marker in lowered:
                 data["phase"] = phase
                 data["current"] = line.strip()
-                if phase == "Failed":
-                    data["failed"] = 1
                 break
+        if re.search(r"\b(downloaded|completed|finished|saved|converted)\b", lowered):
+            data["track_done"] = True
+            data.setdefault("phase", "Processing audio")
+            data.setdefault("current", line.strip())
+        if data.get("current_index") and not data.get("track_done"):
+            # spotDL usually reports the one-based track currently being
+            # handled (for example, "Downloading 3/12").
+            data["completed"] = data["current_index"]
+        elif data.get("current_index"):
+            data["completed"] = data["current_index"]
+        if "failed" in data.get("phase", "").lower():
+            data["failed"] = 1
         return data
 
 
@@ -168,6 +192,10 @@ class DownloadManager:
             lyrics_providers=tuple(lyrics_providers),
             sync_remove_lrc=sync_remove_lrc,
         )
+        if job_type in {"track", "lyrics"}:
+            # A single-track job has a known total even when spotDL does not
+            # print a 1/1 counter.
+            job.total = 1
         job.destination.mkdir(parents=True, exist_ok=True)
         with self._lock:
             self._jobs[job.id] = job
@@ -354,18 +382,54 @@ class DownloadManager:
             assert job.process.stdout is not None
             for line in job.process.stdout:
                 data = parser.parse(line)
-                if "progress" in data:
-                    job.progress = data["progress"]
+                previous_index = job.current_index
+                if (
+                    data.get("current_index")
+                    and data["current_index"] != previous_index
+                    and not data.get("track_done")
+                ):
+                    job.track_progress = 0.0
+                if "track_progress" in data:
+                    job.track_progress = data["track_progress"]
                 if "current" in data:
                     job.current_track = data["current"]
                 if "total" in data:
-                    job.total = data["total"]
+                    job.total = max(job.total, data["total"])
+                if "current_index" in data:
+                    job.current_index = data["current_index"]
                 if "completed" in data:
-                    job.completed = data["completed"]
+                    completed = data["completed"]
+                    if data.get("current_index") and not data.get("track_done"):
+                        completed -= 1
+                    job.completed = max(job.completed, completed)
                 if "phase" in data:
                     job.phase = data["phase"]
                 if "failed" in data:
                     job.failed += data["failed"]
+                if job.total:
+                    completed = job.completed
+                    if data.get("track_done") and job.current_index:
+                        completed = max(completed, job.current_index)
+                    elif job.current_index:
+                        completed = max(completed, job.current_index - 1)
+                    job.completed = min(job.total, completed)
+                    current = 0.0 if data.get("track_done") else job.track_progress / 100
+                    if job.current_index or job.total == 1:
+                        job.progress = min(
+                            100.0,
+                            ((job.completed + current) / job.total) * 100,
+                        )
+                data.update(
+                    {
+                        "progress": job.progress,
+                        "overall_progress": job.progress if job.total else None,
+                        "track_progress": job.track_progress,
+                        "completed": job.completed,
+                        "total": job.total,
+                        "current_index": job.current_index,
+                        "failed": job.failed,
+                    }
+                )
                 self._emit("output", job, data)
             returncode = job.process.wait()
             if job.cancel_requested:
