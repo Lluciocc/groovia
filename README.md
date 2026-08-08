@@ -1,4 +1,5 @@
 <img height="128" src="data/icons/hicolor/scalable/apps/io.github.Lluciocc.Groovia.svg" align="left"/>
+
 # Groovia
 
 Modern Music Player
