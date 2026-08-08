@@ -110,13 +110,23 @@ def main() -> int:
             gi.require_version("Gst", "1.0")
             from gi.repository import Gst
             Gst.init(None)
-            tempo_factory = Gst.ElementFactory.find("rubberband") or Gst.ElementFactory.find("pitch")
+            tempo_factory = next(
+                (Gst.ElementFactory.find(name) for name in ("rubberband", "pitch", "scaletempo")
+                 if Gst.ElementFactory.find(name)),
+                None,
+            )
             if tempo_factory is None:
                 raise RuntimeError("No GStreamer pitch-preserving tempo element is bundled")
             transformed = signal.savgol_filter(numpy.arange(9, dtype=float), 5, 2)
             if transformed.shape != (9,):
                 raise RuntimeError("SciPy DSP smoke test failed")
-            print(f"Groovia Auto DJ smoke test: numpy={numpy.__version__} scipy={scipy.__version__} tempo={tempo_factory.get_name()}")
+            plugin = tempo_factory.get_plugin()
+            print(
+                f"Groovia Auto DJ smoke test: numpy={numpy.__version__} scipy={scipy.__version__} "
+                f"gstreamer={Gst.version_string()} tempo={tempo_factory.get_name()} "
+                f"plugin={plugin.get_name() if plugin else 'unknown'} "
+                f"filename={plugin.get_filename() if plugin else 'unknown'}"
+            )
             return 0
 
         # GTK 4's DrawingArea callbacks hand PyGObject a Cairo context.  The

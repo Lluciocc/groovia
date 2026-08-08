@@ -94,6 +94,12 @@ versions, SciPy DSP, GStreamer and a pitch-preserving tempo element.
 The Flatpak manifest installs pinned CPython 3.13 NumPy/SciPy wheels from
 declared, SHA-256-verified sources with `pip --no-index`; it never contacts
 PyPI during the module build. Both x86_64 and aarch64 wheels are declared.
+It also builds the GStreamer `pitch` element from the GNOME Platform's
+matching GStreamer Bad Plug-ins source and SoundTouch library. The runtime
+does not provide this element by default, so the application logs the exact
+GStreamer version, searched element names, plugin filename, registry paths and
+plugin environment at startup. `rubberband` is optional; `pitch` or
+`scaletempo` is accepted when available.
 
 The bundled runtime includes the GStreamer core libraries, plugin DLLs,
 plugin scanner, selected GObject typelibs, schemas and resources. The plugin

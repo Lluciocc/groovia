@@ -32,7 +32,7 @@ if not LOGGER.handlers:
     LOGGER.addHandler(_handler)
 LOGGER.setLevel(logging.INFO)
 LOGGER.propagate = False
-ANALYSIS_SCHEMA_VERSION = 4
+ANALYSIS_SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +43,8 @@ class TrackAnalysis:
     analysis_schema_version: int = ANALYSIS_SCHEMA_VERSION
     bpm: float | None = None
     source_bpm: str = "unknown"
+    tempo_candidates: tuple[float, ...] = ()
+    tempo_selection_reason: str = "unknown"
     beat_confidence: float = 0.0
     tempo_stability: float = 0.0
     beats: tuple[float, ...] = ()
@@ -100,6 +102,7 @@ class AnalysisCache:
         for name in (
             "beats", "downbeats", "energy_curve", "vocal_curve", "phrase_boundaries",
             "vocal_entry_points", "vocal_exit_points",
+            "tempo_candidates",
         ):
             row[name] = tuple(float(value) for value in (row.get(name) or ()))
         row["vocal_sections"] = tuple(
@@ -126,6 +129,7 @@ class AnalysisCache:
             self._items[analysis.signature] = asdict(analysis)
             self._items[analysis.signature]["beats"] = list(analysis.beats)
             self._items[analysis.signature]["downbeats"] = list(analysis.downbeats)
+            self._items[analysis.signature]["tempo_candidates"] = list(analysis.tempo_candidates)
             self._items[analysis.signature]["energy_curve"] = list(analysis.energy_curve)
             self._items[analysis.signature]["vocal_curve"] = list(analysis.vocal_curve)
             self._items[analysis.signature]["vocal_sections"] = [list(x) for x in analysis.vocal_sections]
@@ -164,9 +168,11 @@ class TrackAnalyzer:
         cached = self.cache.get(path)
         if cached:
             LOGGER.info(
-                "analysis cache_hit track=%r bpm=%s confidence=%.2f beats=%d phrases=%d",
+                "analysis cache_hit track=%r bpm=%s confidence=%.2f beats=%d phrases=%d "
+                "tempo_candidates=%s selected_bpm=%s reason=%s",
                 getattr(track, "title", Path(path).name), cached.bpm or "unknown",
                 cached.beat_confidence, len(cached.beats), len(cached.phrase_boundaries),
+                list(cached.tempo_candidates), cached.bpm or "unknown", cached.tempo_selection_reason,
             )
             return cached
 
@@ -180,9 +186,9 @@ class TrackAnalyzer:
         pcm, sample_rate, decode_seconds = self._decode_pcm(path)
         if duration <= 0 and pcm is not None and sample_rate:
             duration = len(pcm) / sample_rate
-        dsp = self._analyze_pcm(pcm, sample_rate, duration) if pcm is not None else {}
-        detected_bpm = dsp.get("bpm")
         tagged_bpm = self._number(tags.get("bpm"))
+        dsp = self._analyze_pcm(pcm, sample_rate, duration, tagged_bpm) if pcm is not None else {}
+        detected_bpm = dsp.get("bpm")
         if detected_bpm is not None and dsp.get("beat_confidence", 0.0) >= 0.25:
             bpm, source_bpm = detected_bpm, "audio"
         elif tagged_bpm is not None:
@@ -196,6 +202,8 @@ class TrackAnalyzer:
             duration=duration,
             bpm=bpm,
             source_bpm=source_bpm,
+            tempo_candidates=tuple(dsp.get("tempo_candidates", ())) or ((tagged_bpm,) if tagged_bpm else ()),
+            tempo_selection_reason=dsp.get("tempo_selection_reason", "metadata" if tagged_bpm and detected_bpm is None else "unknown"),
             beat_confidence=float(dsp.get("beat_confidence", 0.0)),
             tempo_stability=float(dsp.get("tempo_stability", 0.0)),
             beats=tuple(dsp.get("beats", ())),
@@ -223,7 +231,7 @@ class TrackAnalyzer:
             "analysis complete track=%r total=%.2fs decode=%.2fs bpm=%s source_bpm=%s "
             "beat_confidence=%.2f tempo_stability=%.2f beats=%d downbeats=%d phrases=%d "
             "energy=%s vocal_density=%s vocal_entries=%d vocal_exits=%d lyrics=%s/%s "
-            "key=%s key_confidence=%.2f",
+            "key=%s key_confidence=%.2f tempo_candidates=%s selected_bpm=%s reason=%s",
             getattr(track, "title", Path(path).name), time.perf_counter() - started,
             decode_seconds, analysis.bpm or "unknown", analysis.source_bpm,
             analysis.beat_confidence, analysis.tempo_stability, len(analysis.beats),
@@ -233,6 +241,7 @@ class TrackAnalyzer:
             len(analysis.vocal_entry_points), len(analysis.vocal_exit_points),
             analysis.lyrics_source or "none", analysis.lyrics_sync_quality or "none",
             analysis.key or "unknown", analysis.key_confidence,
+            list(analysis.tempo_candidates), analysis.bpm or "unknown", analysis.tempo_selection_reason,
         )
         return analysis
 
@@ -283,7 +292,7 @@ class TrackAnalyzer:
             return None, 0, time.perf_counter() - started
 
     @staticmethod
-    def _analyze_pcm(samples, sample_rate: int, duration: float) -> dict:
+    def _analyze_pcm(samples, sample_rate: int, duration: float, metadata_bpm: float | None = None) -> dict:
         if samples is None or len(samples) < sample_rate:
             return {}
         try:
@@ -317,8 +326,8 @@ class TrackAnalyzer:
         prominence = max(float(np.percentile(onset, 70)) * 0.18, 1e-5)
         peak_indices, props = signal.find_peaks(onset, distance=peak_distance, prominence=prominence)
         peak_times = peak_indices * hop / sample_rate
-        bpm, confidence, stability = TrackAnalyzer._estimate_tempo(
-            onset, peak_indices, sample_rate, hop
+        bpm, confidence, stability, tempo_details = TrackAnalyzer._estimate_tempo_details(
+            onset, peak_indices, sample_rate, hop, metadata_bpm
         )
         beats = TrackAnalyzer._beat_timeline(peak_times, bpm, duration or len(samples) / sample_rate)
         downbeats = tuple(beats[index] for index in range(0, len(beats), 4))
@@ -339,6 +348,8 @@ class TrackAnalyzer:
         )
         return {
             "bpm": bpm, "beat_confidence": confidence, "tempo_stability": stability,
+            "tempo_candidates": tuple(item["bpm"] for item in tempo_details),
+            "tempo_selection_reason": tempo_details[0]["reason"] if tempo_details else "unknown",
             "beats": beats, "downbeats": downbeats, "energy": energy,
             "energy_curve": energy_curve, "dynamic_range": dynamic_range,
             "vocal_density": vocal_density, "vocal_curve": vocal_curve,
@@ -380,65 +391,125 @@ class TrackAnalyzer:
 
     @staticmethod
     def _estimate_tempo(onset, peaks, sample_rate: int, hop: int):
+        """Backward-compatible tempo API returning only the selected values."""
+        bpm, confidence, stability, _details = TrackAnalyzer._estimate_tempo_details(
+            onset, peaks, sample_rate, hop
+        )
+        return bpm, confidence, stability
+
+    @staticmethod
+    def _estimate_tempo_details(onset, peaks, sample_rate: int, hop: int, metadata_bpm=None):
         try:
             import numpy as np
             from scipy import signal
         except ImportError:
-            return None, 0.0, 0.0
+            return None, 0.0, 0.0, ()
         if len(onset) < 8 or float(np.max(onset)) <= 0:
-            return None, 0.0, 0.0
+            return None, 0.0, 0.0, ()
         autocorr = signal.fftconvolve(onset, onset[::-1], mode="full")[len(onset) - 1:]
         lag_min = max(1, int(60 / 190 * sample_rate / hop))
         lag_max = min(len(autocorr) - 1, int(60 / 55 * sample_rate / hop))
         if lag_max <= lag_min:
-            return None, 0.0, 0.0
+            return None, 0.0, 0.0, ()
         lags = np.arange(lag_min, lag_max + 1)
         values = autocorr[lags]
-        candidates = []
+        base_tempos = []
         for index in np.argsort(values)[-10:]:
             lag = int(lags[index])
             raw = 60.0 * sample_rate / (lag * hop)
-            for tempo in (raw / 2, raw, raw * 2):
-                if 55 <= tempo <= 190:
-                    local = float(np.max(values[max(0, index - 1): index + 2])) / (float(autocorr[0]) + 1e-9)
-                    candidates.append((tempo, local))
-        direct_tempo = None
-        direct_stability = 0.0
+            base_tempos.append(raw)
         if len(peaks) >= 6:
             # Peak-to-peak regression is more accurate than a single FFT lag
             # for tempos whose period falls between analysis frames.
             peak_times = peaks * hop / sample_rate
             slope = float(np.polyfit(np.arange(len(peak_times)), peak_times, 1)[0])
             direct = 60.0 / slope if slope > 0 else 0.0
-            if 55 <= direct <= 190:
-                residual = peak_times - np.polyval(np.polyfit(np.arange(len(peak_times)), peak_times, 1), np.arange(len(peak_times)))
-                direct_stability = float(np.clip(1 - np.std(residual) / max(slope, 1e-6), 0, 1))
-                direct_tempo = direct
-                lag = max(1, int(round(60.0 / direct * sample_rate / hop)))
-                local = float(autocorr[min(lag, len(autocorr) - 1)]) / (float(autocorr[0]) + 1e-9)
-                candidates.append((direct, local))
-        if direct_tempo is not None and direct_stability >= 0.82:
-            return round(float(direct_tempo), 3), float(np.clip(0.72 + direct_stability * 0.25, 0, 1)), direct_stability
-        if not candidates:
-            return None, 0.0, 0.0
-        # Prefer the actual pulse supported by onset peaks; half/double-time
-        # alternatives remain candidates instead of blindly snapping to 120.
-        best = None
+            base_tempos.append(direct)
+
+        # Keep the explicit half/double-time hypotheses.  They are scored as
+        # musical interpretations rather than being clamped to an arbitrary
+        # BPM ceiling.
+        hypotheses = set()
+        for base in base_tempos:
+            if not base or not math.isfinite(base):
+                continue
+            for tempo in (base / 2.0, base, base * 2.0):
+                if 55 <= tempo <= 240:
+                    hypotheses.add(round(float(tempo), 3))
+        if metadata_bpm and 55 <= metadata_bpm <= 240:
+            for tempo in (metadata_bpm / 2.0, metadata_bpm, metadata_bpm * 2.0):
+                if 55 <= tempo <= 240:
+                    hypotheses.add(round(float(tempo), 3))
+        if not hypotheses:
+            return None, 0.0, 0.0, ()
+
         peak_times = peaks * hop / sample_rate
-        for tempo, periodicity in candidates:
-            if len(peak_times) > 1:
-                intervals = np.diff(peak_times)
-                distances = np.abs(intervals - 60 / tempo)
-                pulse_support = float(np.mean(distances < (0.12 * 60 / tempo)))
-                stability = float(np.clip(1 - np.std(intervals) / (np.mean(intervals) + 1e-6), 0, 1))
+        intervals = np.diff(peak_times) if len(peak_times) > 1 else np.array(())
+        scored = []
+        for tempo in sorted(hypotheses):
+            period = 60.0 / tempo
+            lag = min(len(autocorr) - 1, max(1, int(round(period * sample_rate / hop))))
+            periodicity = float(autocorr[lag] / (float(autocorr[0]) + 1e-9))
+            if len(intervals):
+                ratios = intervals / period
+                allowed = np.asarray((0.5, 1.0, 2.0, 4.0))
+                nearest = np.min(np.abs(ratios[:, None] - allowed[None, :]) / allowed[None, :], axis=1)
+                beat_consistency = float(np.mean(np.clip(1.0 - nearest * 2.0, 0, 1)))
+                stability = float(np.clip(1.0 - np.std(intervals / period) / (np.mean(intervals / period) + 1e-9), 0, 1))
+                event_ratio = float(np.mean(intervals) / period)
+                density_distance = min(abs(event_ratio - value) for value in (0.5, 1.0, 2.0, 4.0))
+                event_density = max(0.0, 1.0 - density_distance / 1.5)
             else:
-                pulse_support, stability = 0.0, 0.0
-            score = 0.55 * periodicity + 0.35 * pulse_support + 0.10 * stability
-            item = (score, tempo, stability)
-            if best is None or item[0] > best[0]:
-                best = item
-        score, tempo, stability = best
-        return round(float(tempo), 3), float(np.clip(score * 2.2, 0, 1)), stability
+                beat_consistency = stability = event_density = 0.0
+
+            # Coverage of a regular beat grid, with tolerance for subdivisions.
+            phase_candidates = np.mod(peak_times, period) if len(peak_times) else np.array(())
+            phase = float(np.median(phase_candidates)) if len(phase_candidates) else 0.0
+            if len(peak_times):
+                grid = np.arange(phase, (peak_times[-1] + period), period)
+                coverage = float(np.mean([np.min(np.abs(peak_times - point)) <= period * 0.18 for point in grid]))
+            else:
+                coverage = 0.0
+            downbeat_consistency = float(np.clip(0.5 * coverage + 0.5 * periodicity, 0, 1))
+            typical_range = 1.0 if 70.0 <= tempo <= 155.0 else 0.56
+            metadata_score = 0.0
+            if metadata_bpm:
+                metadata_delta = abs(math.log(max(tempo, 1e-6) / max(metadata_bpm, 1e-6), 2))
+                metadata_score = max(0.0, 1.0 - metadata_delta / 1.2)
+            score = (
+                0.25 * periodicity
+                + 0.23 * beat_consistency
+                + 0.12 * downbeat_consistency
+                + 0.15 * stability
+                + 0.10 * event_density
+                + 0.10 * typical_range
+                + 0.05 * metadata_score
+            )
+            # High BPM is not invalid, but without trustworthy metadata it is
+            # often the upper interpretation of the same musical pulse. Keep
+            # it in the hypothesis set and require stronger evidence to win.
+            if tempo > 165.0 and not metadata_bpm:
+                score *= 0.86
+            scored.append({
+                "bpm": round(tempo, 3), "score": float(score),
+                "periodicity": periodicity, "beat_consistency": beat_consistency,
+                "downbeat_consistency": downbeat_consistency, "stability": stability,
+                "event_density": event_density, "metadata": metadata_score,
+            })
+        scored.sort(key=lambda item: (item["score"], item["stability"], item["bpm"]), reverse=True)
+        best = scored[0]
+        second = scored[1] if len(scored) > 1 else None
+        margin = best["score"] - second["score"] if second else best["score"]
+        confidence = float(np.clip(0.45 + best["score"] * 0.45 + margin * 1.2, 0, 1))
+        reason = "highest composite tempo hypothesis"
+        if best["bpm"] < max(item["bpm"] for item in scored) / 1.7:
+            reason = "half-time interpretation scored higher than double-time pulse"
+        elif best["bpm"] > min(item["bpm"] for item in scored) * 1.7:
+            reason = "double-time interpretation supported by event density"
+        return best["bpm"], confidence, best["stability"], tuple(
+            {**item, "reason": reason if item is best else "alternative tempo hypothesis"}
+            for item in scored
+        )
 
     @staticmethod
     def _beat_timeline(peak_times, bpm, duration):
@@ -502,7 +573,7 @@ class TrackAnalyzer:
         # with eight-bar groups and let strong novelty peaks replace a group
         # anchor.  The spacing/NMS limit keeps long recordings from producing
         # hundreds of interchangeable candidates.
-        minimum_spacing = max(8.0, 16.0 * beat_interval)
+        minimum_spacing = max(12.0, 16.0 * beat_interval)
         candidates = {float(value): 0.28 for value in downbeats[::8] if 0 < value < duration}
         try:
             import numpy as np
@@ -515,22 +586,23 @@ class TrackAnalyzer:
                     novelty, distance=distance, prominence=max(threshold * 0.18, 1e-6)
                 )
                 prominence = properties.get("prominences", np.zeros(len(peaks)))
-                scale = max(float(np.percentile(prominence, 90)), 1e-6)
-                for index, strength in zip(peaks, prominence):
-                    timestamp = index * hop / 11025
-                    if timestamp <= 1.0 or index >= len(onset):
-                        continue
-                    nearest = min(downbeats or beats, key=lambda value: abs(value - timestamp))
-                    if abs(nearest - timestamp) <= max(0.8, 1.25 * beat_interval):
-                        candidates[float(nearest)] = max(
-                            candidates.get(float(nearest), 0.0),
-                            0.55 + 0.45 * min(1.0, float(strength) / scale),
-                        )
+                if len(prominence):
+                    scale = max(float(np.percentile(prominence, 90)), 1e-6)
+                    for index, strength in zip(peaks, prominence):
+                        timestamp = index * hop / 11025
+                        if timestamp <= 1.0 or index >= len(onset):
+                            continue
+                        nearest = min(downbeats or beats, key=lambda value: abs(value - timestamp))
+                        if abs(nearest - timestamp) <= max(0.8, 1.25 * beat_interval):
+                            candidates[float(nearest)] = max(
+                                candidates.get(float(nearest), 0.0),
+                                0.55 + 0.45 * min(1.0, float(strength) / scale),
+                            )
         except (ImportError, ValueError, TypeError):
             pass
 
         selected = TrackAnalyzer._non_max_suppress(
-            candidates.items(), minimum_spacing=minimum_spacing, maximum=128
+            candidates.items(), minimum_spacing=minimum_spacing, maximum=96
         )
         return tuple(round(value, 4) for value in selected if 0 < value < duration)
 

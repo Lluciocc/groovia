@@ -24,14 +24,27 @@ class AutoDJService:
         )
         self._lock = threading.Lock()
         self._generation = 0
+        self._active_key = None
+        self._completed_key = None
+
+    @staticmethod
+    def _prepare_key(current, following, options):
+        values = tuple(sorted((str(key), repr(value)) for key, value in (options or {}).items()))
+        return (current.path, following.path, values)
 
     def prepare(self, current, following, options=None):
-        self.cancel()
         if not current or not following or current.path == following.path:
             return
-        with self._lock:
-            generation = self._generation
         options = dict(options or {})
+        key = self._prepare_key(current, following, options)
+        with self._lock:
+            if key == self._active_key or key == self._completed_key:
+                LOGGER.debug("Auto DJ duplicate prepare skipped current=%s next=%s", current.path, following.path)
+                return
+            self._generation += 1
+            generation = self._generation
+            self._active_key = key
+            self._completed_key = None
 
         def worker():
             try:
@@ -39,11 +52,13 @@ class AutoDJService:
                 right = self.analyzer.analyze(following)
                 plan = self.planner.plan(current, following, left, right, options)
                 LOGGER.info(
-                    "transition ready current=%r next=%r mode=%s duration=%.3fs "
-                    "outgoing_start=%.3f incoming_start=%.3f bars=%d beats=%d confidence=%.2f reason=%r",
+                    "transition ready current=%r next=%r strategy=%s mode=%s duration=%.3fs "
+                    "outgoing_start=%.3f outgoing_end=%.3f incoming_start=%.3f bars=%d beats=%d "
+                    "score=%.3f confidence=%.2f reason=%r",
                     getattr(current, "title", current.path), getattr(following, "title", following.path),
-                    plan.mode, plan.duration, plan.outgoing_start, plan.incoming_start,
-                    plan.bars_used, plan.beats_used, plan.confidence, plan.reason,
+                    plan.strategy, plan.mode, plan.duration, plan.outgoing_start, plan.outgoing_end,
+                    plan.incoming_start, plan.bars_used, plan.beats_used, plan.candidate_score,
+                    plan.confidence, plan.reason,
                 )
             except Exception:
                 # A plan is optional; playback must remain available even if a
@@ -53,6 +68,11 @@ class AutoDJService:
                     getattr(current, "title", current.path), getattr(following, "title", following.path),
                 )
                 plan = None
+            with self._lock:
+                if generation == self._generation:
+                    self._active_key = None
+                    if plan is not None:
+                        self._completed_key = key
             GLib.idle_add(self._deliver, generation, plan)
 
         self._executor.submit(worker)
@@ -60,6 +80,8 @@ class AutoDJService:
     def cancel(self):
         with self._lock:
             self._generation += 1
+            self._active_key = None
+            self._completed_key = None
         LOGGER.debug("Auto DJ analysis cancelled generation=%d", self._generation)
 
     def _deliver(self, generation, plan):

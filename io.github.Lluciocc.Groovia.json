@@ -36,10 +36,6 @@
             ],
             "sources" : [
                 {
-                    "type" : "dir",
-                    "path" : "."
-                },
-                {
                     "type" : "file",
                     "url" : "https://files.pythonhosted.org/packages/19/49/4df9123aafa7b539317bf6d342cb6d227e49f7a35b99c287a6109b13dd93/numpy-2.2.6-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
                     "sha256" : "1bc23a79bfabc5d056d106f9befb8d50c31ced2fbc70eedb8155aec74a45798f",
@@ -62,6 +58,41 @@
                     "url" : "https://files.pythonhosted.org/packages/a2/66/a9618b6a435a0f0c0b8a6d0a2efb32d4ec5a85f023c2b79d39512040355b/scipy-1.15.3-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
                     "sha256" : "79167bba085c31f38603e11a267d862957cbb3ce018d8b38f79ac043bc92d825",
                     "only-arches" : [ "aarch64" ]
+                }
+            ]
+        },
+        {
+            "name" : "soundtouch",
+            "buildsystem" : "cmake-ninja",
+            "config-opts" : [
+                "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+                "-DBUILD_SHARED_LIBS=ON",
+                "-DSOUNDSTRETCH=OFF",
+                "-DSOUNDTOUCH_DLL=OFF"
+            ],
+            "sources" : [
+                {
+                    "type" : "archive",
+                    "url" : "https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz",
+                    "sha256" : "43b23dfac2f64a3aff55d64be096ffc7b73842c3f5665caff44975633a975a99"
+                }
+            ]
+        },
+        {
+            "name" : "gstreamer-soundtouch",
+            "buildsystem" : "meson",
+            "config-opts" : [
+                "-Dauto_features=disabled",
+                "-Dsoundtouch=enabled",
+                "-Dtests=disabled",
+                "-Dexamples=disabled",
+                "-Ddoc=disabled"
+            ],
+            "sources" : [
+                {
+                    "type" : "archive",
+                    "url" : "https://gstreamer.freedesktop.org/src/gst-plugins-bad/gst-plugins-bad-1.26.11.tar.xz",
+                    "sha256" : "110fb82795f0e569b1e27b12ab9699d35c7762e1ff4db95335d6ac8d1442af3d"
                 }
             ]
         },

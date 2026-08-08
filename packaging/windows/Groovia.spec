@@ -104,7 +104,8 @@ for pattern in (
     "libpng*.dll", "libjpeg*.dll", "libgirepository*.dll",
     "libgcc*.dll", "libstdc++*.dll", "libwinpthread*.dll", "libintl*.dll",
     "libiconv*.dll", "libpcre2*.dll", "libzstd*.dll", "liblzma*.dll",
-    "libbz2*.dll",
+    "libbz2*.dll", "libSoundTouch*.dll", "SoundTouch*.dll",
+    "librubberband*.dll", "rubberband*.dll",
 ):
     for path in prefix_bin.glob(pattern):
         add_file(path, ".")

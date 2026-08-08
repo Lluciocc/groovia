@@ -56,18 +56,43 @@ class AudioPlayer(GObject.Object):
         self._auto_dj_transition = False
         self._tempo_filters = {}
         self._eq_filters = {}
-        self.tempo_matching_available = bool(
-            Gst.ElementFactory.find("rubberband") or Gst.ElementFactory.find("pitch")
-        )
-        self.tempo_filter_name = (
-            "rubberband" if Gst.ElementFactory.find("rubberband") else
-            ("pitch" if Gst.ElementFactory.find("pitch") else None)
-        )
+        self._fx_filters = {}
+        # A playbin seek is reliable only after PAUSED preroll completes.
+        self._pending_incoming_seeks = {}
+        self._verified_incoming_seeks = {}
+        self.tempo_filter_name, self.tempo_matching_available = self._detect_tempo_filter()
         LOGGER.info(
             "tempo matching filter=%s available=%s",
             self.tempo_filter_name or "none", self.tempo_matching_available,
         )
         GLib.timeout_add(200, self._tick)
+
+    @staticmethod
+    def _detect_tempo_filter(factory_find=None):
+        Gst.init(None)
+        candidates = ("rubberband", "pitch", "scaletempo")
+        factory_find = factory_find or Gst.ElementFactory.find
+        found = []
+        for name in candidates:
+            factory = factory_find(name)
+            if not factory:
+                continue
+            plugin = factory.get_plugin()
+            found.append((name, plugin.get_name() if plugin else "unknown", plugin.get_filename() if plugin else "unknown"))
+        try:
+            registry_paths = list(Gst.Registry.get().get_path_list())
+        except (AttributeError, TypeError):
+            registry_paths = []
+        LOGGER.info(
+            "GStreamer diagnostics version=%s searched_elements=%s found=%s "
+            "GST_PLUGIN_PATH=%s GST_PLUGIN_PATH_1_0=%s GST_PLUGIN_SYSTEM_PATH_1_0=%s "
+            "GST_PLUGIN_SCANNER=%s registry_paths=%s",
+            Gst.version_string(), list(candidates), found,
+            os.environ.get("GST_PLUGIN_PATH"), os.environ.get("GST_PLUGIN_PATH_1_0"),
+            os.environ.get("GST_PLUGIN_SYSTEM_PATH_1_0"), os.environ.get("GST_PLUGIN_SCANNER"),
+            registry_paths,
+        )
+        return (found[0][0], True) if found else (None, False)
 
     def _new_pipeline(self, track, volume, auto_dj=False):
         pipeline = Gst.ElementFactory.make("playbin", None)
@@ -81,11 +106,12 @@ class AudioPlayer(GObject.Object):
         )
         pipeline.props.volume = volume
         if auto_dj:
-            audio_filter, tempo_filter, equalizer = self._make_audio_filter()
+            audio_filter, tempo_filter, equalizer, effects = self._make_audio_filter()
             if audio_filter:
                 pipeline.props.audio_filter = audio_filter
                 self._tempo_filters[id(pipeline)] = tempo_filter
                 self._eq_filters[id(pipeline)] = equalizer
+                self._fx_filters[id(pipeline)] = effects
         bus = pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message", self._on_message, pipeline)
@@ -98,24 +124,48 @@ class AudioPlayer(GObject.Object):
             Gst.ElementFactory.make(self.tempo_filter_name, None)
             if self.tempo_filter_name else None
         )
-        elements = [item for item in (tempo_filter, equalizer) if item]
+        echo = Gst.ElementFactory.make("audioecho", None)
+        reverb = Gst.ElementFactory.make("freeverb", None)
+        if echo and echo.find_property("max-delay") and echo.find_property("delay"):
+            try:
+                echo.props.max_delay = 450 * Gst.MSECOND
+                echo.props.delay = 180 * Gst.MSECOND
+            except (AttributeError, TypeError, ValueError):
+                pass
+        for effect in (echo, reverb):
+            self._disable_effect(effect)
+        elements = [item for item in (tempo_filter, equalizer, echo, reverb) if item]
         if not elements:
-            return None, None, None
+            return None, None, None, {}
         if len(elements) == 1:
-            return elements[0], tempo_filter, equalizer
+            return elements[0], tempo_filter, equalizer, {"echo": echo, "reverb": reverb}
         chain = Gst.Bin.new(None)
         for element in elements:
             chain.add(element)
         for first, second in zip(elements, elements[1:]):
             if not first.link(second):
-                return None, None, None
+                return None, None, None, {}
         sink_pad = elements[0].get_static_pad("sink")
         source_pad = elements[-1].get_static_pad("src")
         if not sink_pad or not source_pad:
-            return None, None, None
+            return None, None, None, {}
         chain.add_pad(Gst.GhostPad.new("sink", sink_pad))
         chain.add_pad(Gst.GhostPad.new("src", source_pad))
-        return chain, tempo_filter, equalizer
+        return chain, tempo_filter, equalizer, {"echo": echo, "reverb": reverb}
+
+    @staticmethod
+    def _disable_effect(effect):
+        if not effect:
+            return
+        for name, value in (
+            ("intensity", 0.0), ("feedback", 0.0), ("wet-level", 0.0),
+            ("level", 0.0), ("room-scale", 0.0),
+        ):
+            try:
+                if effect.find_property(name):
+                    effect.set_property(name, value)
+            except (AttributeError, TypeError, ValueError):
+                continue
 
     def set_track(self, track, autoplay=True):
         if self._crossfading:
@@ -123,6 +173,7 @@ class AudioPlayer(GObject.Object):
         self._stop_pipeline(self.pipeline)
         self._stop_pipeline(self.next_pipeline)
         self.next_pipeline, self.next_track = None, None
+        self.auto_dj_plan = None
         self._crossfading = False
         self.track = track
         self.position = 0.0
@@ -188,12 +239,17 @@ class AudioPlayer(GObject.Object):
                     and self.auto_dj_plan
                     and self.next_track
                     and self.auto_dj_plan.auto_dj
+                    and self.auto_dj_plan.current_path == self.track.path
                     and self.auto_dj_plan.next_path == self.next_track.path
                 )
                 if auto_dj_plan_matches:
+                    planned_start = float(getattr(self.auto_dj_plan, "outgoing_start", 0.0) or 0.0)
                     if (
                         not self._crossfading
-                        and remaining <= self.auto_dj_plan.duration
+                        # The planner timestamp is authoritative. Never turn
+                        # a semantic exit into an EOS-relative fade because
+                        # the plan duration happens to fit in A's tail.
+                        and position + 0.02 >= planned_start
                     ):
                         started = self._start_auto_dj_transition()
                         if not started and not self._crossfading:
@@ -282,23 +338,32 @@ class AudioPlayer(GObject.Object):
             return False
         if plan.next_path != self.next_track.path:
             return False
+        if not self._incoming_seek_ready(plan):
+            LOGGER.debug(
+                "AutoDJ waiting for incoming preroll before transition B@%.3f",
+                float(getattr(plan, "incoming_start", 0.0) or 0.0),
+            )
+            return False
         if duration_override is not None:
             duration = max(0.8, float(duration_override))
         else:
-            remaining = max(0.8, self.duration - self.position)
-            duration = max(0.8, min(float(plan.duration), remaining))
+            planned_start = float(getattr(plan, "outgoing_start", 0.0) or 0.0)
+            elapsed_since_plan_start = max(0.0, self.position - planned_start)
+            # Account only for a delayed main-loop tick after the authoritative
+            # timestamp; do not derive the transition start from track EOS.
+            duration = max(0.8, float(plan.duration) - elapsed_since_plan_start)
         LOGGER.info(
             "Auto DJ transition starting: %s -> %s (%ss, %s)",
             self.track.title if self.track else "Unknown track",
             self.next_track.title,
             round(duration, 2),
-            plan.mode,
+            getattr(plan, "strategy", plan.mode),
         )
         LOGGER.info(
             "AutoDJ transition started %r -> %r mode=%s duration=%.3fs "
             "outgoing_start=%.3f incoming_start=%.3f confidence=%.2f",
             self.track.title if self.track else "Unknown track", self.next_track.title,
-            plan.mode, duration, plan.outgoing_start, plan.incoming_start, plan.confidence,
+            getattr(plan, "strategy", plan.mode), duration, plan.outgoing_start, plan.incoming_start, plan.confidence,
         )
         self._crossfading = True
         self._auto_dj_transition = True
@@ -323,6 +388,52 @@ class AudioPlayer(GObject.Object):
         except (AttributeError, TypeError, ValueError):
             pass
 
+    def _set_treble(self, pipeline, gain_db):
+        if not pipeline:
+            return
+        try:
+            equalizer = self._eq_filters.get(id(pipeline))
+            if equalizer and equalizer.find_property("band2"):
+                equalizer.props.band2 = max(-8.0, min(0.0, float(gain_db)))
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+    @staticmethod
+    def _set_effect_level(effect, amount):
+        if not effect:
+            return
+        amount = max(0.0, min(1.0, float(amount)))
+        for name, value in (
+            ("intensity", amount), ("wet-level", amount),
+            ("level", amount), ("room-scale", amount),
+        ):
+            try:
+                if effect.find_property(name):
+                    effect.set_property(name, value)
+            except (AttributeError, TypeError, ValueError):
+                continue
+        try:
+            if effect.find_property("feedback"):
+                effect.set_property("feedback", min(0.28, amount * 0.28))
+            if effect.find_property("delay"):
+                effect.set_property("delay", 180 * Gst.MSECOND)
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+    def _apply_transition_fx(self, plan, amount):
+        strategy = getattr(plan, "strategy", "clean_blend")
+        outgoing_effects = self._fx_filters.get(id(self.pipeline), {})
+        incoming_effects = self._fx_filters.get(id(self.next_pipeline), {})
+        if strategy in ("echo_out", "beat_repeat_out"):
+            self._set_effect_level(outgoing_effects.get("echo"), amount * 0.45)
+        elif strategy == "reverb_out":
+            self._set_effect_level(outgoing_effects.get("reverb"), amount * 0.30)
+        elif strategy == "filter_out":
+            self._set_effect_level(outgoing_effects.get("echo"), amount * 0.12)
+            self._set_treble(self.pipeline, -4.0 * amount)
+        self._set_effect_level(incoming_effects.get("echo"), 0.0)
+        self._set_effect_level(incoming_effects.get("reverb"), 0.0)
+
     def _auto_fade_step(self, elapsed_ms):
         if not self._auto_dj_transition or not self.pipeline or not self.next_pipeline:
             return False
@@ -330,16 +441,24 @@ class AudioPlayer(GObject.Object):
         amount = min(1.0, elapsed_ms / (self._auto_dj_duration * 1000.0))
         outgoing_gain = getattr(plan, "outgoing_gain", 1.0)
         incoming_gain = getattr(plan, "incoming_gain", 1.0)
+        strategy = getattr(plan, "strategy", "clean_blend")
+        if strategy == "hard_cut":
+            outgoing_curve = 1.0 if amount < 0.62 else max(0.0, 1.0 - (amount - 0.62) / 0.18)
+            incoming_curve = 0.0 if amount < 0.62 else min(1.0, (amount - 0.62) / 0.18)
+        else:
+            outgoing_curve = math.cos(amount * math.pi / 2)
+            incoming_curve = math.sin(amount * math.pi / 2)
         self.pipeline.props.volume = self._clamp_volume(
-            self.volume * outgoing_gain * math.cos(amount * math.pi / 2)
+            self.volume * outgoing_gain * outgoing_curve
         )
         self.next_pipeline.props.volume = self._clamp_volume(
-            self.volume * incoming_gain * math.sin(amount * math.pi / 2)
+            self.volume * incoming_gain * incoming_curve
         )
-        if getattr(plan, "smart_eq", False):
+        if getattr(plan, "smart_eq", False) and strategy in ("clean_blend", "bass_swap", "vocal_handoff", "filter_out"):
             strength = max(0.0, min(1.0, getattr(plan, "eq_strength", 0.55)))
             self._set_bass(self.pipeline, -8.0 * strength * amount)
             self._set_bass(self.next_pipeline, -8.0 * strength * (1.0 - amount))
+        self._apply_transition_fx(plan, amount)
         if amount >= 1.0:
             previous_track = self.track
             self._stop_pipeline(self.pipeline)
@@ -363,11 +482,38 @@ class AudioPlayer(GObject.Object):
         return False
 
     def prepare_next(self, track):
-        if (
-            self.auto_dj_enabled
-            and self.next_track
-            and self.next_track.path != getattr(track, "path", None)
-        ):
+        requested_path = getattr(track, "path", None) if track else None
+        current_next_path = getattr(self.next_track, "path", None) if self.next_track else None
+        same_next_track = bool(track and self.next_track and requested_path == current_next_path)
+
+        if same_next_track:
+            # Queue updates can repeat while analysis and preroll are in
+            # flight. Preserve both the pipeline and the real plan; in
+            # particular, never reinstall the temporary analysis fallback.
+            LOGGER.debug(
+                "AutoDJ duplicate prepare_next ignored current=%s next=%s plan=%s",
+                getattr(self.track, "path", None), requested_path,
+                "present" if self.auto_dj_plan else "missing",
+            )
+            recreated_pipeline = False
+            if self.auto_dj_enabled and self.next_pipeline is None:
+                self.next_pipeline = self._new_pipeline(track, 0.0, True)
+                if self.next_pipeline:
+                    self.next_pipeline.set_state(Gst.State.PAUSED)
+                    recreated_pipeline = True
+            if recreated_pipeline and self.auto_dj_plan is not None:
+                self._configure_next_pipeline(self.auto_dj_plan)
+            else:
+                self._install_fallback_plan_if_missing(track)
+            return
+
+        if track is None and self.next_track is None and self.next_pipeline is None and self.auto_dj_plan is None:
+            LOGGER.debug("AutoDJ duplicate prepare_next ignored next=None")
+            return
+
+        if self.next_track is not None or self.next_pipeline is not None or self.auto_dj_plan is not None:
+            # The queued path really changed (including B -> None), so the
+            # old preroll and its plan are no longer associated with it.
             self._stop_pipeline(self.next_pipeline)
             self.next_pipeline = None
             self.auto_dj_plan = None
@@ -378,28 +524,36 @@ class AudioPlayer(GObject.Object):
                 self.next_pipeline = self._new_pipeline(track, 0.0, True)
                 if self.next_pipeline:
                     self.next_pipeline.set_state(Gst.State.PAUSED)
-            if (
-                self.auto_dj_enabled
-                and self.track
-                and track.path != self.track.path
-                and self.next_pipeline is not None
-            ):
-                # Analysis runs asynchronously. Keep an immediate, short
-                # Auto DJ plan so a track can never reach EOS and silently
-                # fall back just because ffmpeg is still analyzing it.
-                self.auto_dj_plan = TransitionPlan(
-                    current_path=self.track.path,
-                    next_path=track.path,
-                    duration=2.0,
-                    mode="fallback",
-                    smart_eq=False,
-                    reason="analysis pending",
-                )
+            self._install_fallback_plan_if_missing(track)
         else:
             LOGGER.info("No next track prepared; automatic transition disabled")
-            self._stop_pipeline(self.next_pipeline)
-            self.next_pipeline = None
-            self.auto_dj_plan = None
+
+    def _install_fallback_plan_if_missing(self, track):
+        """Install the temporary safety plan without replacing analysis."""
+        if (
+            not self.auto_dj_enabled
+            or not track
+            or not self.track
+            or track.path == self.track.path
+            or self.next_pipeline is None
+            or self.auto_dj_plan is not None
+        ):
+            return
+        # Analysis runs asynchronously. Keep an immediate, short Auto DJ
+        # plan so playback has a safe transition while analysis is pending.
+        fallback_duration = min(2.0, max(0.8, float(self.duration or track.duration or 2.0)))
+        fallback_end = float(self.duration or self.track.duration or fallback_duration)
+        self.auto_dj_plan = TransitionPlan(
+            current_path=self.track.path,
+            next_path=track.path,
+            duration=fallback_duration,
+            mode="fallback",
+            outgoing_start=max(0.0, fallback_end - fallback_duration),
+            outgoing_end=fallback_end,
+            smart_eq=False,
+            reason="analysis pending",
+        )
+        self._configure_next_pipeline(self.auto_dj_plan)
 
     def set_auto_dj_enabled(self, enabled):
         enabled = bool(enabled)
@@ -423,6 +577,25 @@ class AudioPlayer(GObject.Object):
         if plan.next_path == self.next_track.path and plan.current_path == getattr(
             self.track, "path", None
         ):
+            existing = self.auto_dj_plan
+            if existing == plan:
+                LOGGER.debug(
+                    "AutoDJ duplicate plan ignored current=%s next=%s incoming_start=%.3f",
+                    plan.current_path, plan.next_path, plan.incoming_start,
+                )
+                return
+            if (
+                existing is not None
+                and existing.current_path == plan.current_path
+                and existing.next_path == plan.next_path
+                and getattr(existing, "mode", "fallback") != "fallback"
+                and getattr(plan, "mode", "fallback") == "fallback"
+            ):
+                LOGGER.debug(
+                    "AutoDJ fallback plan ignored; analysed plan already exists current=%s next=%s",
+                    plan.current_path, plan.next_path,
+                )
+                return
             self.auto_dj_plan = plan
             self._configure_next_pipeline(plan)
             LOGGER.info(
@@ -463,9 +636,20 @@ class AudioPlayer(GObject.Object):
             self._reset_dsp(self.next_pipeline)
 
     def _configure_next_pipeline(self, plan):
-        """Apply the plan to the already-prerolled next stream."""
+        """Apply DSP and queue B's seek until PAUSED preroll is complete."""
         if not self.next_pipeline:
             return
+        effects = self._fx_filters.get(id(self.next_pipeline), {})
+        available_effects = [name for name, effect in effects.items() if effect]
+        LOGGER.info(
+            "AutoDJ DSP configured strategy=%s tempo_filter=%s effects=%s",
+            getattr(plan, "strategy", "fallback"), self.tempo_filter_name or "none", available_effects,
+        )
+        strategy = getattr(plan, "strategy", "clean_blend")
+        if strategy in ("echo_out", "beat_repeat_out") and not effects.get("echo"):
+            LOGGER.info("AutoDJ effect fallback strategy=%s -> clean_blend (audioecho unavailable)", strategy)
+        if strategy == "reverb_out" and not effects.get("reverb"):
+            LOGGER.info("AutoDJ effect fallback strategy=reverb_out -> clean_blend (freeverb unavailable)")
         tempo = self._tempo_filters.get(id(self.next_pipeline))
         ratio = float(getattr(plan, "tempo_ratio", 1.0) or 1.0)
         if tempo and abs(ratio - 1.0) > 0.0001:
@@ -478,13 +662,58 @@ class AudioPlayer(GObject.Object):
             except (AttributeError, TypeError, ValueError):
                 LOGGER.warning("AutoDJ tempo filter rejected ratio %.5f", ratio)
         start = max(0.0, float(getattr(plan, "incoming_start", 0.0) or 0.0))
-        if start > 0:
-            success = self.next_pipeline.seek_simple(
+        pipeline_key = id(self.next_pipeline)
+        self._pending_incoming_seeks[pipeline_key] = start
+        self._verified_incoming_seeks.pop(pipeline_key, None)
+        self._apply_pending_incoming_seek(self.next_pipeline)
+
+    def _incoming_seek_ready(self, plan):
+        """Ensure B is positioned at the plan timestamp before PLAYING."""
+        if not self.next_pipeline:
+            return False
+        pipeline_key = id(self.next_pipeline)
+        start = max(0.0, float(getattr(plan, "incoming_start", 0.0) or 0.0))
+        if self._verified_incoming_seeks.get(pipeline_key) == start:
+            return True
+        if pipeline_key not in self._pending_incoming_seeks:
+            self._configure_next_pipeline(plan)
+        self._apply_pending_incoming_seek(self.next_pipeline)
+        return self._verified_incoming_seeks.get(pipeline_key) == start
+
+    def _apply_pending_incoming_seek(self, pipeline):
+        """Seek a preroll-complete playbin and record that it was verified."""
+        if not pipeline:
+            return False
+        pipeline_key = id(pipeline)
+        if pipeline_key not in self._pending_incoming_seeks:
+            return pipeline_key in self._verified_incoming_seeks
+        try:
+            state_result, current_state, pending_state = pipeline.get_state(0)
+        except (AttributeError, TypeError, ValueError):
+            LOGGER.debug("AutoDJ cannot verify preroll for incoming pipeline")
+            return False
+        if state_result != Gst.StateChangeReturn.SUCCESS or current_state != Gst.State.PAUSED:
+            LOGGER.debug(
+                "AutoDJ incoming seek deferred until PAUSED preroll result=%s state=%s pending=%s",
+                state_result, getattr(current_state, "value_nick", current_state),
+                getattr(pending_state, "value_nick", pending_state),
+            )
+            return False
+        start = self._pending_incoming_seeks[pipeline_key]
+        if start <= 0.0:
+            success = True
+        else:
+            success = bool(pipeline.seek_simple(
                 Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.ACCURATE,
                 int(start * Gst.SECOND),
-            )
-            if not success:
-                LOGGER.warning("AutoDJ incoming seek failed start=%.3f", start)
+            ))
+        if not success:
+            LOGGER.warning("AutoDJ incoming seek failed after preroll start=%.3f", start)
+            return False
+        self._pending_incoming_seeks.pop(pipeline_key, None)
+        self._verified_incoming_seeks[pipeline_key] = start
+        LOGGER.info("AutoDJ incoming seek verified after preroll B@%.3f", start)
+        return True
 
     def _reset_dsp(self, pipeline):
         """Restore temporary Auto DJ volume/EQ/tempo controls."""
@@ -506,14 +735,22 @@ class AudioPlayer(GObject.Object):
             equalizer = self._eq_filters.get(id(pipeline))
             if equalizer and equalizer.find_property("band0"):
                 equalizer.props.band0 = 0.0
+            if equalizer and equalizer.find_property("band2"):
+                equalizer.props.band2 = 0.0
         except (AttributeError, TypeError, ValueError):
             pass
+        for effect in self._fx_filters.get(id(pipeline), {}).values():
+            self._disable_effect(effect)
 
     def _on_message(self, _bus, message, source):
         if message.type == Gst.MessageType.ERROR:
             error, _ = message.parse_error()
             LOGGER.error("GStreamer error: %s", error.message)
             self.emit("error", error.message)
+        elif message.type == Gst.MessageType.ASYNC_DONE and source is self.next_pipeline:
+            # playbin has completed its PAUSED preroll; only now is the
+            # incoming timestamp seek considered valid for execution.
+            self._apply_pending_incoming_seek(source)
         elif (
             message.type == Gst.MessageType.EOS
             and source is self.pipeline
@@ -526,6 +763,8 @@ class AudioPlayer(GObject.Object):
                         next_path=self.next_track.path,
                         duration=0.8,
                         mode="fallback",
+                        outgoing_start=max(0.0, self.position - 0.8),
+                        outgoing_end=max(self.position, 0.0),
                         smart_eq=False,
                         reason="end-of-stream fallback",
                     )
@@ -536,10 +775,14 @@ class AudioPlayer(GObject.Object):
             )
             self.emit("finished")
 
-    @staticmethod
-    def _stop_pipeline(pipeline):
+    def _stop_pipeline(self, pipeline):
         if pipeline:
             pipeline.set_state(Gst.State.NULL)
+            self._tempo_filters.pop(id(pipeline), None)
+            self._eq_filters.pop(id(pipeline), None)
+            self._fx_filters.pop(id(pipeline), None)
+            self._pending_incoming_seeks.pop(id(pipeline), None)
+            self._verified_incoming_seeks.pop(id(pipeline), None)
 
     def close(self):
         self._stop_pipeline(self.pipeline)
