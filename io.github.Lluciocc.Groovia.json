@@ -9,11 +9,10 @@
         "--share=ipc",
         "--socket=fallback-x11",
         "--device=dri",
-        "--socket=wayland"
-        ,"--socket=pulseaudio",
+        "--socket=wayland",
+        "--socket=pulseaudio",
         "--filesystem=xdg-music",
-        "--filesystem=xdg-download"
-        ,"--own-name=org.mpris.MediaPlayer2.groovia",
+        "--own-name=org.mpris.MediaPlayer2.groovia",
         "--talk-name=org.freedesktop.Notifications"
     ],
     "cleanup" : [
@@ -29,7 +28,7 @@
     ],
     "modules" : [
         {
-            "name" : "autodj-dsp-python",
+            "name" : "groovia-autodj",
             "buildsystem" : "simple",
             "build-commands" : [
                 "python3 -m pip install --no-index --no-cache-dir --no-deps --prefix=/app --find-links=. numpy==2.2.6 scipy==1.15.3"
@@ -62,41 +61,6 @@
             ]
         },
         {
-            "name" : "soundtouch",
-            "buildsystem" : "cmake-ninja",
-            "config-opts" : [
-                "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
-                "-DBUILD_SHARED_LIBS=ON",
-                "-DSOUNDSTRETCH=OFF",
-                "-DSOUNDTOUCH_DLL=OFF"
-            ],
-            "sources" : [
-                {
-                    "type" : "archive",
-                    "url" : "https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz",
-                    "sha256" : "43b23dfac2f64a3aff55d64be096ffc7b73842c3f5665caff44975633a975a99"
-                }
-            ]
-        },
-        {
-            "name" : "gstreamer-soundtouch",
-            "buildsystem" : "meson",
-            "config-opts" : [
-                "-Dauto_features=disabled",
-                "-Dsoundtouch=enabled",
-                "-Dtests=disabled",
-                "-Dexamples=disabled",
-                "-Ddoc=disabled"
-            ],
-            "sources" : [
-                {
-                    "type" : "archive",
-                    "url" : "https://gstreamer.freedesktop.org/src/gst-plugins-bad/gst-plugins-bad-1.26.11.tar.xz",
-                    "sha256" : "110fb82795f0e569b1e27b12ab9699d35c7762e1ff4db95335d6ac8d1442af3d"
-                }
-            ]
-        },
-        {
             "name" : "groovia",
             "builddir" : true,
             "buildsystem" : "meson",
@@ -110,8 +74,5 @@
                 "--libdir=lib"
             ]
         }
-    ],
-    "build-options" : {
-        "env" : {        }
-    }
+    ]
 }
