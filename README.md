@@ -38,7 +38,7 @@ For detailed setup and packaging instructions, see:
 - [Auto DJ](docs/auto-dj.md)
 
 ## License
-This project is licensed under the GPL3 License. See the [LICENSE file](LICENSE) for details
+This project is licensed under the GPL3 License. See the [LICENSE file](COPYING) for details
 
 ## Support
 If you like my work, please consider buying me a coffee :)
