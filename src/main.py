@@ -7,7 +7,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gio
+from gi.repository import Adw, Gio, Gtk
 
 from .platform_compat import supports_mpris
 from .runtime import configure_icon_theme, initialize_runtime
@@ -53,7 +53,7 @@ class GrooviaApplication(Adw.Application):
             "previous", lambda *_: self._window_action("_previous"), ["<primary>Left"]
         )
         self.create_action(
-            "mute", lambda *_: self._window_action("_toggle_mute"), ["m"]
+            "mute", lambda *_: self._window_action("_toggle_mute")
         )
 
     def do_activate(self):
@@ -85,7 +85,16 @@ class GrooviaApplication(Adw.Application):
         PreferencesWindow(self.props.active_window).present()
 
     def on_shortcuts(self, *_args):
-        dialog = Adw.ShortcutsDialog()
+        # PyGObject registers these newer Adwaita widget types lazily.  Touch
+        # them before Gtk.Builder parses the resource so they are available to
+        # the XML loader on all supported libadwaita versions.
+        Adw.ShortcutsDialog
+        Adw.ShortcutsSection
+        Adw.ShortcutsItem
+        builder = Gtk.Builder.new_from_resource(
+            "/io/github/Lluciocc/Groovia/shortcuts-dialog.ui"
+        )
+        dialog = builder.get_object("shortcuts_dialog")
         dialog.present(self.props.active_window)
 
     def _window_action(self, method):

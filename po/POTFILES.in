@@ -4,5 +4,6 @@ data/io.github.Lluciocc.Groovia.desktop.in
 data/io.github.Lluciocc.Groovia.metainfo.xml.in
 data/io.github.Lluciocc.Groovia.gschema.xml
 src/main.py
+src/shortcuts-dialog.ui
 src/window.py
 src/window.ui

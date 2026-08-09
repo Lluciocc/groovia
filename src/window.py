@@ -3126,13 +3126,20 @@ class GrooviaWindow(Adw.ApplicationWindow):
         ):
             self._toggle_play()
             return True
+        if (
+            keyval == Gdk.KEY_m
+            and not state & modifiers
+            and not self._search_has_focus()
+        ):
+            self._toggle_mute()
+            return True
         return False
 
     def _search_has_focus(self) -> bool:
-        """Keep the global Space shortcut from consuming search input."""
+        """Keep global shortcuts from consuming text input."""
         focused = self.get_focus()
         while focused is not None:
-            if focused is self.search_entry:
+            if isinstance(focused, Gtk.Editable):
                 return True
             focused = focused.get_parent()
         return False
