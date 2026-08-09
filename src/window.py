@@ -326,9 +326,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.stack.add_named(self._lyrics_page(), "lyrics")
 
         sidebar = self._sidebar()
-        split = Adw.NavigationSplitView()
-        split.set_sidebar(Adw.NavigationPage.new(sidebar, "Library"))
-        split.set_content(Adw.NavigationPage.new(self.stack, "Groovia"))
+        split = Adw.OverlaySplitView()
+        split.set_sidebar(sidebar)
+        split.set_content(self.stack)
         split.set_min_sidebar_width(190)
         split.set_max_sidebar_width(240)
         self.split = split
