@@ -68,8 +68,9 @@ if ($LASTEXITCODE -ne 0) { throw "Windows downloader dependency staging failed" 
 # PyInstaller and Inno Setup both require an ICO.  ImageMagick converts the
 # maintained GNOME SVG without adding a second icon source to the repository.
 Require-Command "magick" "Install ImageMagick to convert the application SVG to an ICO."
-& magick (Join-Path $RepoRoot "data\icons\hicolor\scalable\apps\io.github.Lluciocc.Groovia.svg") `
-    -background none -define icon:auto-resize=256,128,64,48,32,16 `
+& magick -background none `
+    (Join-Path $RepoRoot "data\icons\hicolor\scalable\apps\io.github.Lluciocc.Groovia.svg") `
+    -define icon:auto-resize=256,128,64,48,32,16 `
     (Join-Path $BuildRoot "Groovia.ico")
 if ($LASTEXITCODE -ne 0) { throw "ImageMagick icon conversion failed" }
 
