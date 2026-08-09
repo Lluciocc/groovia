@@ -38,9 +38,12 @@ if supports_mpris():
 else:
     MprisService = None
 
+DEFAULT_VERSION = "1.1.1"
+
 
 class GrooviaApplication(Adw.Application):
-    def __init__(self):
+    def __init__(self, version=DEFAULT_VERSION):
+        self.version = version or DEFAULT_VERSION
         super().__init__(
             application_id="io.github.Lluciocc.Groovia",
             flags=Gio.ApplicationFlags.HANDLES_OPEN,
@@ -81,14 +84,26 @@ class GrooviaApplication(Adw.Application):
             win.open_paths([file.get_path() for file in files if file.get_path()])
 
     def on_about(self, *_args):
-        Adw.AboutDialog(
+        about = Adw.AboutDialog(
             application_name="Groovia",
             application_icon="io.github.Lluciocc.Groovia",
+            comments=(
+                "Modern, album-first music player for GNOME.\n\n"
+                "Build a local music collection, browse albums, shape the queue, "
+                "follow synchronized lyrics, and let the optional Auto DJ create "
+                "thoughtful transitions between tracks."
+            ),
             developer_name="Lluciocc",
-            version="0.1.0",
+            version=self.version,
             developers=["Lluciocc"],
             copyright="© 2026 Lluciocc",
-        ).present(self.props.active_window)
+            license_type=Gtk.License.GPL_3_0_ONLY,
+            website="https://github.com/Lluciocc/Groovia",
+            issue_url="https://github.com/Lluciocc/Groovia/issues",
+        )
+        about.add_link("License", "https://www.gnu.org/licenses/gpl-3.0.html")
+        about.add_link("Donate", "https://buymeacoffee.com/lluciocc")
+        about.present(self.props.active_window)
 
     def on_preferences(self, *_args):
         from .preferences import PreferencesWindow
@@ -126,6 +141,6 @@ class GrooviaApplication(Adw.Application):
             self.set_accels_for_action(f"app.{name}", shortcuts)
 
 
-def main(_version):
+def main(version=DEFAULT_VERSION):
     initialize_runtime()
-    return GrooviaApplication().run(sys.argv)
+    return GrooviaApplication(version).run(sys.argv)

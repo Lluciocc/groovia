@@ -43,8 +43,6 @@ This project is licensed under the GPL3 License. See the [LICENSE file](COPYING)
 ## Support
 If you like my work, please consider buying me a coffee :)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L01E41M0)
 <a href="https://buymeacoffee.com/lluciocc" target="_blank">
     <img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="50">
 </a>
-
