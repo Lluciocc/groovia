@@ -26,6 +26,7 @@ class VinylView(Gtk.DrawingArea):
         self.set_draw_func(self._draw)
         self.cover = None
         self.angle = 0.0
+        self._rotation_angle = 0.0
         self.progress = 0.0
         self.duration = 0.0
         self.arm_progress = 0.0
@@ -120,7 +121,8 @@ class VinylView(Gtk.DrawingArea):
         delta = self._angle_delta(current_angle, self._drag_previous_angle)
         self._drag_previous_angle = current_angle
         self._drag_total_angle += delta
-        self.angle = (self.angle + delta) % math.tau
+        self._rotation_angle += delta
+        self.angle = self._rotation_angle
 
         if self.duration > 0:
             # One full manual turn scrubs 45 seconds, in either direction.
@@ -156,7 +158,8 @@ class VinylView(Gtk.DrawingArea):
             1.0, delta * 5.5
         )
         self.arm_progress += (self.progress - self.arm_progress) * min(1.0, delta * 4.5)
-        self.angle = (self.angle + delta * self.rotation_velocity) % math.tau
+        self._rotation_angle += delta * self.rotation_velocity
+        self.angle = self._rotation_angle
         if (
             self.rotation_velocity > 0.002
             or abs(self.arm_progress - self.progress) > 0.001
@@ -203,7 +206,7 @@ class VinylView(Gtk.DrawingArea):
         # without looking like a bright painted line.
         cr.save()
         cr.translate(cx, cy)
-        cr.rotate(self.angle * 0.72)
+        cr.rotate(self._rotation_angle * 0.72)
 
         # Main broad reflection
         cr.set_line_cap(1)
