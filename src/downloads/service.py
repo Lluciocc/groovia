@@ -30,22 +30,17 @@ from ..lyrics import LyricsService
 from ..platform_compat import get_data_dir, get_music_dir
 from .importer import SpotDLImportService
 from .manager import DownloadManager
-from .spotdl import (SourceInfo, classify_input, read_sync_metadata,
-                     read_sync_source)
+from .spotdl import SourceInfo, classify_input, read_sync_metadata, read_sync_source
 
 
 class SpotDLService:
-    def __init__(
-        self, database, scanner, data_dir: str | Path | None = None, callback=None
-    ):
+    def __init__(self, database, scanner, data_dir: str | Path | None = None, callback=None):
         self.database = database
         self.scanner = scanner
         self.callback = callback
         self.manager = DownloadManager(data_dir, self._manager_event, database)
         self.lyrics = LyricsService(database, scanner, data_dir)
-        self.importer = SpotDLImportService(
-            database, scanner, self._import_event, self.lyrics
-        )
+        self.importer = SpotDLImportService(database, scanner, self._import_event, self.lyrics)
         self._contexts: dict[str, dict] = {}
 
     @property
@@ -56,9 +51,7 @@ class SpotDLService:
     def music_dir(self) -> Path:
         configured = os.environ.get("GROOVIA_MUSIC_DIR")
         return (
-            Path(configured).expanduser().resolve()
-            if configured
-            else get_music_dir() / "Groovia"
+            Path(configured).expanduser().resolve() if configured else get_music_dir() / "Groovia"
         )
 
     @property
@@ -123,17 +116,14 @@ class SpotDLService:
                 if (
                     playlist is None
                     and candidate.sync_file
-                    and Path(candidate.sync_file).resolve()
-                    == Path(info.value).resolve()
+                    and Path(candidate.sync_file).resolve() == Path(info.value).resolve()
                 ):
                     playlist = candidate
                     break
             if playlist is None:
                 info = SourceInfo("sync", info.value, sync_id)
         if playlist and existing_action is None:
-            self._emit(
-                "conflict", None, {"playlist": playlist, "source": info, "value": value}
-            )
+            self._emit("conflict", None, {"playlist": playlist, "source": info, "value": value})
             return None
         context = {
             "info": info,
@@ -154,16 +144,12 @@ class SpotDLService:
                 else:
                     name = f"Spotify {info.kind.title()} {info.spotify_id or 'Import'}"
                 destination = self.sync_root / (info.spotify_id or "imported")
-                sync_file = (
-                    self.data_root / "sync" / f"{info.spotify_id or 'imported'}.spotdl"
-                )
+                sync_file = self.data_root / "sync" / f"{info.spotify_id or 'imported'}.spotdl"
                 destination.mkdir(parents=True, exist_ok=True)
                 sync_file.parent.mkdir(parents=True, exist_ok=True)
                 playlist = self.database.create_playlist(
                     name,
-                    source_url=(
-                        info.value if info.kind in {"playlist", "album"} else sync_url
-                    ),
+                    source_url=(info.value if info.kind in {"playlist", "album"} else sync_url),
                     source_id=info.spotify_id,
                     sync_file=str(sync_file),
                     managed_dir=str(destination),
@@ -173,9 +159,7 @@ class SpotDLService:
                     sync_status="synchronizing",
                 )
             else:
-                destination = Path(
-                    playlist.managed_dir or self.sync_root / str(playlist.id)
-                )
+                destination = Path(playlist.managed_dir or self.sync_root / str(playlist.id))
                 sync_file = (
                     Path(playlist.sync_file)
                     if playlist.sync_file
@@ -292,9 +276,7 @@ class SpotDLService:
             playlist_id, sync_status="disconnected", auto_sync="manual"
         )
 
-    def find_lyrics(
-        self, track, *, providers: tuple[str, ...] = (), fallback: bool = True
-    ):
+    def find_lyrics(self, track, *, providers: tuple[str, ...] = (), fallback: bool = True):
         """Find lyrics asynchronously, preferring Groovia's richsync backend."""
         if not track.spotify_id:
             self._emit(
@@ -325,9 +307,7 @@ class SpotDLService:
                         },
                     )
                     if fallback:
-                        self._submit_lyrics_fallback(
-                            track, source, destination, selected
-                        )
+                        self._submit_lyrics_fallback(track, source, destination, selected)
                     return
                 if fallback:
                     self._submit_lyrics_fallback(track, source, destination, selected)
@@ -339,9 +319,7 @@ class SpotDLService:
                         {"track": track, "error": "Musixmatch returned no lyrics."},
                     )
 
-            threading.Thread(
-                target=worker, daemon=True, name="groovia-musixmatch-lyrics"
-            ).start()
+            threading.Thread(target=worker, daemon=True, name="groovia-musixmatch-lyrics").start()
             # Keep the public contract truthy so batch callers can report that
             # a search was queued even though no spotDL job exists yet.
             return True
@@ -455,9 +433,7 @@ class SpotDLService:
                     playlist = self.database.playlist(playlist.id)
                 except Exception:
                     pass
-            by_source = {
-                track.spotify_id: track for track in tracks if track.spotify_id
-            }
+            by_source = {track.spotify_id: track for track in tracks if track.spotify_id}
             ordered = [
                 by_source[item["spotify_id"]]
                 for item in metadata
@@ -475,9 +451,7 @@ class SpotDLService:
                     wanted = {track.id for track in ordered if track.id is not None}
                     for track_id in self.database.playlist_track_ids(playlist.id):
                         if track_id not in wanted:
-                            self.database.remove_track_from_playlist(
-                                playlist.id, track_id
-                            )
+                            self.database.remove_track_from_playlist(playlist.id, track_id)
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
             self.database.update_playlist_source(
                 playlist.id,

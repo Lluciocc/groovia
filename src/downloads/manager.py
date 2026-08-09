@@ -317,8 +317,7 @@ class DownloadManager:
             selected = tuple(
                 provider.lower()
                 for provider in (
-                    job.lyrics_providers
-                    or ("synced", "genius", "musixmatch", "azlyrics")
+                    job.lyrics_providers or ("synced", "genius", "musixmatch", "azlyrics")
                 )
             )
             # Musixmatch is handled by Groovia's custom richsync client. Never
@@ -337,17 +336,11 @@ class DownloadManager:
                     providers = ["genius", "azlyrics"]
             if job.lyrics_fallback:
                 providers.extend(
-                    provider
-                    for provider in ("genius", "azlyrics")
-                    if provider not in providers
+                    provider for provider in ("genius", "azlyrics") if provider not in providers
                 )
             if providers:
                 args.extend(["--lyrics", *providers])
-                if (
-                    job.generate_lrc
-                    and "--generate-lrc" in supported
-                    and "synced" in providers
-                ):
+                if job.generate_lrc and "--generate-lrc" in supported and "synced" in providers:
                     args.append("--generate-lrc")
         if (
             job.job_type == "sync"
@@ -469,9 +462,7 @@ class DownloadManager:
                         "returncode": returncode,
                         "files": self._files(job.destination) - before,
                         "sync_file": (
-                            str(job.sync_file)
-                            if job.sync_file and job.sync_file.exists()
-                            else None
+                            str(job.sync_file) if job.sync_file and job.sync_file.exists() else None
                         ),
                     },
                 )
@@ -639,9 +630,7 @@ class DownloadManager:
                 elif install_spotdl:
                     emit(
                         "dependency-output",
-                        {
-                            "line": "spotDL is already available; keeping the existing installation."
-                        },
+                        {"line": "spotDL is already available; keeping the existing installation."},
                     )
                 command = list(self.resolver.resolve())
                 if install_ffmpeg and status.ffmpeg:
@@ -670,9 +659,7 @@ class DownloadManager:
                 self._dependency_process = None
                 self._dependency_cancel_requested = False
 
-        threading.Thread(
-            target=worker, daemon=True, name="groovia-dependency-install"
-        ).start()
+        threading.Thread(target=worker, daemon=True, name="groovia-dependency-install").start()
 
     def cancel_dependency_installation(self) -> bool:
         if self._dependency_process is None:
@@ -693,9 +680,7 @@ class DownloadManager:
             if callback:
                 GLib.idle_add(callback, "dependency-verified", None, {"tools": results})
 
-        threading.Thread(
-            target=worker, daemon=True, name="groovia-dependency-verify"
-        ).start()
+        threading.Thread(target=worker, daemon=True, name="groovia-dependency-verify").start()
 
     def remove_managed_dependencies(self) -> list[str]:
         """Remove only Groovia's private venv and spotDL tool home."""

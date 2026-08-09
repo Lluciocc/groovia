@@ -31,9 +31,7 @@ class LibraryDatabase:
 
     def __init__(self, data_dir: str | None = None):
         self.path = (
-            Path(data_dir) / "groovia" / "library.db"
-            if data_dir
-            else get_data_dir() / "library.db"
+            Path(data_dir) / "groovia" / "library.db" if data_dir else get_data_dir() / "library.db"
         )
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path, check_same_thread=False)
@@ -97,14 +95,10 @@ class LibraryDatabase:
             },
         }
         for table, wanted in columns.items():
-            existing = {
-                row[1] for row in self.connection.execute(f"PRAGMA table_info({table})")
-            }
+            existing = {row[1] for row in self.connection.execute(f"PRAGMA table_info({table})")}
             for name, definition in wanted.items():
                 if name not in existing:
-                    self.connection.execute(
-                        f"ALTER TABLE {table} ADD COLUMN {name} {definition}"
-                    )
+                    self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
         self.connection.executescript("""
             CREATE INDEX IF NOT EXISTS tracks_spotify_id ON tracks(spotify_id);
             CREATE INDEX IF NOT EXISTS playlists_source_id ON playlists(source_id);
@@ -147,14 +141,11 @@ class LibraryDatabase:
             "sync_remove_lrc": "INTEGER NOT NULL DEFAULT 0",
         }
         existing_jobs = {
-            row[1]
-            for row in self.connection.execute("PRAGMA table_info(download_jobs)")
+            row[1] for row in self.connection.execute("PRAGMA table_info(download_jobs)")
         }
         for name, definition in job_columns.items():
             if name not in existing_jobs:
-                self.connection.execute(
-                    f"ALTER TABLE download_jobs ADD COLUMN {name} {definition}"
-                )
+                self.connection.execute(f"ALTER TABLE download_jobs ADD COLUMN {name} {definition}")
 
     @staticmethod
     def _playlist(row: sqlite3.Row) -> Playlist:
@@ -183,9 +174,7 @@ class LibraryDatabase:
             query = """SELECT * FROM tracks WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?
                        OR genre LIKE ? ORDER BY album, disc_number, track_number, title"""
             needle = f"%{search}%"
-            rows = self.connection.execute(
-                query, (needle, needle, needle, needle)
-            ).fetchall()
+            rows = self.connection.execute(query, (needle, needle, needle, needle)).fetchall()
         else:
             rows = self.connection.execute(
                 "SELECT * FROM tracks ORDER BY album, disc_number, track_number, title"
@@ -277,9 +266,7 @@ class LibraryDatabase:
         self.connection.commit()
 
     def load_playback(self) -> tuple[str, float] | None:
-        row = self.connection.execute(
-            "SELECT value FROM settings WHERE key='playback'"
-        ).fetchone()
+        row = self.connection.execute("SELECT value FROM settings WHERE key='playback'").fetchone()
         if not row:
             return None
         try:
@@ -292,9 +279,7 @@ class LibraryDatabase:
             return None
 
     def track_by_path(self, path: str) -> Track | None:
-        row = self.connection.execute(
-            "SELECT * FROM tracks WHERE path = ?", (path,)
-        ).fetchone()
+        row = self.connection.execute("SELECT * FROM tracks WHERE path = ?", (path,)).fetchone()
         return self._track(row) if row else None
 
     def remove_track(self, path: str) -> None:
@@ -320,15 +305,11 @@ class LibraryDatabase:
         ).fetchone()
         if row:
             return self._playlist(row)
-        self.connection.execute(
-            "INSERT INTO playlists(name, is_favorites) VALUES('Favorites', 1)"
-        )
+        self.connection.execute("INSERT INTO playlists(name, is_favorites) VALUES('Favorites', 1)")
         self.connection.commit()
         return self.favorites()
 
-    def create_playlist(
-        self, name: str, cover_path: str | None = None, **source
-    ) -> Playlist:
+    def create_playlist(self, name: str, cover_path: str | None = None, **source) -> Playlist:
         cursor = self.connection.execute(
             """INSERT INTO playlists(
                 name, cover_path, source_url, source_id, sync_file, managed_dir,
@@ -417,9 +398,7 @@ class LibraryDatabase:
         ).fetchone()
         return self._track(row) if row else None
 
-    def save_track_source(
-        self, spotify_id: str, track: Track, isrc: str | None = None
-    ) -> None:
+    def save_track_source(self, spotify_id: str, track: Track, isrc: str | None = None) -> None:
         stored = self.track_by_path(track.path)
         if stored and stored.id is not None:
             self.connection.execute(
@@ -591,8 +570,7 @@ class LibraryDatabase:
 
     def update_playlist_cover(self, playlist_id: int, cover_path: str | None) -> None:
         self.connection.execute(
-            "UPDATE playlists SET cover_path = ?, modified_at = CURRENT_TIMESTAMP "
-            "WHERE id = ?",
+            "UPDATE playlists SET cover_path = ?, modified_at = CURRENT_TIMESTAMP WHERE id = ?",
             (cover_path, playlist_id),
         )
         self.connection.commit()
@@ -693,9 +671,7 @@ class LibraryDatabase:
         self.connection.commit()
 
     def clear_playlist(self, playlist_id: int) -> None:
-        self.connection.execute(
-            "DELETE FROM playlist_tracks WHERE playlist_id = ?", (playlist_id,)
-        )
+        self.connection.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?", (playlist_id,))
         self.connection.execute(
             "UPDATE playlists SET modified_at = CURRENT_TIMESTAMP WHERE id = ?",
             (playlist_id,),
@@ -726,9 +702,7 @@ class LibraryDatabase:
             )
 
     def load_queue(self) -> list[Track]:
-        row = self.connection.execute(
-            "SELECT value FROM settings WHERE key='queue'"
-        ).fetchone()
+        row = self.connection.execute("SELECT value FROM settings WHERE key='queue'").fetchone()
         if not row:
             return []
         paths = json.loads(row[0])

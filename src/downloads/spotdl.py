@@ -27,7 +27,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
 
 from ..platform_compat import (
     IS_WINDOWS,
@@ -103,9 +102,7 @@ class SpotDLCommandResolver:
     """Resolve one working spotDL command and cache it for the session."""
 
     def __init__(self, data_dir: str | Path | None = None):
-        self.data_dir = (
-            Path(data_dir) / "groovia" if data_dir else get_data_dir()
-        )
+        self.data_dir = Path(data_dir) / "groovia" if data_dir else get_data_dir()
         self._command: tuple[str, ...] | None = None
         self._supported_options: set[str] | None = None
 
@@ -197,7 +194,9 @@ class SpotDLCommandResolver:
             ffmpeg=self._binary_available("ffmpeg"),
             deno=self._binary_available("deno"),
             python=False if IS_WINDOWS else (not is_frozen() or self._venv_python().is_file()),
-            pip=False if IS_WINDOWS else (shutil.which("pip3") is not None or shutil.which("pip") is not None),
+            pip=False
+            if IS_WINDOWS
+            else (shutil.which("pip3") is not None or shutil.which("pip") is not None),
             command=command,
             bundled=IS_WINDOWS and bundled_tool_path("spotdl") is not None,
         )
@@ -253,7 +252,11 @@ class SpotDLCommandResolver:
         return [sys.executable, "-m", "venv", str(self.venv_dir)]
 
     def _venv_python(self) -> Path:
-        return self.venv_dir / ("Scripts" if IS_WINDOWS else "bin") / get_managed_executable_name("python")
+        return (
+            self.venv_dir
+            / ("Scripts" if IS_WINDOWS else "bin")
+            / get_managed_executable_name("python")
+        )
 
     def managed_dependency_paths(self) -> tuple[Path, ...]:
         """Return only paths that Groovia itself owns and may safely remove."""
@@ -313,9 +316,7 @@ def read_sync_metadata(path: str | Path) -> list[dict]:
         return []
     entries = []
     for item in _walk_dicts(payload):
-        spotify_id = (
-            item.get("song_id") or item.get("spotify_id") or item.get("track_id")
-        )
+        spotify_id = item.get("song_id") or item.get("spotify_id") or item.get("track_id")
         if isinstance(spotify_id, str) and spotify_id.startswith("spotify:"):
             spotify_id = spotify_id.rsplit(":", 1)[-1]
         if not isinstance(spotify_id, str) or not SPOTIFY_ID.match(spotify_id):
@@ -334,9 +335,7 @@ def read_sync_metadata(path: str | Path) -> list[dict]:
                 "artist": artist,
                 "album": item.get("album") or item.get("album_name") or "",
                 "list_name": item.get("list_name") or item.get("playlist_name") or "",
-                "cover_url": item.get("cover_url")
-                or item.get("album_art")
-                or item.get("image"),
+                "cover_url": item.get("cover_url") or item.get("album_art") or item.get("image"),
             }
         )
     unique = {}

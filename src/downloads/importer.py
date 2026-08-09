@@ -60,8 +60,7 @@ class DownloadedTrackImporter:
         audio_paths = [
             Path(raw_path)
             for raw_path in sorted(files)
-            if Path(raw_path).is_file()
-            and Path(raw_path).suffix.lower() in AUDIO_SUFFIXES
+            if Path(raw_path).is_file() and Path(raw_path).suffix.lower() in AUDIO_SUFFIXES
         ]
         total = max(len(audio_paths), len(metadata))
         processed = 0
@@ -100,9 +99,7 @@ class DownloadedTrackImporter:
             if existing and Path(existing.path).exists():
                 imported.append(existing)
                 if scanned.spotify_id:
-                    self.database.save_track_source(
-                        scanned.spotify_id, existing, scanned.isrc
-                    )
+                    self.database.save_track_source(scanned.spotify_id, existing, scanned.isrc)
                 self._ingest_track_lyrics(
                     existing,
                     path,
@@ -132,9 +129,7 @@ class DownloadedTrackImporter:
                 total=total,
             )
             if scanned.spotify_id:
-                self.database.save_track_source(
-                    scanned.spotify_id, stored, scanned.isrc
-                )
+                self.database.save_track_source(scanned.spotify_id, stored, scanned.isrc)
             processed += 1
             if progress_callback:
                 progress_callback(processed, total, stored.title, "Imported")
@@ -164,13 +159,9 @@ class DownloadedTrackImporter:
                 if not track.id:
                     continue
                 if progress_callback:
-                    progress_callback(
-                        min(processed, total), total, track.title, "Lyrics"
-                    )
+                    progress_callback(min(processed, total), total, track.title, "Lyrics")
                 variants = self.lyrics_service.find_variants(track)
-                modes = {
-                    self.lyrics_service._mode(timeline) for timeline, _row in variants
-                }
+                modes = {self.lyrics_service._mode(timeline) for timeline, _row in variants}
                 if "word" not in modes:
                     bundle = self.lyrics_service.fetch_musixmatch(track)
                     if bundle:
@@ -326,13 +317,9 @@ class SpotDLImportService:
     def _playlist_oembed(source):
         if not source.startswith("http") or "open.spotify.com/playlist/" not in source:
             return None, None
-        endpoint = "https://open.spotify.com/oembed?url=" + urllib.parse.quote(
-            source, safe=""
-        )
+        endpoint = "https://open.spotify.com/oembed?url=" + urllib.parse.quote(source, safe="")
         try:
-            request = urllib.request.Request(
-                endpoint, headers={"User-Agent": "Groovia/0.1"}
-            )
+            request = urllib.request.Request(endpoint, headers={"User-Agent": "Groovia/0.1"})
             with urllib.request.urlopen(request, timeout=15) as response:
                 payload = json.loads(response.read(512 * 1024).decode("utf-8"))
             return payload.get("title"), payload.get("thumbnail_url")
@@ -346,13 +333,9 @@ class SpotDLImportService:
         )
         if not cover_url or not job.playlist_id:
             return None
-        destination = (
-            job.destination.parent / f".groovia-playlist-cover-{job.playlist_id}.jpg"
-        )
+        destination = job.destination.parent / f".groovia-playlist-cover-{job.playlist_id}.jpg"
         try:
-            request = urllib.request.Request(
-                cover_url, headers={"User-Agent": "Groovia/0.1"}
-            )
+            request = urllib.request.Request(cover_url, headers={"User-Agent": "Groovia/0.1"})
             with urllib.request.urlopen(request, timeout=20) as response:
                 data = response.read(8 * 1024 * 1024 + 1)
             if len(data) > 8 * 1024 * 1024:

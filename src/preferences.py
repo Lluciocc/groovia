@@ -27,12 +27,8 @@ class PreferencesWindow(Adw.PreferencesWindow):
         super().__init__(transient_for=parent, modal=True, title="Preferences")
         settings = Gio.Settings.new("io.github.Lluciocc.Groovia")
 
-        playback = Adw.PreferencesPage(
-            title="Playback", icon_name="media-playback-start-symbolic"
-        )
-        fade = Adw.ComboRow(
-            title="Crossfade", subtitle="Mix the end of a track into the next one"
-        )
+        playback = Adw.PreferencesPage(title="Playback", icon_name="media-playback-start-symbolic")
+        fade = Adw.ComboRow(title="Crossfade", subtitle="Mix the end of a track into the next one")
         fade.set_model(
             Gtk.StringList.new(
                 ["Off", "1 second", "3 seconds", "5 seconds", "8 seconds", "10 seconds"]
@@ -54,9 +50,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
             title="Enable Auto DJ",
             subtitle="Use intelligent transitions while keeping the existing queue unchanged",
         )
-        settings.bind(
-            "auto-dj-enabled", auto_dj, "active", Gio.SettingsBindFlags.DEFAULT
-        )
+        settings.bind("auto-dj-enabled", auto_dj, "active", Gio.SettingsBindFlags.DEFAULT)
         auto_dj_group.add(auto_dj)
         style = Adw.ComboRow(
             title="Transition style",
@@ -64,14 +58,10 @@ class PreferencesWindow(Adw.PreferencesWindow):
         )
         style_values = ["subtle", "balanced", "energetic"]
         style.set_model(Gtk.StringList.new(["Subtle", "Balanced", "Energetic"]))
-        style.set_selected(
-            max(0, min(2, style_values.index(settings.get_string("auto-dj-style"))))
-        )
+        style.set_selected(max(0, min(2, style_values.index(settings.get_string("auto-dj-style")))))
         style.connect(
             "notify::selected",
-            lambda row, *_: settings.set_string(
-                "auto-dj-style", style_values[row.get_selected()]
-            ),
+            lambda row, *_: settings.set_string("auto-dj-style", style_values[row.get_selected()]),
         )
         auto_dj_group.add(style)
         length = Adw.ComboRow(
@@ -112,9 +102,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         tempo = Adw.SwitchRow(
             title="Tempo matching", subtitle="Never exceed the conservative tempo range"
         )
-        smart_eq = Adw.SwitchRow(
-            title="Smart EQ", subtitle="Reduce bass buildup during overlap"
-        )
+        smart_eq = Adw.SwitchRow(title="Smart EQ", subtitle="Reduce bass buildup during overlap")
         silence = Adw.SwitchRow(
             title="Silence detection",
             subtitle="Use intro and outro silence in the plan",
@@ -160,15 +148,11 @@ class PreferencesWindow(Adw.PreferencesWindow):
             title="Dynamic album background",
             subtitle="Tint the player with the current artwork",
         )
-        settings.bind(
-            "dynamic-background", dynamic, "active", Gio.SettingsBindFlags.DEFAULT
-        )
+        settings.bind("dynamic-background", dynamic, "active", Gio.SettingsBindFlags.DEFAULT)
         rotation = Adw.SwitchRow(
             title="Spinning vinyl", subtitle="Animate the record while music is playing"
         )
-        settings.bind(
-            "vinyl-rotation", rotation, "active", Gio.SettingsBindFlags.DEFAULT
-        )
+        settings.bind("vinyl-rotation", rotation, "active", Gio.SettingsBindFlags.DEFAULT)
         animations = Adw.SwitchRow(
             title="Animations", subtitle="Respect the system reduced-motion preference"
         )
@@ -191,9 +175,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         notifications.add(now_playing_notifications)
         interface.add(notifications)
 
-        library = Adw.PreferencesPage(
-            title="Library", icon_name="folder-music-symbolic"
-        )
+        library = Adw.PreferencesPage(title="Library", icon_name="folder-music-symbolic")
         group = Adw.PreferencesGroup(title="Music folders")
         group.add(
             Adw.ActionRow(
@@ -203,9 +185,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         )
         library.add(group)
 
-        downloads = Adw.PreferencesPage(
-            title="Downloads", icon_name="document-save-symbolic"
-        )
+        downloads = Adw.PreferencesPage(title="Downloads", icon_name="document-save-symbolic")
         spotdl_group = Adw.PreferencesGroup(
             title="Spotify imports",
             description="Groovia uses spotDL to find matching audio and preserve Spotify metadata.",
@@ -274,9 +254,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         format_row = Adw.ComboRow(title="Audio format")
         format_row.set_model(Gtk.StringList.new(["MP3", "FLAC", "M4A", "OPUS", "OGG"]))
         format_values = ["mp3", "flac", "m4a", "opus", "ogg"]
-        format_row.set_selected(
-            max(0, format_values.index(settings.get_string("download-format")))
-        )
+        format_row.set_selected(max(0, format_values.index(settings.get_string("download-format"))))
         format_row.connect(
             "notify::selected",
             lambda row, *_: settings.set_string(
@@ -285,9 +263,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         )
         bitrate_row = Adw.ComboRow(title="Audio bitrate")
         bitrate_row.set_model(
-            Gtk.StringList.new(
-                ["Automatic", "96 kbps", "128 kbps", "192 kbps", "320 kbps"]
-            )
+            Gtk.StringList.new(["Automatic", "96 kbps", "128 kbps", "192 kbps", "320 kbps"])
         )
         bitrate_values = ["auto", "96k", "128k", "192k", "320k"]
         bitrate_row.set_selected(
@@ -313,20 +289,14 @@ class PreferencesWindow(Adw.PreferencesWindow):
         mode.set_selected(max(0, mode_values.index(settings.get_string("sync-mode"))))
         mode.connect(
             "notify::selected",
-            lambda row, *_: settings.set_string(
-                "sync-mode", mode_values[row.get_selected()]
-            ),
+            lambda row, *_: settings.set_string("sync-mode", mode_values[row.get_selected()]),
         )
         policy = Adw.ComboRow(title="Automatic synchronization")
         policy.set_model(
-            Gtk.StringList.new(
-                ["Manually only", "On startup", "Once per day", "Once per week"]
-            )
+            Gtk.StringList.new(["Manually only", "On startup", "Once per day", "Once per week"])
         )
         policy_values = ["manual", "startup", "daily", "weekly"]
-        policy.set_selected(
-            max(0, policy_values.index(settings.get_string("auto-sync-policy")))
-        )
+        policy.set_selected(max(0, policy_values.index(settings.get_string("auto-sync-policy"))))
         policy.connect(
             "notify::selected",
             lambda row, *_: settings.set_string(
@@ -334,9 +304,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
             ),
         )
         cover_policy = Adw.ComboRow(title="Playlist cover")
-        cover_policy.set_model(
-            Gtk.StringList.new(["Follow Spotify", "Keep custom local cover"])
-        )
+        cover_policy.set_model(Gtk.StringList.new(["Follow Spotify", "Keep custom local cover"]))
         cover_values = ["follow", "custom"]
         cover_policy.set_selected(
             max(0, cover_values.index(settings.get_string("playlist-cover-policy")))
@@ -348,9 +316,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
             ),
         )
         order_policy = Adw.ComboRow(title="Playlist order")
-        order_policy.set_model(
-            Gtk.StringList.new(["Follow Spotify order", "Keep local order"])
-        )
+        order_policy.set_model(Gtk.StringList.new(["Follow Spotify order", "Keep local order"]))
         order_values = ["spotify", "local"]
         order_policy.set_selected(
             max(0, order_values.index(settings.get_string("playlist-order-policy")))
@@ -372,33 +338,19 @@ class PreferencesWindow(Adw.PreferencesWindow):
             description="Synchronized lyrics are optional and may not be available for every track.",
         )
         synced_lyrics = Adw.SwitchRow(title="Download synchronized lyrics")
-        settings.bind(
-            "lyrics-synced", synced_lyrics, "active", Gio.SettingsBindFlags.DEFAULT
-        )
+        settings.bind("lyrics-synced", synced_lyrics, "active", Gio.SettingsBindFlags.DEFAULT)
         fallback_lyrics = Adw.SwitchRow(title="Download plain lyrics as fallback")
-        settings.bind(
-            "lyrics-fallback", fallback_lyrics, "active", Gio.SettingsBindFlags.DEFAULT
-        )
+        settings.bind("lyrics-fallback", fallback_lyrics, "active", Gio.SettingsBindFlags.DEFAULT)
         generate_lrc = Adw.SwitchRow(title="Generate external .lrc files")
-        settings.bind(
-            "lyrics-generate-lrc", generate_lrc, "active", Gio.SettingsBindFlags.DEFAULT
-        )
+        settings.bind("lyrics-generate-lrc", generate_lrc, "active", Gio.SettingsBindFlags.DEFAULT)
         embed_plain = Adw.SwitchRow(title="Embed plain lyrics when supported")
-        settings.bind(
-            "lyrics-embed-plain", embed_plain, "active", Gio.SettingsBindFlags.DEFAULT
-        )
+        settings.bind("lyrics-embed-plain", embed_plain, "active", Gio.SettingsBindFlags.DEFAULT)
         auto_missing = Adw.SwitchRow(title="Search automatically for missing lyrics")
-        settings.bind(
-            "lyrics-auto-missing", auto_missing, "active", Gio.SettingsBindFlags.DEFAULT
-        )
+        settings.bind("lyrics-auto-missing", auto_missing, "active", Gio.SettingsBindFlags.DEFAULT)
         preserve = Adw.SwitchRow(title="Keep manually edited lyrics")
-        settings.bind(
-            "lyrics-preserve-edited", preserve, "active", Gio.SettingsBindFlags.DEFAULT
-        )
+        settings.bind("lyrics-preserve-edited", preserve, "active", Gio.SettingsBindFlags.DEFAULT)
         remove_sync = Adw.SwitchRow(title="Remove lyrics during mirror synchronization")
-        settings.bind(
-            "lyrics-remove-sync", remove_sync, "active", Gio.SettingsBindFlags.DEFAULT
-        )
+        settings.bind("lyrics-remove-sync", remove_sync, "active", Gio.SettingsBindFlags.DEFAULT)
         show_availability = Adw.SwitchRow(title="Show lyrics availability")
         settings.bind(
             "lyrics-show-availability",
@@ -437,9 +389,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         )
         clear_button = Gtk.Button(label="Delete all data", valign=Gtk.Align.CENTER)
         clear_button.add_css_class("destructive-action")
-        clear_button.connect(
-            "clicked", lambda *_: parent._confirm_clear_all_data(presenter=self)
-        )
+        clear_button.connect("clicked", lambda *_: parent._confirm_clear_all_data(presenter=self))
         clear_row.add_suffix(clear_button)
         data_group.add(clear_row)
         data.add(data_group)

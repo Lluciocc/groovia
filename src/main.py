@@ -60,18 +60,12 @@ class GrooviaApplication(Adw.Application):
             lambda *_: self._window_action("_show_lyrics"),
             ["<primary>l"],
         )
-        self.create_action(
-            "toggle-play", lambda *_: self._window_action("_toggle_play")
-        )
-        self.create_action(
-            "next", lambda *_: self._window_action("_next"), ["<primary>Right"]
-        )
+        self.create_action("toggle-play", lambda *_: self._window_action("_toggle_play"))
+        self.create_action("next", lambda *_: self._window_action("_next"), ["<primary>Right"])
         self.create_action(
             "previous", lambda *_: self._window_action("_previous"), ["<primary>Left"]
         )
-        self.create_action(
-            "mute", lambda *_: self._window_action("_toggle_mute")
-        )
+        self.create_action("mute", lambda *_: self._window_action("_toggle_mute"))
 
     def do_activate(self):
         configure_icon_theme()
@@ -108,9 +102,7 @@ class GrooviaApplication(Adw.Application):
         Adw.ShortcutsDialog
         Adw.ShortcutsSection
         Adw.ShortcutsItem
-        builder = Gtk.Builder.new_from_resource(
-            "/io/github/Lluciocc/Groovia/shortcuts-dialog.ui"
-        )
+        builder = Gtk.Builder.new_from_resource("/io/github/Lluciocc/Groovia/shortcuts-dialog.ui")
         dialog = builder.get_object("shortcuts_dialog")
         dialog.present(self.props.active_window)
 

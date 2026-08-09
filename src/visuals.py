@@ -17,7 +17,6 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import math
 from pathlib import Path
 
 import gi
@@ -130,9 +129,7 @@ def palette_for(
                 brightness = (r + g + b) / 3
                 saturation = max(r, g, b) - min(r, g, b)
                 if 0.08 < brightness < 0.94:
-                    candidates.append(
-                        (saturation * (1 - abs(brightness - 0.5)), r, g, b)
-                    )
+                    candidates.append((saturation * (1 - abs(brightness - 0.5)), r, g, b))
         if not candidates:
             print("No suitable colors found, using fallback palette.")
             return FALLBACK_PALETTE
@@ -145,9 +142,7 @@ def palette_for(
         cache[key] = (accent, background)
         return cache[key]
     except Exception as e:
-        print(
-            f"An error occurred while sampling the palette, using fallback palette: {e}"
-        )
+        print(f"An error occurred while sampling the palette, using fallback palette: {e}")
         return FALLBACK_PALETTE
 
 
@@ -159,6 +154,4 @@ def mix(first, second, progress: float):
 
 
 def css_rgb(color):
-    return "rgb(%d,%d,%d)" % tuple(
-        round(max(0, min(1, value)) * 255) for value in color
-    )
+    return "rgb(%d,%d,%d)" % tuple(round(max(0, min(1, value)) * 255) for value in color)

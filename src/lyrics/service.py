@@ -24,8 +24,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from .parser import LyricsTimeline, parse_lyrics
 from ..platform_compat import get_data_dir
+from .parser import LyricsTimeline, parse_lyrics
 
 
 @dataclass(slots=True)
@@ -47,11 +47,7 @@ class LyricsService:
     def __init__(self, database, scanner, data_dir: str | Path | None = None):
         self.database = database
         self.scanner = scanner
-        self.root = (
-            Path(data_dir) / "groovia" / "lyrics"
-            if data_dir
-            else get_data_dir() / "lyrics"
-        )
+        self.root = Path(data_dir) / "groovia" / "lyrics" if data_dir else get_data_dir() / "lyrics"
         self.root.mkdir(parents=True, exist_ok=True)
         # Keep the custom Musixmatch workaround as the single Musixmatch
         # implementation.  Import lazily so the lyrics package remains usable
@@ -59,9 +55,7 @@ class LyricsService:
         try:
             from ..downloads.musicmatch import MusixmatchRichsync
 
-            self.musixmatch = MusixmatchRichsync(
-                token_cache=self.root / "musixmatch-token.json"
-            )
+            self.musixmatch = MusixmatchRichsync(token_cache=self.root / "musixmatch-token.json")
         except (ImportError, OSError, TypeError):
             self.musixmatch = None
 
@@ -71,15 +65,9 @@ class LyricsService:
 
     @staticmethod
     def _kind(path: Path, timeline: LyricsTimeline) -> str:
-        return (
-            "synced"
-            if timeline.synchronized and path.suffix.lower() == ".lrc"
-            else "plain"
-        )
+        return "synced" if timeline.synchronized and path.suffix.lower() == ".lrc" else "plain"
 
-    def _read_file(
-        self, path: Path, provider: str | None = None
-    ) -> LyricsTimeline | None:
+    def _read_file(self, path: Path, provider: str | None = None) -> LyricsTimeline | None:
         try:
             content = path.read_text(encoding="utf-8-sig")
         except (OSError, UnicodeError):
@@ -103,8 +91,7 @@ class LyricsService:
         kind = self._kind(path, timeline)
         existing = self.database.lyrics_for_track(track.id)
         if not replace and any(
-            item["user_edited"] and item.get("file_path") == str(path)
-            for item in existing
+            item["user_edited"] and item.get("file_path") == str(path) for item in existing
         ):
             return
         self.database.save_lyrics(
@@ -140,19 +127,15 @@ class LyricsService:
         timeline = parse_lyrics(content, provider=provider)
         if not timeline.lines:
             return None
-        kind = "synced" if timeline.synchronized else "plain"
         suffix = ".lrc" if timeline.synchronized else ".txt"
         safe_provider = (
-            "".join(char for char in provider.lower() if char.isalnum() or char in "-_")
-            or "lyrics"
+            "".join(char for char in provider.lower() if char.isalnum() or char in "-_") or "lyrics"
         )
         safe_variant = "".join(
             char for char in (variant or "").lower() if char.isalnum() or char in "-_"
         )
         variant_suffix = f"-{safe_variant}" if safe_variant else ""
-        destination = (
-            self.root / f"track-{track.id}-{safe_provider}{variant_suffix}{suffix}"
-        )
+        destination = self.root / f"track-{track.id}-{safe_provider}{variant_suffix}{suffix}"
         try:
             destination.write_text(content, encoding="utf-8")
             self._save_mapping(
@@ -230,9 +213,7 @@ class LyricsService:
             return None
         return timeline
 
-    def save_text(
-        self, track, content: str, *, synchronized: bool = False, user_edited=True
-    ):
+    def save_text(self, track, content: str, *, synchronized: bool = False, user_edited=True):
         if track.id is None:
             return None
         suffix = ".lrc" if synchronized else ".txt"
@@ -301,9 +282,7 @@ class LyricsService:
                     continue
             if row.get("content"):
                 timeline = parse_lyrics(row["content"], provider=row.get("provider"))
-                timeline.apply_offset(
-                    timeline.offset_ms + int(row.get("timing_offset_ms") or 0)
-                )
+                timeline.apply_offset(timeline.offset_ms + int(row.get("timing_offset_ms") or 0))
                 timeline.user_edited = bool(row.get("user_edited"))
                 if self._displayable(timeline, row):
                     candidates.append((timeline, row))
@@ -317,9 +296,7 @@ class LyricsService:
                 if candidate.is_file():
                     timeline = self._read_file(candidate)
                     if timeline:
-                        self._save_mapping(
-                            track, candidate, timeline, provider="external"
-                        )
+                        self._save_mapping(track, candidate, timeline, provider="external")
                         return self._load_candidates(track)
             embedded = self.scanner.read_embedded_lyrics(track.path)
             if embedded:
@@ -346,9 +323,9 @@ class LyricsService:
         for candidate in candidates:
             timeline, _row = candidate
             mode = self._mode(timeline)
-            if mode not in best or self._candidate_priority(
-                candidate
-            ) < self._candidate_priority(best[mode]):
+            if mode not in best or self._candidate_priority(candidate) < self._candidate_priority(
+                best[mode]
+            ):
                 best[mode] = candidate
         if "line" in best or "word" in best:
             return [best[mode] for mode in ("line", "word") if mode in best]
@@ -366,9 +343,7 @@ class LyricsService:
             if row["user_edited"] and not include_user_edited:
                 continue
             path = Path(row["file_path"]) if row.get("file_path") else None
-            if path and (
-                self._within(path, self.root) or path.suffix.lower() in {".lrc", ".txt"}
-            ):
+            if path and (self._within(path, self.root) or path.suffix.lower() in {".lrc", ".txt"}):
                 try:
                     if self.database.lyrics_path_references(str(path)) <= 1:
                         path.unlink()

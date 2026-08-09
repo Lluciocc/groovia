@@ -26,12 +26,7 @@ import os
 import sys
 from pathlib import Path
 
-from .platform_compat import (
-    IS_WINDOWS,
-    get_cache_dir,
-    get_config_dir,
-    get_managed_executable_name,
-)
+from .platform_compat import IS_WINDOWS, get_cache_dir, get_config_dir, get_managed_executable_name
 
 LOGGER = logging.getLogger("groovia.runtime")
 _RESOURCE_REGISTERED = False

@@ -30,11 +30,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from ..platform_compat import (
-    get_data_dir,
-    get_managed_executable_name,
-    subprocess_window_kwargs,
-)
+from ..platform_compat import get_data_dir, get_managed_executable_name, subprocess_window_kwargs
 
 LOGGER = logging.getLogger("groovia.autodj")
 if not LOGGER.handlers:
@@ -111,8 +107,13 @@ class AnalysisCache:
     @staticmethod
     def _tuple_fields(row: dict) -> dict:
         for name in (
-            "beats", "downbeats", "energy_curve", "vocal_curve", "phrase_boundaries",
-            "vocal_entry_points", "vocal_exit_points",
+            "beats",
+            "downbeats",
+            "energy_curve",
+            "vocal_curve",
+            "phrase_boundaries",
+            "vocal_entry_points",
+            "vocal_exit_points",
             "tempo_candidates",
         ):
             row[name] = tuple(float(value) for value in (row.get(name) or ()))
@@ -143,8 +144,12 @@ class AnalysisCache:
             self._items[analysis.signature]["tempo_candidates"] = list(analysis.tempo_candidates)
             self._items[analysis.signature]["energy_curve"] = list(analysis.energy_curve)
             self._items[analysis.signature]["vocal_curve"] = list(analysis.vocal_curve)
-            self._items[analysis.signature]["vocal_sections"] = [list(x) for x in analysis.vocal_sections]
-            self._items[analysis.signature]["vocal_entry_points"] = list(analysis.vocal_entry_points)
+            self._items[analysis.signature]["vocal_sections"] = [
+                list(x) for x in analysis.vocal_sections
+            ]
+            self._items[analysis.signature]["vocal_entry_points"] = list(
+                analysis.vocal_entry_points
+            )
             self._items[analysis.signature]["vocal_exit_points"] = list(analysis.vocal_exit_points)
             self._items[analysis.signature]["phrase_boundaries"] = list(analysis.phrase_boundaries)
             # A bounded cache avoids retaining analyses for deleted libraries.
@@ -181,9 +186,14 @@ class TrackAnalyzer:
             LOGGER.info(
                 "analysis cache_hit track=%r bpm=%s confidence=%.2f beats=%d phrases=%d "
                 "tempo_candidates=%s selected_bpm=%s reason=%s",
-                getattr(track, "title", Path(path).name), cached.bpm or "unknown",
-                cached.beat_confidence, len(cached.beats), len(cached.phrase_boundaries),
-                list(cached.tempo_candidates), cached.bpm or "unknown", cached.tempo_selection_reason,
+                getattr(track, "title", Path(path).name),
+                cached.bpm or "unknown",
+                cached.beat_confidence,
+                len(cached.beats),
+                len(cached.phrase_boundaries),
+                list(cached.tempo_candidates),
+                cached.bpm or "unknown",
+                cached.tempo_selection_reason,
             )
             return cached
 
@@ -213,8 +223,12 @@ class TrackAnalyzer:
             duration=duration,
             bpm=bpm,
             source_bpm=source_bpm,
-            tempo_candidates=tuple(dsp.get("tempo_candidates", ())) or ((tagged_bpm,) if tagged_bpm else ()),
-            tempo_selection_reason=dsp.get("tempo_selection_reason", "metadata" if tagged_bpm and detected_bpm is None else "unknown"),
+            tempo_candidates=tuple(dsp.get("tempo_candidates", ()))
+            or ((tagged_bpm,) if tagged_bpm else ()),
+            tempo_selection_reason=dsp.get(
+                "tempo_selection_reason",
+                "metadata" if tagged_bpm and detected_bpm is None else "unknown",
+            ),
             beat_confidence=float(dsp.get("beat_confidence", 0.0)),
             tempo_stability=float(dsp.get("tempo_stability", 0.0)),
             beats=tuple(dsp.get("beats", ())),
@@ -227,12 +241,18 @@ class TrackAnalyzer:
             energy_curve=tuple(dsp.get("energy_curve", ())),
             dynamic_range=dsp.get("dynamic_range"),
             key=dsp.get("key") or tags.get("key") or None,
-            key_confidence=float(dsp.get("key_confidence", 0.0) or (0.25 if tags.get("key") else 0.0)),
+            key_confidence=float(
+                dsp.get("key_confidence", 0.0) or (0.25 if tags.get("key") else 0.0)
+            ),
             vocal_density=lyrics.get("vocal_density", dsp.get("vocal_density")),
             vocal_curve=tuple(lyrics.get("vocal_curve", dsp.get("vocal_curve", ()))),
             vocal_sections=tuple(lyrics.get("vocal_sections", dsp.get("vocal_sections", ()))),
-            vocal_entry_points=tuple(lyrics.get("vocal_entry_points", dsp.get("vocal_entry_points", ()))),
-            vocal_exit_points=tuple(lyrics.get("vocal_exit_points", dsp.get("vocal_exit_points", ()))),
+            vocal_entry_points=tuple(
+                lyrics.get("vocal_entry_points", dsp.get("vocal_entry_points", ()))
+            ),
+            vocal_exit_points=tuple(
+                lyrics.get("vocal_exit_points", dsp.get("vocal_exit_points", ()))
+            ),
             lyrics_source=lyrics.get("lyrics_source"),
             lyrics_sync_quality=lyrics.get("lyrics_sync_quality"),
             phrase_boundaries=tuple(dsp.get("phrase_boundaries", ())),
@@ -243,27 +263,52 @@ class TrackAnalyzer:
             "beat_confidence=%.2f tempo_stability=%.2f beats=%d downbeats=%d phrases=%d "
             "energy=%s vocal_density=%s vocal_entries=%d vocal_exits=%d lyrics=%s/%s "
             "key=%s key_confidence=%.2f tempo_candidates=%s selected_bpm=%s reason=%s",
-            getattr(track, "title", Path(path).name), time.perf_counter() - started,
-            decode_seconds, analysis.bpm or "unknown", analysis.source_bpm,
-            analysis.beat_confidence, analysis.tempo_stability, len(analysis.beats),
-            len(analysis.downbeats), len(analysis.phrase_boundaries),
+            getattr(track, "title", Path(path).name),
+            time.perf_counter() - started,
+            decode_seconds,
+            analysis.bpm or "unknown",
+            analysis.source_bpm,
+            analysis.beat_confidence,
+            analysis.tempo_stability,
+            len(analysis.beats),
+            len(analysis.downbeats),
+            len(analysis.phrase_boundaries),
             f"{analysis.energy:.2f}" if analysis.energy is not None else "unknown",
             f"{analysis.vocal_density:.2f}" if analysis.vocal_density is not None else "unknown",
-            len(analysis.vocal_entry_points), len(analysis.vocal_exit_points),
-            analysis.lyrics_source or "none", analysis.lyrics_sync_quality or "none",
-            analysis.key or "unknown", analysis.key_confidence,
-            list(analysis.tempo_candidates), analysis.bpm or "unknown", analysis.tempo_selection_reason,
+            len(analysis.vocal_entry_points),
+            len(analysis.vocal_exit_points),
+            analysis.lyrics_source or "none",
+            analysis.lyrics_sync_quality or "none",
+            analysis.key or "unknown",
+            analysis.key_confidence,
+            list(analysis.tempo_candidates),
+            analysis.bpm or "unknown",
+            analysis.tempo_selection_reason,
         )
         return analysis
 
     def _probe_tags(self, path: str) -> dict[str, str]:
         if not self.ffprobe or not Path(path).is_file():
             return {}
-        command = [self.ffprobe, "-v", "error", "-show_entries",
-                   "format=duration:format_tags=BPM,TBPM,KEY", "-of", "json", path]
+        command = [
+            self.ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:format_tags=BPM,TBPM,KEY",
+            "-of",
+            "json",
+            path,
+        ]
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=12,
-                                    check=False, **subprocess_window_kwargs())
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=12,
+                check=False,
+                **subprocess_window_kwargs(),
+            )
             payload = json.loads(result.stdout or "{}")
             format_data = payload.get("format") or {}
             tags = {str(k).lower(): str(v) for k, v in (format_data.get("tags") or {}).items()}
@@ -280,11 +325,26 @@ class TrackAnalyzer:
         if not self.ffmpeg or not Path(path).is_file() or path.startswith(("http://", "https://")):
             return None, 0, 0.0
         started = time.perf_counter()
-        command = [self.ffmpeg, "-hide_banner", "-loglevel", "error", "-i", path,
-                   "-vn", "-ac", "1", "-ar", "11025", "-f", "f32le", "-"]
+        command = [
+            self.ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            path,
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "11025",
+            "-f",
+            "f32le",
+            "-",
+        ]
         try:
-            result = subprocess.run(command, capture_output=True, timeout=90, check=False,
-                                    **subprocess_window_kwargs())
+            result = subprocess.run(
+                command, capture_output=True, timeout=90, check=False, **subprocess_window_kwargs()
+            )
             if result.returncode:
                 return None, 0, time.perf_counter() - started
             try:
@@ -303,7 +363,9 @@ class TrackAnalyzer:
             return None, 0, time.perf_counter() - started
 
     @staticmethod
-    def _analyze_pcm(samples, sample_rate: int, duration: float, metadata_bpm: float | None = None) -> dict:
+    def _analyze_pcm(
+        samples, sample_rate: int, duration: float, metadata_bpm: float | None = None
+    ) -> dict:
         if samples is None or len(samples) < sample_rate:
             return {}
         try:
@@ -322,7 +384,9 @@ class TrackAnalyzer:
         window = np.hanning(frame).astype(np.float32)
         count = 1 + (len(samples) - frame) // hop
         frames = np.lib.stride_tricks.as_strided(
-            samples, shape=(count, frame), strides=(samples.strides[0] * hop, samples.strides[0]),
+            samples,
+            shape=(count, frame),
+            strides=(samples.strides[0] * hop, samples.strides[0]),
             writeable=False,
         )
         spectrum = np.abs(np.fft.rfft(frames * window, axis=1))
@@ -335,19 +399,25 @@ class TrackAnalyzer:
         onset = np.maximum(0.0, flux - baseline)
         peak_distance = max(1, int(sample_rate * 60 / 220 / hop))
         prominence = max(float(np.percentile(onset, 70)) * 0.18, 1e-5)
-        peak_indices, props = signal.find_peaks(onset, distance=peak_distance, prominence=prominence)
+        peak_indices, props = signal.find_peaks(
+            onset, distance=peak_distance, prominence=prominence
+        )
         peak_times = peak_indices * hop / sample_rate
         bpm, confidence, stability, tempo_details = TrackAnalyzer._estimate_tempo_details(
             onset, peak_indices, sample_rate, hop, metadata_bpm
         )
-        beats = TrackAnalyzer._beat_timeline(peak_times, bpm, duration or len(samples) / sample_rate)
+        beats = TrackAnalyzer._beat_timeline(
+            peak_times, bpm, duration or len(samples) / sample_rate
+        )
         downbeats = tuple(beats[index] for index in range(0, len(beats), 4))
         rms = np.sqrt(np.mean(frames * frames, axis=1) + 1e-12)
         db = 20 * np.log10(rms + 1e-7)
         energy_curve = TrackAnalyzer._normalize_curve(db, 48)
         energy = float(np.clip((np.percentile(db, 90) + 60) / 60, 0, 1))
         dynamic_range = float(max(0.0, np.percentile(db, 95) - np.percentile(db, 10)))
-        band = spectrum[:, max(1, int(250 / (sample_rate / frame))): max(2, int(4000 / (sample_rate / frame)))]
+        band = spectrum[
+            :, max(1, int(250 / (sample_rate / frame))) : max(2, int(4000 / (sample_rate / frame)))
+        ]
         vocal_curve = TrackAnalyzer._normalize_curve(band.mean(axis=1), 48)
         vocal_density = float(np.mean(np.asarray(vocal_curve) > 0.52)) if vocal_curve else None
         vocal_sections = TrackAnalyzer._curve_sections(
@@ -358,16 +428,23 @@ class TrackAnalyzer:
             beats, downbeats, db, onset, hop, duration or len(samples) / sample_rate
         )
         return {
-            "bpm": bpm, "beat_confidence": confidence, "tempo_stability": stability,
+            "bpm": bpm,
+            "beat_confidence": confidence,
+            "tempo_stability": stability,
             "tempo_candidates": tuple(item["bpm"] for item in tempo_details),
             "tempo_selection_reason": tempo_details[0]["reason"] if tempo_details else "unknown",
-            "beats": beats, "downbeats": downbeats, "energy": energy,
-            "energy_curve": energy_curve, "dynamic_range": dynamic_range,
-            "vocal_density": vocal_density, "vocal_curve": vocal_curve,
+            "beats": beats,
+            "downbeats": downbeats,
+            "energy": energy,
+            "energy_curve": energy_curve,
+            "dynamic_range": dynamic_range,
+            "vocal_density": vocal_density,
+            "vocal_curve": vocal_curve,
             "vocal_sections": vocal_sections,
             "vocal_entry_points": tuple(start for start, _end in vocal_sections),
             "vocal_exit_points": tuple(end for _start, end in vocal_sections),
-            "key": detected_key, "key_confidence": key_confidence,
+            "key": detected_key,
+            "key_confidence": key_confidence,
             "phrase_boundaries": phrase_boundaries,
         }
 
@@ -417,7 +494,7 @@ class TrackAnalyzer:
             return None, 0.0, 0.0, ()
         if len(onset) < 8 or float(np.max(onset)) <= 0:
             return None, 0.0, 0.0, ()
-        autocorr = signal.fftconvolve(onset, onset[::-1], mode="full")[len(onset) - 1:]
+        autocorr = signal.fftconvolve(onset, onset[::-1], mode="full")[len(onset) - 1 :]
         lag_min = max(1, int(60 / 190 * sample_rate / hop))
         lag_max = min(len(autocorr) - 1, int(60 / 55 * sample_rate / hop))
         if lag_max <= lag_min:
@@ -464,9 +541,17 @@ class TrackAnalyzer:
             if len(intervals):
                 ratios = intervals / period
                 allowed = np.asarray((0.5, 1.0, 2.0, 4.0))
-                nearest = np.min(np.abs(ratios[:, None] - allowed[None, :]) / allowed[None, :], axis=1)
+                nearest = np.min(
+                    np.abs(ratios[:, None] - allowed[None, :]) / allowed[None, :], axis=1
+                )
                 beat_consistency = float(np.mean(np.clip(1.0 - nearest * 2.0, 0, 1)))
-                stability = float(np.clip(1.0 - np.std(intervals / period) / (np.mean(intervals / period) + 1e-9), 0, 1))
+                stability = float(
+                    np.clip(
+                        1.0 - np.std(intervals / period) / (np.mean(intervals / period) + 1e-9),
+                        0,
+                        1,
+                    )
+                )
                 event_ratio = float(np.mean(intervals) / period)
                 density_distance = min(abs(event_ratio - value) for value in (0.5, 1.0, 2.0, 4.0))
                 event_density = max(0.0, 1.0 - density_distance / 1.5)
@@ -478,7 +563,9 @@ class TrackAnalyzer:
             phase = float(np.median(phase_candidates)) if len(phase_candidates) else 0.0
             if len(peak_times):
                 grid = np.arange(phase, (peak_times[-1] + period), period)
-                coverage = float(np.mean([np.min(np.abs(peak_times - point)) <= period * 0.18 for point in grid]))
+                coverage = float(
+                    np.mean([np.min(np.abs(peak_times - point)) <= period * 0.18 for point in grid])
+                )
             else:
                 coverage = 0.0
             downbeat_consistency = float(np.clip(0.5 * coverage + 0.5 * periodicity, 0, 1))
@@ -501,12 +588,18 @@ class TrackAnalyzer:
             # it in the hypothesis set and require stronger evidence to win.
             if tempo > 165.0 and not metadata_bpm:
                 score *= 0.86
-            scored.append({
-                "bpm": round(tempo, 3), "score": float(score),
-                "periodicity": periodicity, "beat_consistency": beat_consistency,
-                "downbeat_consistency": downbeat_consistency, "stability": stability,
-                "event_density": event_density, "metadata": metadata_score,
-            })
+            scored.append(
+                {
+                    "bpm": round(tempo, 3),
+                    "score": float(score),
+                    "periodicity": periodicity,
+                    "beat_consistency": beat_consistency,
+                    "downbeat_consistency": downbeat_consistency,
+                    "stability": stability,
+                    "event_density": event_density,
+                    "metadata": metadata_score,
+                }
+            )
         scored.sort(key=lambda item: (item["score"], item["stability"], item["bpm"]), reverse=True)
         best = scored[0]
         second = scored[1] if len(scored) > 1 else None
@@ -517,9 +610,14 @@ class TrackAnalyzer:
             reason = "half-time interpretation scored higher than double-time pulse"
         elif best["bpm"] > min(item["bpm"] for item in scored) * 1.7:
             reason = "double-time interpretation supported by event density"
-        return best["bpm"], confidence, best["stability"], tuple(
-            {**item, "reason": reason if item is best else "alternative tempo hypothesis"}
-            for item in scored
+        return (
+            best["bpm"],
+            confidence,
+            best["stability"],
+            tuple(
+                {**item, "reason": reason if item is best else "alternative tempo hypothesis"}
+                for item in scored
+            ),
         )
 
     @staticmethod
@@ -532,17 +630,24 @@ class TrackAnalyzer:
             return ()
         start = peaks[0]
         end = max(start, duration)
-        return tuple(round(start + index * interval, 4) for index in range(int((end - start) / interval) + 1))
+        return tuple(
+            round(start + index * interval, 4) for index in range(int((end - start) / interval) + 1)
+        )
 
     @staticmethod
     def _normalize_curve(values, points):
         try:
             import numpy as np
+
             values = np.asarray(values, dtype=float)
             if not len(values):
                 return ()
             edges = np.linspace(0, len(values), points + 1, dtype=int)
-            result = [float(np.mean(values[edges[i]: edges[i + 1]])) for i in range(points) if edges[i] < edges[i + 1]]
+            result = [
+                float(np.mean(values[edges[i] : edges[i + 1]]))
+                for i in range(points)
+                if edges[i] < edges[i + 1]
+            ]
             low, high = min(result), max(result)
             if high - low < 1e-9:
                 return tuple(0.5 for _ in result)
@@ -574,6 +679,7 @@ class TrackAnalyzer:
             return ()
         try:
             import numpy as np
+
             beat_interval = float(np.median(np.diff(np.asarray(beats, dtype=float))))
         except (ImportError, TypeError, ValueError):
             beat_interval = duration / max(len(beats), 1)
@@ -589,6 +695,7 @@ class TrackAnalyzer:
         try:
             import numpy as np
             from scipy import signal
+
             novelty = np.abs(np.diff(energy_db, prepend=energy_db[:1]))
             if len(novelty):
                 threshold = float(np.percentile(novelty, 78))
@@ -643,10 +750,7 @@ class TrackAnalyzer:
                 offset = getattr(timeline, "offset_ms", 0) / 1000
                 line_start = line.start_time_ms / 1000 + offset
                 words = getattr(line, "words", ())
-                vocal_entry = (
-                    words[0].start_time_ms / 1000 + offset
-                    if words else line_start
-                )
+                vocal_entry = words[0].start_time_ms / 1000 + offset if words else line_start
                 entries.append(max(0.0, vocal_entry))
                 start = max(0.0, vocal_entry - (0.08 if words else 0.18))
                 next_start = (line.end_time_ms or 0) / 1000 + offset
@@ -654,7 +758,8 @@ class TrackAnalyzer:
                     index = timeline.lines.index(line)
                     next_start = (
                         timeline.lines[index + 1].start_time_ms / 1000 + offset
-                        if index + 1 < len(timeline.lines) else start + 2.0
+                        if index + 1 < len(timeline.lines)
+                        else start + 2.0
                     )
                 exit_time = min(duration or next_start, next_start + 0.18)
                 exits.append(exit_time)
@@ -662,7 +767,16 @@ class TrackAnalyzer:
             if not sections:
                 return {}
             points = 48
-            curve = tuple(1.0 if any(start <= index / points * duration <= end for start, end in sections) else 0.0 for index in range(points)) if duration else ()
+            curve = (
+                tuple(
+                    1.0
+                    if any(start <= index / points * duration <= end for start, end in sections)
+                    else 0.0
+                    for index in range(points)
+                )
+                if duration
+                else ()
+            )
             occupied = sum(max(0.0, end - start) for start, end in sections)
             return {
                 "vocal_density": min(1.0, occupied / max(duration, 1.0)),
@@ -671,20 +785,40 @@ class TrackAnalyzer:
                 "vocal_entry_points": tuple(entries),
                 "vocal_exit_points": tuple(exits),
                 "lyrics_source": getattr(timeline, "provider", None) or "local",
-                "lyrics_sync_quality": "word" if getattr(timeline, "word_synchronized", False) else "line",
+                "lyrics_sync_quality": "word"
+                if getattr(timeline, "word_synchronized", False)
+                else "line",
             }
         except Exception:
-            LOGGER.debug("local lyrics unavailable for %s", getattr(track, "path", track), exc_info=True)
+            LOGGER.debug(
+                "local lyrics unavailable for %s", getattr(track, "path", track), exc_info=True
+            )
             return {}
 
     def _silence(self, path: str, duration: float) -> tuple[float, float]:
         if not self.ffmpeg or not Path(path).is_file():
             return 0.0, 0.0
-        command = [self.ffmpeg, "-hide_banner", "-nostats", "-i", path,
-                   "-af", "silencedetect=noise=-45dB:d=0.35", "-f", "null", "-"]
+        command = [
+            self.ffmpeg,
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            path,
+            "-af",
+            "silencedetect=noise=-45dB:d=0.35",
+            "-f",
+            "null",
+            "-",
+        ]
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=45,
-                                    check=False, **subprocess_window_kwargs())
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=45,
+                check=False,
+                **subprocess_window_kwargs(),
+            )
             output = f"{result.stdout}\n{result.stderr}"
             starts = [float(value) for value in self._silence_start.findall(output)]
             ends = [float(value) for value in self._silence_end.findall(output)]
@@ -698,11 +832,27 @@ class TrackAnalyzer:
     def _loudness_values(self, path: str) -> tuple[float | None, float | None]:
         if not self.ffmpeg or not Path(path).is_file():
             return None, None
-        command = [self.ffmpeg, "-hide_banner", "-nostats", "-i", path,
-                   "-af", "ebur128=framelog=verbose", "-f", "null", "-"]
+        command = [
+            self.ffmpeg,
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            path,
+            "-af",
+            "ebur128=framelog=verbose",
+            "-f",
+            "null",
+            "-",
+        ]
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=60,
-                                    check=False, **subprocess_window_kwargs())
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+                **subprocess_window_kwargs(),
+            )
             output = f"{result.stdout}\n{result.stderr}"
             loudness, peaks = self._loudness.findall(output), self._peak.findall(output)
             return (float(loudness[-1]) if loudness else None, float(peaks[-1]) if peaks else None)

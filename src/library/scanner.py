@@ -95,9 +95,7 @@ class LibraryScanner:
                     cover = self._extract_embedded_cover(tags, path)
         except Exception:
             pass
-        return Track(
-            None, title, artist, album, artist, "", "", 0, 1, duration, str(path), cover
-        )
+        return Track(None, title, artist, album, artist, "", "", 0, 1, duration, str(path), cover)
 
     def read_track(self, path: str) -> Track:
         """Read one file on demand, useful for libraries imported before artwork support."""
@@ -187,13 +185,10 @@ class LibraryScanner:
                 ok, mapped = buffer.map(Gst.MapFlags.READ)
                 if not ok:
                     continue
-                digest = hashlib.sha1(
-                    f"{path}:{path.stat().st_mtime_ns}".encode()
-                ).hexdigest()
+                digest = hashlib.sha1(f"{path}:{path.stat().st_mtime_ns}".encode()).hexdigest()
                 suffix = (
                     ".png"
-                    if "png"
-                    in (sample.get_caps().to_string() if sample.get_caps() else "")
+                    if "png" in (sample.get_caps().to_string() if sample.get_caps() else "")
                     else ".jpg"
                 )
                 destination = self.artwork_dir / f"{digest}{suffix}"

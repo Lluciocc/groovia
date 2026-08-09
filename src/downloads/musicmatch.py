@@ -128,8 +128,7 @@ def richsync_to_lrc(richsync_body: str) -> str:
         if ts is None:
             continue
         words = [
-            (ts + (w.get("o") or 0), str(w.get("c") or "").strip())
-            for w in (e.get("l") or [])
+            (ts + (w.get("o") or 0), str(w.get("c") or "").strip()) for w in (e.get("l") or [])
         ]
         words = [(wt, wc) for wt, wc in words if wc]
         if words:
@@ -137,8 +136,7 @@ def richsync_to_lrc(richsync_body: str) -> str:
             out.append(
                 (
                     ts,
-                    f"[{_stamp(ts)}]"
-                    + " ".join(f"<{_stamp(wt)}>{wc}" for wt, wc in words),
+                    f"[{_stamp(ts)}]" + " ".join(f"<{_stamp(wt)}>{wc}" for wt, wc in words),
                 )
             )
         elif (e.get("x") or "").strip():
@@ -167,9 +165,7 @@ class MusixmatchRichsync:
         self.base_url = base_url.rstrip("/") + "/"
         self.timeout = timeout
         self.token_cache = (
-            Path(token_cache)
-            if token_cache
-            else get_cache_dir() / "musixmatch-richsync-token.json"
+            Path(token_cache) if token_cache else get_cache_dir() / "musixmatch-richsync-token.json"
         )
         self._token = None
         self._token_at = 0.0
@@ -230,9 +226,7 @@ class MusixmatchRichsync:
     @staticmethod
     def _trusted(t: dict, title: str, artist: str, duration: float) -> bool:
         wt, wa = _normalize(title), _normalize(artist)
-        gt, ga = _normalize(t.get("track_name", "")), _normalize(
-            t.get("artist_name", "")
-        )
+        gt, ga = _normalize(t.get("track_name", "")), _normalize(t.get("artist_name", ""))
         tl = t.get("track_length") or 0
         dd = abs(tl - duration) if (tl and duration) else 9999
         if dd > 15 and dd != 9999:

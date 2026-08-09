@@ -24,7 +24,6 @@ import os
 import sys
 from pathlib import Path
 
-
 REQUIRED_ICONS = (
     "audio-x-generic-symbolic",
     "open-menu-symbolic",
@@ -84,7 +83,9 @@ def main() -> int:
     os.environ["GI_TYPELIB_PATH"] = str(internal_root / "typelibs")
     os.environ["GSETTINGS_SCHEMA_DIR"] = str(internal_root / "schemas")
     prepend_env_path("XDG_DATA_DIRS", share_dir)
-    os.environ["PATH"] = os.pathsep.join([str(internal_root), str(internal_root / "tools"), os.environ.get("PATH", "")])
+    os.environ["PATH"] = os.pathsep.join(
+        [str(internal_root), str(internal_root / "tools"), os.environ.get("PATH", "")]
+    )
     if hasattr(os, "add_dll_directory"):
         os.add_dll_directory(str(internal_root))
 

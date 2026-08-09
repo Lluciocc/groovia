@@ -81,17 +81,28 @@ class TransitionPlanner:
         "vocal_overlap_penalty": -0.25,
     }
 
-    def plan(self, current, following, left: TrackAnalysis, right: TrackAnalysis, options: dict) -> TransitionPlan:
+    def plan(
+        self, current, following, left: TrackAnalysis, right: TrackAnalysis, options: dict
+    ) -> TransitionPlan:
         style = options.get("style", "balanced")
         if style not in self.STYLE_BARS:
             style = "balanced"
-        description = " ".join(str(value or "") for value in (
-            getattr(current, "genre", ""), getattr(current, "album", ""),
-            getattr(following, "genre", ""), getattr(following, "album", ""),
-        )).lower()
+        description = " ".join(
+            str(value or "")
+            for value in (
+                getattr(current, "genre", ""),
+                getattr(current, "album", ""),
+                getattr(following, "genre", ""),
+                getattr(following, "album", ""),
+            )
+        ).lower()
         if any(word in description for word in ("podcast", "audiobook", "spoken word")):
-            return self._fallback(left, right, "spoken content: beat matching and bass swap disabled")
-        if any(word in description for word in ("classical", "live", "continuous", "dj mix", "mixtape")):
+            return self._fallback(
+                left, right, "spoken content: beat matching and bass swap disabled"
+            )
+        if any(
+            word in description for word in ("classical", "live", "continuous", "dj mix", "mixtape")
+        ):
             return self._fallback(left, right, "gapless/live material: preserving the recording")
 
         tempo_factor, tempo_reason, beat_cap = self._tempo_policy(left, right, options)
@@ -103,14 +114,35 @@ class TransitionPlanner:
             "stability_b=%.2f beats_b=%d downbeats_b=%d phrases_b=%d key_a=%s key_b=%s "
             "key_confidence=%.2f/%.2f energy=%.2f/%.2f vocal_density=%.2f/%.2f lyrics=%s/%s "
             "vocal_entries=%d/%d vocal_exits=%d/%d tempo_ratio=%.4f stretch=%.2f candidates_pending",
-            left.bpm or 0.0, left.source_bpm, left.beat_confidence, left.tempo_stability, len(left.beats),
-            len(left.downbeats), len(left.phrase_boundaries), right.bpm or 0.0, right.source_bpm,
-            right.beat_confidence, right.tempo_stability, len(right.beats), len(right.downbeats),
-            len(right.phrase_boundaries), left.key or "unknown", right.key or "unknown",
-            left.key_confidence, right.key_confidence, left.energy or 0, right.energy or 0,
-            left.vocal_density or 0, right.vocal_density or 0, left.lyrics_source or "none",
-            right.lyrics_source or "none", len(self._vocal_entries(left)), len(self._vocal_entries(right)),
-            len(self._vocal_exits(left)), len(self._vocal_exits(right)), tempo_factor,
+            left.bpm or 0.0,
+            left.source_bpm,
+            left.beat_confidence,
+            left.tempo_stability,
+            len(left.beats),
+            len(left.downbeats),
+            len(left.phrase_boundaries),
+            right.bpm or 0.0,
+            right.source_bpm,
+            right.beat_confidence,
+            right.tempo_stability,
+            len(right.beats),
+            len(right.downbeats),
+            len(right.phrase_boundaries),
+            left.key or "unknown",
+            right.key or "unknown",
+            left.key_confidence,
+            right.key_confidence,
+            left.energy or 0,
+            right.energy or 0,
+            left.vocal_density or 0,
+            right.vocal_density or 0,
+            left.lyrics_source or "none",
+            right.lyrics_source or "none",
+            len(self._vocal_entries(left)),
+            len(self._vocal_entries(right)),
+            len(self._vocal_exits(left)),
+            len(self._vocal_exits(right)),
+            tempo_factor,
             abs(tempo_factor - 1),
         )
         candidates = self._candidates(left, right, style, options, tempo_factor, beat_cap)
@@ -119,7 +151,9 @@ class TransitionPlanner:
             [(round(value, 2), label) for value, label in self._semantic_outgoing_points(left)],
             [(round(value, 2), label) for value, label in self._semantic_incoming_points(right)],
         )
-        LOGGER.info("AutoDJ generated %d candidates for %s -> %s", len(candidates), left.path, right.path)
+        LOGGER.info(
+            "AutoDJ generated %d candidates for %s -> %s", len(candidates), left.path, right.path
+        )
         if not candidates:
             return self._fallback(left, right, tempo_reason or "no compatible musical candidate")
 
@@ -135,9 +169,14 @@ class TransitionPlanner:
             LOGGER.debug(
                 "AutoDJ candidate %s incoming_start=%.2f score=%.2f outgoing_start=%.2f duration=%.2f "
                 "scores=%s reason=%r",
-                candidate["selected_strategy"], candidate["incoming_start"], total, candidate["outgoing_start"],
-                candidate["duration"], {
-                    key: round(value, 3) for key, value in scores.items()
+                candidate["selected_strategy"],
+                candidate["incoming_start"],
+                total,
+                candidate["outgoing_start"],
+                candidate["duration"],
+                {
+                    key: round(value, 3)
+                    for key, value in scores.items()
                     if isinstance(value, (int, float))
                 },
                 self._candidate_reason(candidate, scores),
@@ -148,9 +187,15 @@ class TransitionPlanner:
             LOGGER.info(
                 "AutoDJ top_candidate rank=%d strategy=%s score=%.3f confidence=%.3f "
                 "A@%.2f B@%.2f duration=%.2f entry_salience=%.2f exit_salience=%.2f reason=%r",
-                index, candidate.get("selected_strategy", candidate["strategy"]), candidate["total"], candidate["confidence"],
-                candidate["outgoing_start"], candidate["incoming_start"], candidate["duration"],
-                candidate["scores"]["entry_salience_score"], candidate["scores"]["exit_salience_score"],
+                index,
+                candidate.get("selected_strategy", candidate["strategy"]),
+                candidate["total"],
+                candidate["confidence"],
+                candidate["outgoing_start"],
+                candidate["incoming_start"],
+                candidate["duration"],
+                candidate["scores"]["entry_salience_score"],
+                candidate["scores"]["exit_salience_score"],
                 self._candidate_reason(candidate, candidate["scores"]),
             )
         best = ranked[0]
@@ -169,11 +214,15 @@ class TransitionPlanner:
         vocal_quality = 1.0 - scores["vocal_overlap_penalty"]
         harmonic_quality = scores["harmonic"]
         if best["mode"] == "vocal_handoff":
-            reason_parts = ["clean outgoing vocal end", "incoming vocal phrase starts on structural boundary"]
+            reason_parts = [
+                "clean outgoing vocal end",
+                "incoming vocal phrase starts on structural boundary",
+            ]
         elif best["incoming_start"] > 2.0 and self._vocal_entries(right):
             reason_parts.append(
                 "weak instrumental intro skipped to a stronger vocal entry"
-                if scores["intro_skip_penalty"] >= 0.25 else "intro skipped to a stronger semantic entry"
+                if scores["intro_skip_penalty"] >= 0.25
+                else "intro skipped to a stronger semantic entry"
             )
         elif best["incoming_start"] <= 1.0:
             reason_parts.append("instrumental blend retained")
@@ -220,10 +269,19 @@ class TransitionPlanner:
             reason=reason,
         )
         LOGGER.info(
-            'AutoDJ selected strategy=%s mode=%s A@%.2f -> B@%.2f duration=%.3f bars=%d beats=%d '
-            'score=%.3f confidence=%.2f drift=%.2f reason=%r',
-            plan.strategy, plan.mode, plan.outgoing_start, plan.incoming_start, plan.duration, plan.bars_used,
-            plan.beats_used, plan.candidate_score, plan.confidence, best["scores"]["beat_drift_score"], plan.reason,
+            "AutoDJ selected strategy=%s mode=%s A@%.2f -> B@%.2f duration=%.3f bars=%d beats=%d "
+            "score=%.3f confidence=%.2f drift=%.2f reason=%r",
+            plan.strategy,
+            plan.mode,
+            plan.outgoing_start,
+            plan.incoming_start,
+            plan.duration,
+            plan.bars_used,
+            plan.beats_used,
+            plan.candidate_score,
+            plan.confidence,
+            best["scores"]["beat_drift_score"],
+            plan.reason,
         )
         return plan
 
@@ -250,10 +308,18 @@ class TransitionPlanner:
         if delta > 0.01 and not options.get("tempo_matching_available", False):
             LOGGER.info("beatmatch rejected: tempo stretch plugin unavailable")
             return ratio, "tempo stretch unavailable; phrase blend", False
-        return ratio, "beats compatible" if delta <= 0.01 else "slight tempo stretch available", True
+        return (
+            ratio,
+            "beats compatible" if delta <= 0.01 else "slight tempo stretch available",
+            True,
+        )
 
     def _candidates(self, left, right, style, options, tempo_factor, beat_cap):
-        available = min(value for value in (left.duration, right.duration) if value > 0) if left.duration and right.duration else 60.0
+        available = (
+            min(value for value in (left.duration, right.duration) if value > 0)
+            if left.duration and right.duration
+            else 60.0
+        )
         custom = options.get("length", "automatic")
         if custom != "automatic":
             try:
@@ -263,12 +329,19 @@ class TransitionPlanner:
         elif beat_cap and left.bpm:
             lengths = [bars * 4 * 60.0 / left.bpm for bars in self.STYLE_BARS[style]]
         else:
-            minimum, maximum = {"subtle": (2.0, 4.5), "balanced": (3.0, 9.5), "energetic": (6.0, 14.0)}[style]
-            lengths = [min(maximum, max(minimum, available * fraction)) for fraction in (0.16, 0.22, 0.30)]
+            minimum, maximum = {
+                "subtle": (2.0, 4.5),
+                "balanced": (3.0, 9.5),
+                "energetic": (6.0, 14.0),
+            }[style]
+            lengths = [
+                min(maximum, max(minimum, available * fraction)) for fraction in (0.16, 0.22, 0.30)
+            ]
         incoming_points = self._semantic_incoming_points(right)
         outgoing_semantic = self._semantic_outgoing_points(left)
         vocal_exits = [
-            value for value in self._vocal_exits(left)
+            value
+            for value in self._vocal_exits(left)
             if max(1.5, 0.0) <= left.duration - value <= 14.0
         ]
         vocal_exits = self._select_semantic_values(vocal_exits, minimum_spacing=1.5, maximum=4)
@@ -276,30 +349,65 @@ class TransitionPlanner:
         for duration in lengths:
             if duration > available:
                 continue
-            outgoing_points = [(max(0.0, (left.duration or duration) - duration), "final_tail", left.duration or duration)]
+            outgoing_points = [
+                (
+                    max(0.0, (left.duration or duration) - duration),
+                    "final_tail",
+                    left.duration or duration,
+                )
+            ]
             for outgoing_start, outgoing_kind in outgoing_semantic:
                 outgoing_end = outgoing_start + duration
-                if outgoing_end <= left.duration and abs(outgoing_start - (left.duration - duration)) > 0.2:
+                if (
+                    outgoing_end <= left.duration
+                    and abs(outgoing_start - (left.duration - duration)) > 0.2
+                ):
                     outgoing_points.append((outgoing_start, outgoing_kind, outgoing_end))
             for outgoing_start, outgoing_kind, outgoing_end in outgoing_points:
                 bars = round(duration * (left.bpm or 0) / 60 / 4) if left.bpm and beat_cap else 0
-                beats = max(0, round(duration * (left.bpm or 0) / 60)) if left.bpm and beat_cap else 0
+                beats = (
+                    max(0, round(duration * (left.bpm or 0) / 60)) if left.bpm and beat_cap else 0
+                )
                 for incoming_start, incoming_kind in incoming_points:
-                    if outgoing_kind == "vocal_exit" and incoming_kind in ("vocal_entry", "strong_vocal_entry"):
+                    if outgoing_kind == "vocal_exit" and incoming_kind in (
+                        "vocal_entry",
+                        "strong_vocal_entry",
+                    ):
                         continue
                     if right.duration and incoming_start + duration > right.duration - 0.05:
                         continue
-                    mode = "beat_tempo" if beat_cap and abs(tempo_factor - 1) > 0.01 else ("beat" if beat_cap else ("phrase" if options.get("phrase_matching", True) else "gentle"))
-                    result.append({
-                        "duration": duration, "outgoing_start": outgoing_start,
-                        "outgoing_end": outgoing_end, "incoming_start": incoming_start,
-                        "incoming_end": incoming_start + duration, "bars_used": bars,
-                        "beats_used": beats, "mode": mode,
-                        "incoming_kind": incoming_kind, "outgoing_kind": outgoing_kind,
-                        "strategy": "instrumental_blend" if incoming_kind in ("intro_start", "instrumental_blend") else incoming_kind,
-                        "beat_offset": self._phase_offset(left.beats, outgoing_start, right.beats, incoming_start),
-                        "downbeat_offset": self._phase_offset(left.downbeats, outgoing_start, right.downbeats, incoming_start),
-                    })
+                    mode = (
+                        "beat_tempo"
+                        if beat_cap and abs(tempo_factor - 1) > 0.01
+                        else (
+                            "beat"
+                            if beat_cap
+                            else ("phrase" if options.get("phrase_matching", True) else "gentle")
+                        )
+                    )
+                    result.append(
+                        {
+                            "duration": duration,
+                            "outgoing_start": outgoing_start,
+                            "outgoing_end": outgoing_end,
+                            "incoming_start": incoming_start,
+                            "incoming_end": incoming_start + duration,
+                            "bars_used": bars,
+                            "beats_used": beats,
+                            "mode": mode,
+                            "incoming_kind": incoming_kind,
+                            "outgoing_kind": outgoing_kind,
+                            "strategy": "instrumental_blend"
+                            if incoming_kind in ("intro_start", "instrumental_blend")
+                            else incoming_kind,
+                            "beat_offset": self._phase_offset(
+                                left.beats, outgoing_start, right.beats, incoming_start
+                            ),
+                            "downbeat_offset": self._phase_offset(
+                                left.downbeats, outgoing_start, right.downbeats, incoming_start
+                            ),
+                        }
+                    )
             # A lyric/audio vocal exit is a separate family of candidates. Its
             # duration is allowed to be the actual tail length, rather than
             # forcing the tail into the style's preferred bar count.
@@ -307,25 +415,38 @@ class TransitionPlanner:
                 vocal_duration = left.duration - vocal_exit
                 if not 1.5 <= vocal_duration <= min(14.0, available):
                     continue
-                vocal_bars = round(vocal_duration * (left.bpm or 0) / 60 / 4) if left.bpm and beat_cap else 0
-                vocal_beats = round(vocal_duration * (left.bpm or 0) / 60) if left.bpm and beat_cap else 0
+                vocal_bars = (
+                    round(vocal_duration * (left.bpm or 0) / 60 / 4) if left.bpm and beat_cap else 0
+                )
+                vocal_beats = (
+                    round(vocal_duration * (left.bpm or 0) / 60) if left.bpm and beat_cap else 0
+                )
                 for incoming_start, incoming_kind in incoming_points:
                     if incoming_kind not in ("vocal_entry", "strong_vocal_entry"):
                         continue
                     if right.duration and incoming_start + vocal_duration > right.duration - 0.05:
                         continue
-                    result.append({
-                        "duration": vocal_duration, "outgoing_start": vocal_exit,
-                        "outgoing_end": left.duration or vocal_duration,
-                        "incoming_start": incoming_start,
-                        "incoming_end": incoming_start + vocal_duration,
-                        "bars_used": vocal_bars, "beats_used": vocal_beats,
-                        "mode": "vocal_handoff", "incoming_kind": incoming_kind,
-                        "outgoing_kind": "vocal_exit",
-                        "strategy": "vocal_handoff",
-                        "beat_offset": self._phase_offset(left.beats, vocal_exit, right.beats, incoming_start),
-                        "downbeat_offset": self._phase_offset(left.downbeats, vocal_exit, right.downbeats, incoming_start),
-                    })
+                    result.append(
+                        {
+                            "duration": vocal_duration,
+                            "outgoing_start": vocal_exit,
+                            "outgoing_end": left.duration or vocal_duration,
+                            "incoming_start": incoming_start,
+                            "incoming_end": incoming_start + vocal_duration,
+                            "bars_used": vocal_bars,
+                            "beats_used": vocal_beats,
+                            "mode": "vocal_handoff",
+                            "incoming_kind": incoming_kind,
+                            "outgoing_kind": "vocal_exit",
+                            "strategy": "vocal_handoff",
+                            "beat_offset": self._phase_offset(
+                                left.beats, vocal_exit, right.beats, incoming_start
+                            ),
+                            "downbeat_offset": self._phase_offset(
+                                left.downbeats, vocal_exit, right.downbeats, incoming_start
+                            ),
+                        }
+                    )
         return self._deduplicate_candidates(result)
 
     @staticmethod
@@ -343,16 +464,48 @@ class TransitionPlanner:
 
     @staticmethod
     def _score_candidate(candidate, left, right, tempo_factor):
-        phrase = min(1.0, 0.5 * TransitionPlanner._boundary_score(left.phrase_boundaries, candidate["outgoing_start"]) + 0.5 * TransitionPlanner._boundary_score(right.phrase_boundaries, candidate["incoming_start"])) if left.phrase_boundaries or right.phrase_boundaries else 0.32
-        rhythm = min(left.beat_confidence, right.beat_confidence) if candidate["mode"].startswith("beat") else 0.42
+        phrase = (
+            min(
+                1.0,
+                0.5
+                * TransitionPlanner._boundary_score(
+                    left.phrase_boundaries, candidate["outgoing_start"]
+                )
+                + 0.5
+                * TransitionPlanner._boundary_score(
+                    right.phrase_boundaries, candidate["incoming_start"]
+                ),
+            )
+            if left.phrase_boundaries or right.phrase_boundaries
+            else 0.32
+        )
+        rhythm = (
+            min(left.beat_confidence, right.beat_confidence)
+            if candidate["mode"].startswith("beat")
+            else 0.42
+        )
         if left.beats and right.beats:
-            rhythm = min(1.0, rhythm * 0.55 + (1 - min(1.0, abs(candidate["beat_offset"]) / 0.18)) * 0.45)
-        energy = 1.0 - min(1.0, abs(TransitionPlanner._curve_at(left.energy_curve, 0.94) - TransitionPlanner._curve_at(right.energy_curve, 0.10)))
+            rhythm = min(
+                1.0, rhythm * 0.55 + (1 - min(1.0, abs(candidate["beat_offset"]) / 0.18)) * 0.45
+            )
+        energy = 1.0 - min(
+            1.0,
+            abs(
+                TransitionPlanner._curve_at(left.energy_curve, 0.94)
+                - TransitionPlanner._curve_at(right.energy_curve, 0.10)
+            ),
+        )
         harmonic = TransitionPlanner._harmonic_score(
             left.key if TransitionPlanner._key_is_confident(left) else None,
             right.key if TransitionPlanner._key_is_confident(right) else None,
         )
-        overlap = TransitionPlanner._vocal_overlap_fraction(left, right, candidate["outgoing_start"], candidate["incoming_start"], candidate["duration"])
+        overlap = TransitionPlanner._vocal_overlap_fraction(
+            left,
+            right,
+            candidate["outgoing_start"],
+            candidate["incoming_start"],
+            candidate["duration"],
+        )
         vocal = 1.0 - overlap
         outgoing_exit = TransitionPlanner._point_score(
             candidate["outgoing_start"], TransitionPlanner._vocal_exits(left), 0.55
@@ -360,7 +513,15 @@ class TransitionPlanner:
         incoming_entry = TransitionPlanner._point_score(
             candidate["incoming_start"], TransitionPlanner._vocal_entries(right), 0.55
         )
-        phrase_alignment = min(1.0, 0.55 * TransitionPlanner._boundary_score(left.phrase_boundaries, candidate["outgoing_start"]) + 0.45 * TransitionPlanner._boundary_score(right.phrase_boundaries, candidate["incoming_start"]))
+        phrase_alignment = min(
+            1.0,
+            0.55
+            * TransitionPlanner._boundary_score(left.phrase_boundaries, candidate["outgoing_start"])
+            + 0.45
+            * TransitionPlanner._boundary_score(
+                right.phrase_boundaries, candidate["incoming_start"]
+            ),
+        )
         downbeat_alignment = min(
             1.0,
             0.5 * TransitionPlanner._boundary_score(left.downbeats, candidate["outgoing_start"])
@@ -381,26 +542,33 @@ class TransitionPlanner:
             # the dedicated handoff family gets the additional outgoing-exit
             # evidence and therefore remains stronger when it is clean.
             vocal_handoff = (
-                0.34 * incoming_entry
-                + 0.26 * vocal
-                + 0.24 * phrase_alignment
-                + 0.16 * energy
+                0.34 * incoming_entry + 0.26 * vocal + 0.24 * phrase_alignment + 0.16 * energy
             )
         else:
             vocal_handoff = 0.0
-        entry_salience = TransitionPlanner._entry_salience(right, candidate["incoming_start"], candidate["incoming_kind"])
-        exit_salience = TransitionPlanner._exit_salience(left, candidate["outgoing_start"], candidate.get("outgoing_kind", ""))
+        entry_salience = TransitionPlanner._entry_salience(
+            right, candidate["incoming_start"], candidate["incoming_kind"]
+        )
+        exit_salience = TransitionPlanner._exit_salience(
+            left, candidate["outgoing_start"], candidate.get("outgoing_kind", "")
+        )
         intro_value = TransitionPlanner._intro_value_score(right)
         intro_skip = TransitionPlanner._intro_skip_penalty(right, candidate["incoming_start"])
-        outgoing_cut = TransitionPlanner._outgoing_cut_penalty(left, candidate["outgoing_start"], candidate.get("outgoing_end"))
-        silence = min(1.0, 0.5 + min(left.outro_silence, 1.0) * 0.25 + min(right.intro_silence, 1.0) * 0.25)
+        outgoing_cut = TransitionPlanner._outgoing_cut_penalty(
+            left, candidate["outgoing_start"], candidate.get("outgoing_end")
+        )
+        silence = min(
+            1.0, 0.5 + min(left.outro_silence, 1.0) * 0.25 + min(right.intro_silence, 1.0) * 0.25
+        )
         structure = phrase * 0.7 + silence * 0.3
         tempo = max(0.0, 1.0 - abs(tempo_factor - 1.0) / 0.08) if left.bpm and right.bpm else 0.35
         drift = TransitionPlanner._beat_drift_score(left, right, candidate, tempo_factor)
         strategy = TransitionPlanner._strategy_for_candidate(
             candidate, vocal_handoff, overlap, rhythm, phrase_alignment, entry_salience, left, right
         )
-        strategy_suitability = TransitionPlanner._strategy_suitability(strategy, candidate, left, right)
+        strategy_suitability = TransitionPlanner._strategy_suitability(
+            strategy, candidate, left, right
+        )
         return {
             "rhythm": rhythm,
             "downbeat_alignment": downbeat_alignment,
@@ -431,8 +599,16 @@ class TransitionPlanner:
         stability = min(left.tempo_stability, right.tempo_stability)
         phrase = scores.get("phrase_alignment_score", 0.25)
         energy = scores.get("energy", 0.35)
-        vocal_evidence = 0.75 if TransitionPlanner._vocal_sections(left) or TransitionPlanner._vocal_sections(right) else 0.25
-        key = min(left.key_confidence, right.key_confidence) if TransitionPlanner._keys_confident(left, right) else 0.0
+        vocal_evidence = (
+            0.75
+            if TransitionPlanner._vocal_sections(left) or TransitionPlanner._vocal_sections(right)
+            else 0.25
+        )
+        key = (
+            min(left.key_confidence, right.key_confidence)
+            if TransitionPlanner._keys_confident(left, right)
+            else 0.0
+        )
         rhythm_evidence = beat if candidate["mode"].startswith("beat") else beat * 0.35
         evidence = (
             0.23 * rhythm_evidence
@@ -501,7 +677,9 @@ class TransitionPlanner:
             base = 0.32
         if cls._boundary_score(analysis.phrase_boundaries, point) >= 0.75:
             base += 0.10
-        if analysis.outro_silence and point >= max(0.0, analysis.duration - analysis.outro_silence - 1.0):
+        if analysis.outro_silence and point >= max(
+            0.0, analysis.duration - analysis.outro_silence - 1.0
+        ):
             base += 0.08
         return min(1.0, base)
 
@@ -521,10 +699,18 @@ class TransitionPlanner:
         build = max(0.0, end - start)
         intro_boundaries = sum(1 for point in boundaries if point < first_event)
         rhythmic_value = min(1.0, intro_boundaries / 2.0)
-        high_energy = cls._curve_at(analysis.energy_curve, min(1.0, intro_length / max(analysis.duration, 1.0)))
+        high_energy = cls._curve_at(
+            analysis.energy_curve, min(1.0, intro_length / max(analysis.duration, 1.0))
+        )
         short_intro = 1.0 if intro_length <= 4.0 else max(0.0, 1.0 - (intro_length - 4.0) / 20.0)
         silence_bonus = 0.0 if analysis.intro_silence else 0.08
-        value = 0.30 * min(1.0, build * 3.0) + 0.25 * rhythmic_value + 0.20 * high_energy + 0.17 * short_intro + silence_bonus
+        value = (
+            0.30 * min(1.0, build * 3.0)
+            + 0.25 * rhythmic_value
+            + 0.20 * high_energy
+            + 0.17 * short_intro
+            + silence_bonus
+        )
         return max(0.0, min(1.0, value))
 
     @classmethod
@@ -547,7 +733,9 @@ class TransitionPlanner:
         if first_entry <= 1.5 or incoming_start >= first_entry - 0.8:
             return 0.0
         distance = min(1.0, (first_entry - incoming_start) / max(8.0, first_entry))
-        salience = cls._entry_salience(right, first_entry, "vocal_entry" if cls._vocal_entries(right) else "phrase_boundary")
+        salience = cls._entry_salience(
+            right, first_entry, "vocal_entry" if cls._vocal_entries(right) else "phrase_boundary"
+        )
         intro_value = cls._intro_value_score(right)
         # A demonstrated build/rhythmic intro is valuable enough to make
         # skipping it materially less attractive, while a flat intro keeps
@@ -563,7 +751,9 @@ class TransitionPlanner:
 
     @staticmethod
     def _key_is_confident(analysis):
-        return bool(analysis.key and analysis.key_confidence >= TransitionPlanner.KEY_CONFIDENCE_THRESHOLD)
+        return bool(
+            analysis.key and analysis.key_confidence >= TransitionPlanner.KEY_CONFIDENCE_THRESHOLD
+        )
 
     @classmethod
     def _keys_confident(cls, left, right):
@@ -576,21 +766,42 @@ class TransitionPlanner:
         duration = candidate["duration"]
         left_start = min(left.beats, key=lambda value: abs(value - candidate["outgoing_start"]))
         right_start = min(right.beats, key=lambda value: abs(value - candidate["incoming_start"]))
-        left_end = min(left.beats, key=lambda value: abs(value - (candidate["outgoing_start"] + duration)))
-        right_end = min(right.beats, key=lambda value: abs(value - (candidate["incoming_start"] + duration)))
+        left_end = min(
+            left.beats, key=lambda value: abs(value - (candidate["outgoing_start"] + duration))
+        )
+        right_end = min(
+            right.beats, key=lambda value: abs(value - (candidate["incoming_start"] + duration))
+        )
         left_error = abs((left_end - left_start) - duration)
-        right_error = abs((right_end - right_start) - duration * (left.bpm / right.bpm) / max(tempo_factor, 1e-6))
+        right_error = abs(
+            (right_end - right_start) - duration * (left.bpm / right.bpm) / max(tempo_factor, 1e-6)
+        )
         return max(0.0, min(1.0, 1.0 - (left_error + right_error) / 0.8))
 
     @staticmethod
-    def _strategy_for_candidate(candidate, vocal_handoff, overlap, rhythm, phrase, entry, left, right):
+    def _strategy_for_candidate(
+        candidate, vocal_handoff, overlap, rhythm, phrase, entry, left, right
+    ):
         if candidate["mode"] == "vocal_handoff":
             return "vocal_handoff"
-        if entry >= 0.93 and phrase >= 0.85 and candidate["incoming_kind"] in ("chorus_like_entry", "energy_rise"):
+        if (
+            entry >= 0.93
+            and phrase >= 0.85
+            and candidate["incoming_kind"] in ("chorus_like_entry", "energy_rise")
+        ):
             return "hard_cut"
-        if rhythm >= 0.9 and left.tempo_stability >= 0.85 and candidate.get("outgoing_kind") in ("downbeat_exit", "energy_drop") and candidate["duration"] <= 4.5:
+        if (
+            rhythm >= 0.9
+            and left.tempo_stability >= 0.85
+            and candidate.get("outgoing_kind") in ("downbeat_exit", "energy_drop")
+            and candidate["duration"] <= 4.5
+        ):
             return "beat_repeat_out"
-        if overlap >= 0.5 and (left.vocal_density or 0.0) > 0.45 and (right.vocal_density or 0.0) > 0.45:
+        if (
+            overlap >= 0.5
+            and (left.vocal_density or 0.0) > 0.45
+            and (right.vocal_density or 0.0) > 0.45
+        ):
             return "filter_out"
         if entry >= 0.88 and rhythm >= 0.68 and phrase >= 0.65:
             return "bass_swap"
@@ -603,7 +814,9 @@ class TransitionPlanner:
     @staticmethod
     def _strategy_suitability(strategy, candidate, left, right):
         if strategy == "vocal_handoff":
-            return 1.0 if candidate["incoming_kind"] in ("vocal_entry", "strong_vocal_entry") else 0.5
+            return (
+                1.0 if candidate["incoming_kind"] in ("vocal_entry", "strong_vocal_entry") else 0.5
+            )
         if strategy == "bass_swap":
             return min(left.beat_confidence, right.beat_confidence)
         if strategy == "filter_out":
@@ -723,9 +936,36 @@ class TransitionPlanner:
             return 1.0
         if left.rstrip(" M") == right.rstrip(" M"):
             return 0.85
-        notes = {"C": 0, "C#": 1, "DB": 1, "D": 2, "D#": 3, "EB": 3, "E": 4, "F": 5, "F#": 6, "GB": 6, "G": 7, "G#": 8, "AB": 8, "A": 9, "A#": 10, "BB": 10, "B": 11}
+        notes = {
+            "C": 0,
+            "C#": 1,
+            "DB": 1,
+            "D": 2,
+            "D#": 3,
+            "EB": 3,
+            "E": 4,
+            "F": 5,
+            "F#": 6,
+            "GB": 6,
+            "G": 7,
+            "G#": 8,
+            "AB": 8,
+            "A": 9,
+            "A#": 10,
+            "BB": 10,
+            "B": 11,
+        }
+
         def root(value):
-            return next((notes[key] for key in sorted(notes, key=len, reverse=True) if value.startswith(key)), None)
+            return next(
+                (
+                    notes[key]
+                    for key in sorted(notes, key=len, reverse=True)
+                    if value.startswith(key)
+                ),
+                None,
+            )
+
         a, b = root(left), root(right)
         if a is None or b is None:
             return 0.5
@@ -787,7 +1027,9 @@ class TransitionPlanner:
         entries = [value for value in cls._vocal_entries(right) if 0 < value <= limit]
         entries = cls._select_semantic_values(entries, minimum_spacing=1.5, maximum=8)
         phrase_boundaries = [value for value in right.phrase_boundaries if 0 < value <= limit]
-        phrase_boundaries = cls._select_semantic_values(phrase_boundaries, minimum_spacing=3.0, maximum=8)
+        phrase_boundaries = cls._select_semantic_values(
+            phrase_boundaries, minimum_spacing=3.0, maximum=8
+        )
         for value in entries:
             near_phrase = any(abs(value - boundary) <= 0.8 for boundary in phrase_boundaries)
             label = "strong_vocal_entry" if near_phrase else "vocal_entry"
@@ -815,9 +1057,14 @@ class TransitionPlanner:
             points.append((min(right.intro_silence, 8.0), "silence_end"))
         points = cls._unique_labeled_points(points)
         priority = {
-            "strong_vocal_entry": 6, "chorus_like_entry": 5, "energy_rise": 4,
-            "vocal_entry": 4, "phrase_boundary": 3, "downbeat": 2,
-            "silence_end": 1, "intro_start": 0,
+            "strong_vocal_entry": 6,
+            "chorus_like_entry": 5,
+            "energy_rise": 4,
+            "vocal_entry": 4,
+            "phrase_boundary": 3,
+            "downbeat": 2,
+            "silence_end": 1,
+            "intro_start": 0,
         }
         selected = []
         for point in sorted(points, key=lambda item: (-priority.get(item[1], 0), item[0])):
@@ -864,9 +1111,16 @@ class TransitionPlanner:
 
     @staticmethod
     def _fallback(left, right, reason):
-        return TransitionPlan(current_path=left.path, next_path=right.path, duration=2.0,
-                              mode="fallback", smart_eq=False, confidence=0.0,
-                              reason=reason, auto_dj=False)
+        return TransitionPlan(
+            current_path=left.path,
+            next_path=right.path,
+            duration=2.0,
+            mode="fallback",
+            smart_eq=False,
+            confidence=0.0,
+            reason=reason,
+            auto_dj=False,
+        )
 
     @staticmethod
     def _loudness_gain(lufs, peak_db):
@@ -880,4 +1134,6 @@ class TransitionPlanner:
     @staticmethod
     def _eq_strength(left, right, style):
         energy_gap = abs((left.energy or 0.5) - (right.energy or 0.5))
-        return min(0.9, 0.35 + energy_gap * 0.8 + {"subtle": 0.0, "balanced": 0.1, "energetic": 0.2}[style])
+        return min(
+            0.9, 0.35 + energy_gap * 0.8 + {"subtle": 0.0, "balanced": 0.1, "energetic": 0.2}[style]
+        )

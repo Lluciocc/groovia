@@ -86,8 +86,7 @@ def _startup_error(error: BaseException) -> None:
 
     if "namespace gtk not available" in lowered or "typelib" in lowered:
         detail = (
-            "A required GTK or GObject Introspection typelib is missing "
-            "from the Groovia bundle."
+            "A required GTK or GObject Introspection typelib is missing from the Groovia bundle."
         )
     elif "dll" in lowered or "could not be loaded" in lowered:
         detail = (
@@ -120,16 +119,21 @@ def main() -> int:
         _configure_frozen_environment()
 
         if "--smoke-test" in sys.argv[1:]:
+            import gi
             import numpy
             import scipy
             from scipy import signal
-            import gi
+
             gi.require_version("Gst", "1.0")
             from gi.repository import Gst
+
             Gst.init(None)
             tempo_factory = next(
-                (Gst.ElementFactory.find(name) for name in ("rubberband", "pitch", "scaletempo")
-                 if Gst.ElementFactory.find(name)),
+                (
+                    Gst.ElementFactory.find(name)
+                    for name in ("rubberband", "pitch", "scaletempo")
+                    if Gst.ElementFactory.find(name)
+                ),
                 None,
             )
             if tempo_factory is None:
@@ -150,7 +154,6 @@ def main() -> int:
         # MSYS2 bindings require the PyCairo foreign converter to be loaded
         # explicitly before any GTK/PangoCairo drawing code is imported.
         import gi
-        import cairo
 
         gi.require_foreign("cairo")
 

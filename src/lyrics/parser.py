@@ -23,9 +23,7 @@ import bisect
 import re
 from dataclasses import dataclass, field
 
-TIMESTAMP = re.compile(
-    r"\[(?P<minutes>\d+):(?P<seconds>\d{1,2})(?:[.:](?P<fraction>\d{1,3}))?\]"
-)
+TIMESTAMP = re.compile(r"\[(?P<minutes>\d+):(?P<seconds>\d{1,2})(?:[.:](?P<fraction>\d{1,3}))?\]")
 WORD_TIMESTAMP = re.compile(
     r"<(?P<minutes>\d+):(?P<seconds>\d{1,2})(?:[.:](?P<fraction>\d{1,3}))?>"
 )
@@ -73,8 +71,7 @@ class LyricsTimeline:
     def __post_init__(self):
         self._line_starts = [line.start_time_ms + self.offset_ms for line in self.lines]
         self._word_starts = [
-            [word.start_time_ms + self.offset_ms for word in line.words]
-            for line in self.lines
+            [word.start_time_ms + self.offset_ms for word in line.words] for line in self.lines
         ]
 
     @property
@@ -96,8 +93,7 @@ class LyricsTimeline:
         self.offset_ms = int(amount_ms)
         self._line_starts = [line.start_time_ms + self.offset_ms for line in self.lines]
         self._word_starts = [
-            [word.start_time_ms + self.offset_ms for word in line.words]
-            for line in self.lines
+            [word.start_time_ms + self.offset_ms for word in line.words] for line in self.lines
         ]
 
     def current_index(self, position_ms: int) -> int:
@@ -175,9 +171,7 @@ def parse_lrc(
                 text=word,
                 start_time_ms=word_start,
                 end_time_ms=(
-                    word_specs[word_index + 1][0]
-                    if word_index + 1 < len(word_specs)
-                    else end
+                    word_specs[word_index + 1][0] if word_index + 1 < len(word_specs) else end
                 ),
             )
             for word_index, (word_start, word) in enumerate(word_specs)

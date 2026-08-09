@@ -314,9 +314,7 @@ class LyricsView(Gtk.ScrolledWindow):
         try:
             schema_source = Gio.SettingsSchemaSource.get_default()
             schema = (
-                schema_source.lookup("io.github.Lluciocc.Groovia", True)
-                if schema_source
-                else None
+                schema_source.lookup("io.github.Lluciocc.Groovia", True) if schema_source else None
             )
             if schema is not None:
                 self._app_settings = Gio.Settings.new_full(schema, None, None)
@@ -336,9 +334,7 @@ class LyricsView(Gtk.ScrolledWindow):
             else bool(gtk_settings.get_property("gtk-enable-animations"))
         )
         app_enabled = (
-            True
-            if self._app_settings is None
-            else self._app_settings.get_boolean("animations")
+            True if self._app_settings is None else self._app_settings.get_boolean("animations")
         )
         self._animations_enabled = system_enabled and app_enabled
         if not self._animations_enabled:
@@ -388,8 +384,6 @@ class LyricsView(Gtk.ScrolledWindow):
             self._set_line_visuals(index, to_scale, to_opacity)
             return
 
-        widget = self._buttons[index]
-
         def update(value):
             progress = float(value)
             scale = from_scale + (to_scale - from_scale) * progress
@@ -408,9 +402,7 @@ class LyricsView(Gtk.ScrolledWindow):
         adjustment = self.get_vadjustment()
         allocation = self._buttons[index].get_allocation()
         target = max(0.0, allocation.y - adjustment.get_page_size() * 0.42)
-        target = min(
-            target, max(0.0, adjustment.get_upper() - adjustment.get_page_size())
-        )
+        target = min(target, max(0.0, adjustment.get_upper() - adjustment.get_page_size()))
         current = adjustment.get_value()
         if not animated or not self._animations_enabled or abs(target - current) < 1:
             adjustment.set_value(target)
@@ -528,13 +520,9 @@ class LyricsView(Gtk.ScrolledWindow):
                     button = Gtk.Button(has_frame=False, focusable=True)
                     text = line.text or ""
                     if text.strip():
-                        content = Gtk.Label(
-                            label=text, wrap=True, justify=Gtk.Justification.CENTER
-                        )
+                        content = Gtk.Label(label=text, wrap=True, justify=Gtk.Justification.CENTER)
                     else:
-                        content = Gtk.Image.new_from_icon_name(
-                            "audio-x-generic-symbolic"
-                        )
+                        content = Gtk.Image.new_from_icon_name("audio-x-generic-symbolic")
                         content.set_pixel_size(self._music_icon_size)
                         content.add_css_class("lyrics-music-icon")
                     button.set_child(content)
@@ -662,9 +650,7 @@ class LyricsView(Gtk.ScrolledWindow):
 
     @property
     def available_modes(self):
-        return tuple(
-            mode for mode in ("line", "word", "plain") if mode in self._documents
-        )
+        return tuple(mode for mode in ("line", "word", "plain") if mode in self._documents)
 
     @property
     def selected_row(self):
@@ -673,7 +659,5 @@ class LyricsView(Gtk.ScrolledWindow):
     @property
     def variant_rows(self):
         return tuple(
-            row
-            for row in self._document_rows.values()
-            if row and row.get("id") is not None
+            row for row in self._document_rows.values() if row and row.get("id") is not None
         )

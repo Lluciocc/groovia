@@ -24,7 +24,7 @@ import gi
 
 gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Gdk, GdkPixbuf, GObject, Gtk
+from gi.repository import Gdk, GObject, Gtk
 
 from ..visuals import load_scaled_pixbuf
 
@@ -145,9 +145,7 @@ class VinylView(Gtk.DrawingArea):
 
         if self.duration > 0:
             # One full manual turn scrubs 45 seconds, in either direction.
-            seconds = (
-                self._drag_start_position + self._drag_total_angle / math.tau * 45.0
-            )
+            seconds = self._drag_start_position + self._drag_total_angle / math.tau * 45.0
             seconds = max(0.0, min(self.duration, seconds))
             self.progress = seconds / self.duration
             self.emit("seek-requested", seconds)
@@ -173,16 +171,11 @@ class VinylView(Gtk.DrawingArea):
         delta = min(0.1, now - self._last_frame)
         self._last_frame = now
         target_velocity = 1.18 if self.is_playing else 0.0
-        self.rotation_velocity += (target_velocity - self.rotation_velocity) * min(
-            1.0, delta * 5.5
-        )
+        self.rotation_velocity += (target_velocity - self.rotation_velocity) * min(1.0, delta * 5.5)
         self.arm_progress += (self.progress - self.arm_progress) * min(1.0, delta * 4.5)
         self._rotation_angle += delta * self.rotation_velocity
         self.angle = self._rotation_angle
-        if (
-            self.rotation_velocity > 0.002
-            or abs(self.arm_progress - self.progress) > 0.001
-        ):
+        if self.rotation_velocity > 0.002 or abs(self.arm_progress - self.progress) > 0.001:
             self.queue_draw()
         return True
 
@@ -288,9 +281,7 @@ class VinylView(Gtk.DrawingArea):
             cr.clip()
             # Draw the already bounded Pixbuf into the exact label diameter.
             cr.translate(-diameter / 2, -diameter / 2)
-            cr.scale(
-                diameter / self.cover.get_width(), diameter / self.cover.get_height()
-            )
+            cr.scale(diameter / self.cover.get_width(), diameter / self.cover.get_height())
             Gdk.cairo_set_source_pixbuf(cr, self.cover, 0, 0)
             cr.paint()
             cr.restore()
