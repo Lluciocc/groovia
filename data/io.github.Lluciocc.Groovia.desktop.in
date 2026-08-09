@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Groovia
-Exec=groovia
+Exec=groovia %U
 Icon=io.github.Lluciocc.Groovia
 Terminal=false
 Type=Application
