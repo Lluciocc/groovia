@@ -67,7 +67,9 @@ install_data(['audio/__init__.py', 'audio/player.py'], install_dir: moduledir / 
 install_data(['autodj/__init__.py', 'autodj/analysis.py', 'autodj/planner.py', 'autodj/service.py'], install_dir: moduledir / 'autodj')
 install_data(['library/__init__.py', 'library/database.py', 'library/scanner.py'], install_dir: moduledir / 'library')
 install_data(['widgets/__init__.py', 'widgets/vinyl_view.py', 'widgets/lyrics_view.py'], install_dir: moduledir / 'widgets')
-install_data(['lyrics/__init__.py', 'lyrics/parser.py', 'lyrics/service.py'], install_dir: moduledir / 'lyrics')
+install_data([
+  'lyrics/__init__.py', 'lyrics/lrclib.py', 'lyrics/parser.py', 'lyrics/service.py',
+], install_dir: moduledir / 'lyrics')
 install_data([
   'downloads/__init__.py', 'downloads/manager.py', 'downloads/spotdl.py',
   'downloads/importer.py', 'downloads/service.py', 'downloads/musicmatch.py',

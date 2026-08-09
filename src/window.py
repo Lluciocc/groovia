@@ -2033,6 +2033,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
             button.set_halign(Gtk.Align.FILL)
             if name == "show-lyrics":
                 button.set_sensitive(lyrics_available)
+            if name in {"edit-lyrics", "remove-lyrics"}:
+                button.set_sensitive(lyrics_available)
             if name == "add-to-playlist":
                 button.connect(
                     "clicked",

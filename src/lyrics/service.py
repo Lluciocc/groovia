@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..platform_compat import get_data_dir
+from .lrclib import LrcLibClient
 from .parser import LyricsTimeline, parse_lyrics
 
 
@@ -34,13 +35,14 @@ class LyricsBundle:
 
     word: LyricsTimeline | None = None
     line: LyricsTimeline | None = None
+    plain: LyricsTimeline | None = None
 
     @property
     def preferred(self) -> LyricsTimeline | None:
-        return self.line or self.word
+        return self.line or self.word or self.plain
 
     def __bool__(self):
-        return bool(self.word or self.line)
+        return bool(self.word or self.line or self.plain)
 
 
 class LyricsService:
@@ -58,6 +60,7 @@ class LyricsService:
             self.musixmatch = MusixmatchRichsync(token_cache=self.root / "musixmatch-token.json")
         except (ImportError, OSError, TypeError):
             self.musixmatch = None
+        self.lrclib = LrcLibClient()
 
     @staticmethod
     def _checksum(content: str) -> str:
@@ -176,6 +179,44 @@ class LyricsService:
             replace=replace,
             variant="word",
         )
+        return bundle if bundle else None
+
+    def fetch_lrclib(self, track, *, replace: bool = False) -> LyricsBundle | None:
+        """Fetch synchronized or plain lyrics for any local or Spotify track."""
+        if track.id is None:
+            return None
+        try:
+            result = self.lrclib.get_lyrics(
+                track.title,
+                track.artist,
+                getattr(track, "album", "") or "",
+                getattr(track, "duration", 0) or 0,
+            )
+        except Exception:
+            return None
+        if not result:
+            return None
+
+        bundle = LyricsBundle()
+        source_id = f"lrclib:{result.id}" if result.id is not None else None
+        if result.synced_lyrics:
+            bundle.line = self.ingest_content(
+                track,
+                result.synced_lyrics,
+                provider="lrclib",
+                source_id=source_id,
+                replace=replace,
+                variant="line",
+            )
+        if result.plain_lyrics and not bundle.line:
+            bundle.plain = self.ingest_content(
+                track,
+                result.plain_lyrics,
+                provider="lrclib",
+                source_id=source_id,
+                replace=replace,
+                variant="plain",
+            )
         return bundle if bundle else None
 
     def ingest_download(
