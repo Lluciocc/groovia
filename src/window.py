@@ -1223,6 +1223,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         point.width = 1
         point.height = 1
         popover = Gtk.Popover()
+        popover.set_autohide(True)
         popover.set_parent(anchor)
         popover.set_pointing_to(point)
         menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -2101,6 +2102,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         lyrics_available = bool(self.download_service.lyrics.find(track)[0])
 
         popover = Gtk.Popover()
+        popover.set_autohide(True)
         popover.set_has_arrow(True)
         popover.set_parent(parent)
         popover.set_pointing_to(point)
@@ -2206,6 +2208,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if getattr(self, "_playlist_popover", None):
             self._playlist_popover.popdown()
         popover = Gtk.Popover()
+        popover.set_autohide(True)
         popover.set_parent(anchor)
         popover.set_has_arrow(True)
         menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -3111,6 +3114,31 @@ class GrooviaWindow(Adw.ApplicationWindow):
         controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         controller.connect("key-pressed", self._global_key_pressed)
         self.add_controller(controller)
+
+        click = Gtk.GestureClick()
+        click.set_button(0)
+        click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        click.connect("pressed", self._dismiss_popovers_on_click)
+        self.add_controller(click)
+
+    def _dismiss_popovers_on_click(self, _gesture, _n_press, x, y):
+        """Close custom context menus when the pointer leaves their bounds."""
+        popovers = tuple(
+            popover
+            for name in ("_track_popover", "_playlist_menu", "_playlist_popover")
+            if (popover := getattr(self, name, None)) is not None
+            and popover.get_visible()
+        )
+        if not popovers:
+            return
+
+        picked = self.pick(x, y, Gtk.PickFlags.DEFAULT)
+        for popover in popovers:
+            widget = picked
+            while widget is not None and widget is not popover:
+                widget = widget.get_parent()
+            if widget is not popover:
+                popover.popdown()
 
     def _global_key_pressed(self, _controller, keyval, _keycode, state):
         modifiers = (
