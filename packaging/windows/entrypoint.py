@@ -153,6 +153,7 @@ def main() -> int:
         # GTK 4's DrawingArea callbacks hand PyGObject a Cairo context.  The
         # MSYS2 bindings require the PyCairo foreign converter to be loaded
         # explicitly before any GTK/PangoCairo drawing code is imported.
+        import cairo as _cairo  # noqa: F401
         import gi
 
         gi.require_foreign("cairo")

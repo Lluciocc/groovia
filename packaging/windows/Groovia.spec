@@ -132,6 +132,7 @@ add_file(scanner, "gstreamer-1.0")
 
 
 hiddenimports = [
+    "cairo",
     "gi._gi_cairo",
     "gi.repository.Adw", "gi.repository.Gdk", "gi.repository.GdkPixbuf",
     "gi.repository.Gio", "gi.repository.GLib", "gi.repository.GObject",
