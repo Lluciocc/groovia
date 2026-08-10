@@ -1955,6 +1955,112 @@ class GrooviaWindow(Adw.ApplicationWindow):
         point.width = 1
         point.height = 1
 
+        lyrics_available = bool(self.download_service.lyrics.find(track)[0])
+
+        popover = Gtk.Popover()
+        popover.set_autohide(True)
+        popover.set_has_arrow(True)
+        popover.set_parent(parent)
+        popover.set_pointing_to(point)
+        menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        menu_box.set_margin_top(6)
+        menu_box.set_margin_bottom(6)
+        menu_box.set_margin_start(6)
+        menu_box.set_margin_end(6)
+        popover.set_child(menu_box)
+
+        favorite_label = (
+            "Remove from Favorites" if self.database.is_favorite(track) else "Add to Favorites"
+        )
+        direct_items = [
+            ("play", "Play", lambda: self._play_selected_track(track, playlist)),
+            ("play-next", "Play Next", lambda: self._play_next(track)),
+            ("add-to-queue", "Add to Queue", lambda: self._add_to_queue(track)),
+            ("go-to-album", "Go to Album", lambda: self._go_to_album(track)),
+            ("go-to-artist", "Go to Artist", lambda: self._go_to_artist(track)),
+        ]
+        categories = [
+            (
+                "Library",
+                [
+                    ("add-to-playlist", "Add to Playlist"),
+                    ("favorite", favorite_label),
+                    ("remove-from-library", "Remove from Library"),
+                ],
+            ),
+            (
+                "Lyrics",
+                [
+                    ("show-lyrics", "Show Lyrics"),
+                    ("find-lyrics", "Find Lyrics"),
+                    ("import-lyrics", "Import Lyrics"),
+                    ("edit-lyrics", "Edit Lyrics"),
+                    ("remove-lyrics", "Remove Downloaded Lyrics"),
+                ],
+            ),
+            (
+                "More",
+                [
+                    ("show-in-file-manager", "Show in File Manager"),
+                    ("song-information", "Song Information"),
+                ],
+            ),
+        ]
+        if playlist:
+            categories.append(
+                (
+                    "Playlist",
+                    [
+                        ("remove-from-playlist", "Remove from Playlist"),
+                        ("move-up", "Move Up in Playlist"),
+                        ("move-down", "Move Down in Playlist"),
+                    ],
+                ),
+            )
+
+        self._track_subpopover = None
+        for name, label, callback in direct_items:
+            button = Gtk.Button(halign=Gtk.Align.FILL)
+            button.set_label(label)
+            button.add_css_class("flat")
+            button.set_hexpand(True)
+            button.set_halign(Gtk.Align.FILL)
+            button.connect(
+                "clicked",
+                lambda _button, name=name, callback=callback: self._activate_track_action(
+                    name, track, callback
+                ),
+            )
+            menu_box.append(button)
+
+        for category, items in categories:
+            button = Gtk.Button(halign=Gtk.Align.FILL)
+            button.add_css_class("flat")
+            button.set_hexpand(True)
+            button.set_halign(Gtk.Align.FILL)
+            content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            label = Gtk.Label(label=category, xalign=0)
+            label.set_hexpand(True)
+            content.append(label)
+            content.append(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+            button.set_child(content)
+            button.connect(
+                "clicked",
+                lambda _button, anchor=button, items=items: self._show_track_submenu(
+                    track, anchor, items, lyrics_available, playlist
+                ),
+            )
+            menu_box.append(button)
+
+        popover.connect("closed", self._on_track_popover_closed)
+        parent.connect("notify::root", self._on_track_popover_parent_root_changed, popover)
+        self._track_popover = popover
+        popover.popup()
+
+    def _show_track_submenu(self, track, anchor, items, lyrics_available, playlist):
+        if getattr(self, "_track_subpopover", None):
+            self._track_subpopover.popdown()
+
         callbacks = {
             "play": lambda: self._play_selected_track(track, playlist),
             "play-next": lambda: self._play_next(track),
@@ -1971,13 +2077,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
             "remove-lyrics": lambda: self._confirm_remove_lyrics(track),
             "remove-from-library": lambda: self._confirm_remove_from_library(track),
         }
-        lyrics_available = bool(self.download_service.lyrics.find(track)[0])
-
         popover = Gtk.Popover()
         popover.set_autohide(True)
         popover.set_has_arrow(True)
-        popover.set_parent(parent)
-        popover.set_pointing_to(point)
+        popover.set_position(Gtk.PositionType.RIGHT)
+        popover.set_parent(anchor)
         menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         menu_box.set_margin_top(6)
         menu_box.set_margin_bottom(6)
@@ -1985,65 +2089,22 @@ class GrooviaWindow(Adw.ApplicationWindow):
         menu_box.set_margin_end(6)
         popover.set_child(menu_box)
 
-        items = [
-            ("play", "Play"),
-            ("play-next", "Play Next"),
-            ("add-to-queue", "Add to Queue"),
-            (None, None),
-            ("add-to-playlist", "Add to Playlist"),
-            (
-                "favorite",
-                (
-                    "Remove from Favorites"
-                    if self.database.is_favorite(track)
-                    else "Add to Favorites"
-                ),
-            ),
-            (None, None),
-            ("go-to-album", "Go to Album"),
-            ("go-to-artist", "Go to Artist"),
-            (None, None),
-            ("show-in-file-manager", "Show in File Manager"),
-            ("song-information", "Song Information"),
-            (None, None),
-            ("show-lyrics", "Show Lyrics"),
-            ("find-lyrics", "Find Lyrics"),
-            ("import-lyrics", "Import Lyrics"),
-            ("edit-lyrics", "Edit Lyrics"),
-            ("remove-lyrics", "Remove Downloaded Lyrics"),
-            (None, None),
-            ("remove-from-library", "Remove from Library"),
-        ]
-        if playlist:
-            items.extend(
-                [
-                    (None, None),
-                    ("remove-from-playlist", "Remove from Playlist"),
-                    ("move-up", "Move Up in Playlist"),
-                    ("move-down", "Move Down in Playlist"),
-                ]
-            )
         for name, label in items:
-            if name is None:
-                menu_box.append(Gtk.Separator())
-                continue
             button = Gtk.Button(label=label, halign=Gtk.Align.FILL)
             button.add_css_class("flat")
             button.set_hexpand(True)
             button.set_halign(Gtk.Align.FILL)
-            if name == "show-lyrics":
-                button.set_sensitive(lyrics_available)
-            if name in {"edit-lyrics", "remove-lyrics"}:
+            if name in {"show-lyrics", "edit-lyrics", "remove-lyrics"}:
                 button.set_sensitive(lyrics_available)
             if name == "add-to-playlist":
                 button.connect(
                     "clicked",
-                    lambda button: self._show_add_to_playlist_menu(track, button),
+                    lambda clicked: self._show_add_to_playlist_menu(track, clicked),
                 )
             elif name == "remove-from-playlist":
                 button.connect(
                     "clicked",
-                    lambda _button: self._activate_track_action(
+                    lambda _button, name=name: self._activate_track_action(
                         name,
                         track,
                         lambda: self._remove_track_from_playlist(track, playlist),
@@ -2053,7 +2114,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 direction = -1 if name == "move-up" else 1
                 button.connect(
                     "clicked",
-                    lambda _button, direction=direction: self._activate_track_action(
+                    lambda _button, name=name, direction=direction: self._activate_track_action(
                         name,
                         track,
                         lambda: self._move_playlist_track(playlist, track, direction),
@@ -2068,10 +2129,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 )
             menu_box.append(button)
 
-        popover.connect("closed", self._on_track_popover_closed)
-        parent.connect("notify::root", self._on_track_popover_parent_root_changed, popover)
-        self._track_popover = popover
+        popover.connect("closed", self._on_track_subpopover_closed)
+        self._track_subpopover = popover
         popover.popup()
+
+    def _on_track_subpopover_closed(self, popover):
+        if popover.get_parent() is not None:
+            popover.unparent()
+        if getattr(self, "_track_subpopover", None) is popover:
+            self._track_subpopover = None
 
     def _show_add_to_playlist_menu(self, track, anchor):
         parent = anchor.get_parent()
@@ -2083,15 +2149,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
         popover.set_autohide(True)
         popover.set_parent(anchor)
         popover.set_has_arrow(True)
+        popover.set_position(Gtk.PositionType.RIGHT)
         menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         menu_box.set_margin_top(6)
         menu_box.set_margin_bottom(6)
         menu_box.set_margin_start(6)
         menu_box.set_margin_end(6)
         popover.set_child(menu_box)
-        existing = {
-            playlist.id for playlist in self.database.playlists() if not playlist.is_favorites
-        }
         for playlist in self.database.playlists():
             if playlist.is_favorites:
                 continue
@@ -2102,8 +2166,6 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 lambda _button, pid=playlist.id: self._add_track_to_playlist(track, pid, popover),
             )
             menu_box.append(button)
-        if existing:
-            menu_box.append(Gtk.Separator())
         create = Gtk.Button(label="Create New Playlist", icon_name="list-add-symbolic")
         create.add_css_class("flat")
         create.connect(
@@ -2174,6 +2236,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         return True
 
     def _on_track_popover_closed(self, popover):
+        if getattr(self, "_track_subpopover", None) is not None:
+            self._track_subpopover.popdown()
         parent = popover.get_parent()
         if parent is not None:
             popover.unparent()
@@ -2958,7 +3022,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
         """Close custom context menus when the pointer leaves their bounds."""
         popovers = tuple(
             popover
-            for name in ("_track_popover", "_playlist_menu", "_playlist_popover")
+            for name in (
+                "_track_popover",
+                "_track_subpopover",
+                "_playlist_menu",
+                "_playlist_popover",
+            )
             if (popover := getattr(self, name, None)) is not None and popover.get_visible()
         )
         if not popovers:
