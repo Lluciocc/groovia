@@ -1161,6 +1161,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         point.height = 1
         popover = Gtk.Popover()
         popover.set_autohide(True)
+        popover.set_cascade_popdown(True)
         popover.set_parent(anchor)
         popover.set_pointing_to(point)
         menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -1959,6 +1960,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
         popover = Gtk.Popover()
         popover.set_autohide(True)
+        popover.set_cascade_popdown(True)
         popover.set_has_arrow(True)
         popover.set_parent(parent)
         popover.set_pointing_to(point)
@@ -2079,6 +2081,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         }
         popover = Gtk.Popover()
         popover.set_autohide(True)
+        popover.set_cascade_popdown(True)
         popover.set_has_arrow(True)
         popover.set_position(Gtk.PositionType.RIGHT)
         popover.set_parent(anchor)
@@ -2147,6 +2150,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._playlist_popover.popdown()
         popover = Gtk.Popover()
         popover.set_autohide(True)
+        popover.set_cascade_popdown(True)
         popover.set_parent(anchor)
         popover.set_has_arrow(True)
         popover.set_position(Gtk.PositionType.RIGHT)
@@ -3011,12 +3015,41 @@ class GrooviaWindow(Adw.ApplicationWindow):
         controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         controller.connect("key-pressed", self._global_key_pressed)
         self.add_controller(controller)
+        self.connect("notify::focus-widget", self._close_popovers_when_focus_leaves)
 
         click = Gtk.GestureClick()
         click.set_button(0)
         click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         click.connect("pressed", self._dismiss_popovers_on_click)
         self.add_controller(click)
+
+    def _close_popovers_when_focus_leaves(self, window, _pspec):
+        """Dismiss context popovers when focus moves back into the main window."""
+        popovers = tuple(
+            popover
+            for name in (
+                "_track_popover",
+                "_track_subpopover",
+                "_playlist_menu",
+                "_playlist_popover",
+            )
+            if (popover := getattr(self, name, None)) is not None and popover.get_visible()
+        )
+        if not popovers:
+            return
+
+        focus = window.get_focus()
+        if focus is None:
+            return
+        for popover in popovers:
+            widget = focus
+            while widget is not None and widget is not popover:
+                widget = widget.get_parent()
+            if widget is popover:
+                return
+
+        for popover in popovers:
+            popover.popdown()
 
     def _dismiss_popovers_on_click(self, _gesture, _n_press, x, y):
         """Close custom context menus when the pointer leaves their bounds."""
