@@ -152,35 +152,7 @@ class DownloadedTrackImporter:
                             existing.title,
                             "Reused from library",
                         )
-        # A sync can reuse an existing library track without producing a new
-        # audio file. Fetch the selected custom provider for those entries too.
-        if job and self.lyrics_service and self._uses_musixmatch(job):
-            for track in imported:
-                if not track.id:
-                    continue
-                if progress_callback:
-                    progress_callback(min(processed, total), total, track.title, "Lyrics")
-                variants = self.lyrics_service.find_variants(track)
-                modes = {self.lyrics_service._mode(timeline) for timeline, _row in variants}
-                if "word" not in modes:
-                    bundle = self.lyrics_service.fetch_musixmatch(track)
-                    if bundle:
-                        self.lyrics_counts["synced"] += 1
-                    else:
-                        self.lyrics_counts["failed"] += 1
         return imported
-
-    @staticmethod
-    def _uses_musixmatch(job) -> bool:
-        selected = job.lyrics_providers or (
-            "synced",
-            "genius",
-            "musixmatch",
-            "azlyrics",
-        )
-        return job.lyrics_mode != "none" and "musixmatch" in {
-            str(provider).lower() for provider in selected
-        }
 
     def _ingest_track_lyrics(
         self,
@@ -192,29 +164,19 @@ class DownloadedTrackImporter:
         current=0,
         total=0,
     ):
-        if job and job.lyrics_mode != "none" and progress_callback:
-            progress_callback(current, total, track.title, "Lyrics")
         self._ingest_lyrics(track, audio_path, job=job)
 
     def _ingest_lyrics(self, track, audio_path: Path, *, job=None):
         if not self.lyrics_service:
             return
-        if job and self._uses_musixmatch(job):
-            variants = self.lyrics_service.find_variants(track)
-            modes = {self.lyrics_service._mode(timeline) for timeline, _row in variants}
-            providers = {row.get("provider") for _timeline, row in variants}
-            if {"line", "word"}.issubset(modes) and "musixmatch" in providers:
-                return
-            bundle = self.lyrics_service.fetch_musixmatch(track)
-            if bundle:
-                self.lyrics_counts["synced"] += 1
         for candidate in (
             audio_path.with_suffix(".lrc"),
+            audio_path.with_suffix(".ttml"),
             audio_path.with_suffix(".txt"),
         ):
             if not candidate.is_file():
                 continue
-            timeline = self.lyrics_service.ingest_download(track, candidate)
+            timeline = self.lyrics_service.ingest_download(track, candidate, provider="external")
             if timeline:
                 self.lyrics_counts["synced" if timeline.synchronized else "plain"] += 1
             else:

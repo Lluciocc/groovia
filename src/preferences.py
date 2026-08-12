@@ -157,9 +157,42 @@ class PreferencesWindow(Adw.PreferencesWindow):
             title="Animations", subtitle="Respect the system reduced-motion preference"
         )
         settings.bind("animations", animations, "active", Gio.SettingsBindFlags.DEFAULT)
+        lyrics_wave = Adw.SwitchRow(
+            title="Lyrics wave",
+            subtitle="Apply the soft vertical emphasis wave to word-synced lyrics",
+        )
+        settings.bind("lyrics-wave", lyrics_wave, "active", Gio.SettingsBindFlags.DEFAULT)
+        lyrics_glow = Adw.SwitchRow(
+            title="Lyrics glow",
+            subtitle="Add a subtle light bloom around the current lyric position",
+        )
+        settings.bind("lyrics-glow", lyrics_glow, "active", Gio.SettingsBindFlags.DEFAULT)
+        lyrics_background = Adw.ComboRow(
+            title="Lyrics background",
+            subtitle="Choose animated Better Lyrics artwork or the album cover",
+        )
+        lyrics_background.set_model(
+            Gtk.StringList.new(["Animated artwork when available", "Album cover"])
+        )
+        background_values = ["animated", "cover"]
+        stored_background = settings.get_string("lyrics-artwork-preference")
+        lyrics_background.set_selected(
+            background_values.index(stored_background)
+            if stored_background in background_values
+            else 0
+        )
+        lyrics_background.connect(
+            "notify::selected",
+            lambda row, *_: settings.set_string(
+                "lyrics-artwork-preference", background_values[row.get_selected()]
+            ),
+        )
         visuals.add(dynamic)
         visuals.add(rotation)
         visuals.add(animations)
+        visuals.add(lyrics_wave)
+        visuals.add(lyrics_glow)
+        visuals.add(lyrics_background)
         interface.add(visuals)
         notifications = Adw.PreferencesGroup(title="Notifications")
         now_playing_notifications = Adw.SwitchRow(
@@ -337,20 +370,12 @@ class PreferencesWindow(Adw.PreferencesWindow):
             title="Lyrics",
             description="Synchronized lyrics are optional and may not be available for every track.",
         )
-        synced_lyrics = Adw.SwitchRow(title="Download synchronized lyrics")
-        settings.bind("lyrics-synced", synced_lyrics, "active", Gio.SettingsBindFlags.DEFAULT)
-        fallback_lyrics = Adw.SwitchRow(title="Download plain lyrics as fallback")
+        fallback_lyrics = Adw.SwitchRow(title="Use LRCLIB when Better Lyrics is unavailable")
         settings.bind("lyrics-fallback", fallback_lyrics, "active", Gio.SettingsBindFlags.DEFAULT)
-        generate_lrc = Adw.SwitchRow(title="Generate external .lrc files")
-        settings.bind("lyrics-generate-lrc", generate_lrc, "active", Gio.SettingsBindFlags.DEFAULT)
-        embed_plain = Adw.SwitchRow(title="Embed plain lyrics when supported")
-        settings.bind("lyrics-embed-plain", embed_plain, "active", Gio.SettingsBindFlags.DEFAULT)
         auto_missing = Adw.SwitchRow(title="Search automatically for missing lyrics")
         settings.bind("lyrics-auto-missing", auto_missing, "active", Gio.SettingsBindFlags.DEFAULT)
         preserve = Adw.SwitchRow(title="Keep manually edited lyrics")
         settings.bind("lyrics-preserve-edited", preserve, "active", Gio.SettingsBindFlags.DEFAULT)
-        remove_sync = Adw.SwitchRow(title="Remove lyrics during mirror synchronization")
-        settings.bind("lyrics-remove-sync", remove_sync, "active", Gio.SettingsBindFlags.DEFAULT)
         show_availability = Adw.SwitchRow(title="Show lyrics availability")
         settings.bind(
             "lyrics-show-availability",
@@ -358,22 +383,16 @@ class PreferencesWindow(Adw.PreferencesWindow):
             "active",
             Gio.SettingsBindFlags.DEFAULT,
         )
-        providers = Adw.EntryRow(title="Preferred providers")
-        providers.set_text(settings.get_string("lyrics-providers"))
-        providers.connect(
-            "changed",
-            lambda row: settings.set_string("lyrics-providers", row.get_text()),
+        provider_info = Adw.ActionRow(
+            title="Online lyrics providers",
+            subtitle="Better Lyrics (syllable sync) with LRCLIB as a fallback",
         )
         for row in (
-            synced_lyrics,
             fallback_lyrics,
-            generate_lrc,
-            embed_plain,
             auto_missing,
             preserve,
-            remove_sync,
             show_availability,
-            providers,
+            provider_info,
         ):
             lyrics_options.add(row)
         downloads.add(lyrics_options)

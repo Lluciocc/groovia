@@ -133,19 +133,6 @@ class LibraryDatabase:
             CREATE INDEX IF NOT EXISTS lyrics_track ON lyrics(track_id);
             CREATE INDEX IF NOT EXISTS lyrics_kind ON lyrics(track_id, kind);
             """)
-        job_columns = {
-            "lyrics_mode": "TEXT NOT NULL DEFAULT 'none'",
-            "lyrics_fallback": "INTEGER NOT NULL DEFAULT 1",
-            "generate_lrc": "INTEGER NOT NULL DEFAULT 0",
-            "lyrics_providers": "TEXT",
-            "sync_remove_lrc": "INTEGER NOT NULL DEFAULT 0",
-        }
-        existing_jobs = {
-            row[1] for row in self.connection.execute("PRAGMA table_info(download_jobs)")
-        }
-        for name, definition in job_columns.items():
-            if name not in existing_jobs:
-                self.connection.execute(f"ALTER TABLE download_jobs ADD COLUMN {name} {definition}")
 
     @staticmethod
     def _playlist(row: sqlite3.Row) -> Playlist:
@@ -425,20 +412,12 @@ class LibraryDatabase:
         destination: str | None = None,
         error: str | None = None,
         completed_at: str | None = None,
-        lyrics_mode: str = "none",
-        lyrics_fallback: bool = True,
-        generate_lrc: bool = False,
-        lyrics_providers: str | None = None,
-        sync_remove_lrc: bool = False,
     ) -> None:
         self.connection.execute(
-            """INSERT INTO download_jobs(id, job_type, source, state, progress, destination, error, completed_at,
-               lyrics_mode, lyrics_fallback, generate_lrc, lyrics_providers, sync_remove_lrc)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,
+            """INSERT INTO download_jobs(id, job_type, source, state, progress, destination, error, completed_at)
+               VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,
                progress=excluded.progress, destination=excluded.destination, error=excluded.error,
-               completed_at=excluded.completed_at, lyrics_mode=excluded.lyrics_mode,
-               lyrics_fallback=excluded.lyrics_fallback, generate_lrc=excluded.generate_lrc,
-               lyrics_providers=excluded.lyrics_providers, sync_remove_lrc=excluded.sync_remove_lrc""",
+               completed_at=excluded.completed_at""",
             (
                 job_id,
                 job_type,
@@ -448,11 +427,6 @@ class LibraryDatabase:
                 destination,
                 error,
                 completed_at,
-                lyrics_mode,
-                int(lyrics_fallback),
-                int(generate_lrc),
-                lyrics_providers,
-                int(sync_remove_lrc),
             ),
         )
         self.connection.commit()

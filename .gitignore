@@ -45,7 +45,8 @@ Thumbs.db
 install
 pip
 dist/
-tests
+tests/*
+!tests/test_lyrics_better.py
 build-check
 .mypycache/
 .mypy_cache/

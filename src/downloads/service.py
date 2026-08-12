@@ -80,11 +80,6 @@ class SpotDLService:
         bitrate: str = "auto",
         cover_policy: str = "follow",
         order_policy: str = "spotify",
-        lyrics_mode: str = "none",
-        lyrics_fallback: bool = True,
-        generate_lrc: bool = False,
-        lyrics_providers: tuple[str, ...] = (),
-        sync_remove_lrc: bool = False,
     ):
         info = self.classify(value)
         if info.kind == "invalid":
@@ -202,11 +197,6 @@ class SpotDLService:
             output_format=output_format,
             bitrate=bitrate,
             playlist_id=playlist.id if playlist else playlist_id,
-            lyrics_mode=lyrics_mode,
-            lyrics_fallback=lyrics_fallback,
-            generate_lrc=generate_lrc,
-            lyrics_providers=lyrics_providers,
-            sync_remove_lrc=sync_remove_lrc,
         )
         self._contexts[job.id] = context
         return job
@@ -217,11 +207,6 @@ class SpotDLService:
         sync_mode: str | None = None,
         output_format: str = "mp3",
         bitrate: str = "auto",
-        lyrics_mode: str = "none",
-        lyrics_fallback: bool = True,
-        generate_lrc: bool = False,
-        lyrics_providers: tuple[str, ...] = (),
-        sync_remove_lrc: bool = False,
     ):
         playlist = self.database.playlist(playlist_id)
         if not playlist or not playlist.sync_file:
@@ -258,11 +243,6 @@ class SpotDLService:
             output_format=output_format,
             bitrate=bitrate,
             playlist_id=playlist.id,
-            lyrics_mode=lyrics_mode,
-            lyrics_fallback=lyrics_fallback,
-            generate_lrc=generate_lrc,
-            lyrics_providers=lyrics_providers,
-            sync_remove_lrc=sync_remove_lrc,
         )
         self._contexts[job.id] = {
             "playlist": playlist,
@@ -277,11 +257,7 @@ class SpotDLService:
         )
 
     def find_lyrics(self, track, *, providers: tuple[str, ...] = (), fallback: bool = True):
-        """Find lyrics asynchronously, including for locally imported tracks."""
-        source = f"https://open.spotify.com/track/{track.spotify_id}" if track.spotify_id else None
-        destination = Path(track.path).parent
-        selected = tuple(providers or ("synced", "genius", "musixmatch", "azlyrics"))
-        selected_lower = {provider.lower() for provider in selected}
+        """Find lyrics asynchronously from metadata, independent of spotDL."""
 
         def completed(bundle):
             GLib.idle_add(
@@ -303,69 +279,21 @@ class SpotDLService:
                 {"track": track, "error": message},
             )
 
-        # The custom Musixmatch client can spend a long time refreshing a
-        # rate-limited token.  Local imports have no Spotify source to fall
-        # back to, so try the fast title-based LRCLIB lookup first for them.
-        if "musixmatch" in selected_lower and source:
-
-            def worker():
-                bundle = self.lyrics.fetch_musixmatch(track)
-                if bundle:
-                    completed(bundle)
-                    if fallback and source:
-                        self._submit_lyrics_fallback(track, source, destination, selected)
-                    return
-                if "synced" in selected_lower or fallback:
-                    bundle = self.lyrics.fetch_lrclib(track)
-                    if bundle:
-                        completed(bundle)
-                        return
-                if fallback and source:
-                    self._submit_lyrics_fallback(track, source, destination, selected)
-                else:
-                    failed("No lyrics found online.")
-
-            threading.Thread(target=worker, daemon=True, name="groovia-musixmatch-lyrics").start()
-            # Keep the public contract truthy so batch callers can report that
-            # a search was queued even though no spotDL job exists yet.
-            return True
-
         def worker():
-            if "synced" in selected_lower or fallback:
+            bundle = self.lyrics.fetch_better_lyrics(track)
+            if not bundle and fallback:
                 bundle = self.lyrics.fetch_lrclib(track)
-                if bundle:
-                    completed(bundle)
-                    return
-            if "musixmatch" in selected_lower:
-                bundle = self.lyrics.fetch_musixmatch(track)
-                if bundle:
-                    completed(bundle)
-                    return
-            if fallback and source:
-                self._submit_lyrics_fallback(track, source, destination, selected)
+            if bundle:
+                completed(bundle)
             else:
                 failed("No lyrics found online.")
 
-        threading.Thread(target=worker, daemon=True, name="groovia-lrclib-lyrics").start()
+        threading.Thread(target=worker, daemon=True, name="groovia-better-lyrics").start()
         return True
 
-    def _submit_lyrics_fallback(self, track, source, destination, selected):
-        providers = tuple(
-            provider for provider in selected if provider.lower() != "musixmatch"
-        ) or ("synced", "genius", "azlyrics")
-        job = self.manager.submit(
-            "lyrics",
-            source,
-            destination,
-            sync_mode="safe",
-            output_format="mp3",
-            bitrate="auto",
-            lyrics_mode="synced",
-            lyrics_fallback=True,
-            generate_lrc=True,
-            lyrics_providers=providers,
-        )
-        self._contexts[job.id] = {"track": track}
+    def enrich_tracks_async(self, tracks) -> int:
+        """Enrich already-imported tracks using the shared lyrics pipeline."""
+        return self.lyrics.enrich_tracks_async(tracks, callback=self._enrichment_finished)
 
     def _unique_name(self, base: str) -> str:
         names = {item.name for item in self.database.playlists()}
@@ -377,27 +305,6 @@ class SpotDLService:
         return name
 
     def _manager_event(self, event, job, payload):
-        if job and job.job_type == "lyrics" and event == "finished":
-            context = self._contexts.get(job.id, {})
-            track = context.get("track")
-            lrc_path = Path(track.path).with_suffix(".lrc") if track else None
-            timeline = (
-                self.lyrics.ingest_download(track, lrc_path)
-                if track and lrc_path and lrc_path.exists()
-                else None
-            )
-            self._emit("lyrics-completed", job, {"track": track, "timeline": timeline})
-            return
-        if job and job.job_type == "lyrics" and event in {"failed", "cancelled"}:
-            self._emit(
-                "lyrics-failed",
-                job,
-                {
-                    "track": self._contexts.get(job.id, {}).get("track"),
-                    "error": job.error or event,
-                },
-            )
-            return
         if event == "finished":
             self.importer.import_async(job, payload)
         elif event in {"failed", "cancelled"}:
@@ -423,6 +330,11 @@ class SpotDLService:
         context = self._contexts.get(job.id, {})
         playlist = context.get("playlist")
         tracks = payload.get("tracks", [])
+        # ``tracks`` are returned only after the importer has read the final
+        # audio metadata and persisted each Track.  Start optional enrichment
+        # here so Better Lyrics sees the authoritative title/artist/album and
+        # duration, including every track in a playlist or sync batch.
+        self.lyrics.enrich_tracks_async(tracks, callback=self._enrichment_finished)
         if playlist:
             metadata = payload.get("metadata", [])
             cover_path = payload.get("cover_path")
@@ -473,13 +385,6 @@ class SpotDLService:
                     else (job.error or "partial failure")
                 ),
             )
-            if (
-                job.state == "finished"
-                and job.job_type == "sync"
-                and job.sync_mode == "mirror"
-                and job.sync_remove_lrc
-            ):
-                self.lyrics.cleanup_missing_managed(job.destination)
         terminal_event = (
             "completed"
             if job.state == "finished"
@@ -494,6 +399,20 @@ class SpotDLService:
                 "metadata": payload.get("metadata", []),
                 "count": len(tracks),
                 "lyrics_counts": payload.get("lyrics_counts", {}),
+            },
+        )
+
+    def _enrichment_finished(self, result):
+        """Forward worker completion to the GTK-facing download callback."""
+        GLib.idle_add(
+            self._emit,
+            "lyrics-enriched",
+            None,
+            {
+                "track": result.track,
+                "bundle": result.bundle,
+                "artwork": result.artwork,
+                "error": result.error,
             },
         )
 

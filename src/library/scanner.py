@@ -56,7 +56,10 @@ class LibraryScanner:
                 GLib.idle_add(callback, "progress", index, total)
             if tracks:
                 self.database.upsert_tracks(tracks)
-            GLib.idle_add(callback, "finished", len(tracks), total)
+            # Resolve the rows again so enrichment receives the final
+            # persisted metadata/id, just like the download importer does.
+            stored_tracks = [self.database.track_by_path(track.path) or track for track in tracks]
+            GLib.idle_add(callback, "finished", len(tracks), total, stored_tracks)
 
         threading.Thread(target=worker, daemon=True, name="library-scan").start()
 

@@ -17,15 +17,17 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from .parser import LyricsLine, LyricsTimeline, LyricsWord, parse_lrc, parse_lyrics
-from .service import LyricsBundle, LyricsService
+from .parser import LyricsLine, LyricsTimeline, LyricsWord, parse_lrc, parse_lyrics, parse_ttml
+from .service import LyricsBundle, LyricsEnrichment, LyricsService
 
 __all__ = [
     "LyricsLine",
     "LyricsTimeline",
     "LyricsWord",
     "LyricsBundle",
+    "LyricsEnrichment",
     "LyricsService",
     "parse_lyrics",
     "parse_lrc",
+    "parse_ttml",
 ]

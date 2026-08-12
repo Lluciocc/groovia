@@ -50,9 +50,9 @@ Music/Groovia/Synced Playlists
 
 Lyrics are optional.
 
-When enabled, spotDL receives the configured `--lyrics` providers and
-generates local `.lrc` files when the installed version supports
-`--generate-lrc`.
+spotDL is used only for audio download and playlist synchronization. Lyrics
+are fetched independently from track metadata, with Better Lyrics as the
+primary online provider and LRCLIB as the fallback.
 
 Groovia keeps lyrics mappings in SQLite.
 

@@ -59,11 +59,6 @@ class DownloadJob:
     total: int = 0
     failed: int = 0
     phase: str = "queued"
-    lyrics_mode: str = "none"
-    lyrics_fallback: bool = True
-    generate_lrc: bool = False
-    lyrics_providers: tuple[str, ...] = ()
-    sync_remove_lrc: bool = False
     created_at: float = field(default_factory=time.time)
     process: subprocess.Popen | None = field(default=None, repr=False)
     cancel_requested: bool = field(default=False, repr=False)
@@ -103,7 +98,6 @@ class ProgressParser:
             ("tagging", "Writing metadata"),
             ("converting", "Converting audio"),
             ("processing", "Processing audio"),
-            ("lyrics", "Finding lyrics"),
             ("downloading", "Downloading audio"),
             ("searching", "Searching for a match"),
             ("matching", "Matching audio"),
@@ -129,9 +123,6 @@ class ProgressParser:
         if "failed" in data.get("phase", "").lower():
             data["failed"] = 1
         return data
-
-
-LYRICS_PROVIDERS = {"synced", "genius", "azlyrics"}
 
 
 class DownloadManager:
@@ -163,11 +154,6 @@ class DownloadManager:
                         previous["progress"],
                         previous["destination"],
                         "Groovia closed while this job was running",
-                        lyrics_mode=previous.get("lyrics_mode", "none"),
-                        lyrics_fallback=bool(previous.get("lyrics_fallback", 1)),
-                        generate_lrc=bool(previous.get("generate_lrc", 0)),
-                        lyrics_providers=previous.get("lyrics_providers"),
-                        sync_remove_lrc=bool(previous.get("sync_remove_lrc", 0)),
                     )
 
     @property
@@ -187,11 +173,6 @@ class DownloadManager:
         output_format: str = "mp3",
         bitrate: str = "auto",
         playlist_id: int | None = None,
-        lyrics_mode: str = "none",
-        lyrics_fallback: bool = True,
-        generate_lrc: bool = False,
-        lyrics_providers: tuple[str, ...] = (),
-        sync_remove_lrc: bool = False,
     ) -> DownloadJob:
         job = DownloadJob(
             id=uuid.uuid4().hex,
@@ -203,13 +184,8 @@ class DownloadManager:
             output_format=output_format,
             bitrate=bitrate,
             playlist_id=playlist_id,
-            lyrics_mode=lyrics_mode,
-            lyrics_fallback=lyrics_fallback,
-            generate_lrc=generate_lrc,
-            lyrics_providers=tuple(lyrics_providers),
-            sync_remove_lrc=sync_remove_lrc,
         )
-        if job_type in {"track", "lyrics"}:
+        if job_type == "track":
             # A single-track job has a known total even when spotDL does not
             # print a 1/1 counter.
             job.total = 1
@@ -254,11 +230,6 @@ class DownloadManager:
             old.output_format,
             old.bitrate,
             old.playlist_id,
-            old.lyrics_mode,
-            old.lyrics_fallback,
-            old.generate_lrc,
-            old.lyrics_providers,
-            old.sync_remove_lrc,
         )
 
     def _start_next(self):
@@ -313,42 +284,6 @@ class DownloadManager:
             ffmpeg = bundled_tool_path("ffmpeg")
             if ffmpeg:
                 args.extend(["--ffmpeg", str(ffmpeg)])
-        if job.lyrics_mode != "none" and "--lyrics" in supported:
-            selected = tuple(
-                provider.lower()
-                for provider in (
-                    job.lyrics_providers or ("synced", "genius", "musixmatch", "azlyrics")
-                )
-            )
-            # Musixmatch is handled by Groovia's custom richsync client. Never
-            # pass it to spotDL: doing so would select the old API path and
-            # reintroduce the HTTP 401 failures this backend avoids.
-            providers = [
-                provider
-                for provider in selected
-                if provider in LYRICS_PROVIDERS and provider != "musixmatch"
-            ]
-            if not providers and job.lyrics_fallback:
-                providers = ["synced", "genius", "azlyrics"]
-            if job.lyrics_mode != "synced":
-                providers = [provider for provider in providers if provider != "synced"]
-                if not providers and job.lyrics_fallback:
-                    providers = ["genius", "azlyrics"]
-            if job.lyrics_fallback:
-                providers.extend(
-                    provider for provider in ("genius", "azlyrics") if provider not in providers
-                )
-            if providers:
-                args.extend(["--lyrics", *providers])
-                if job.generate_lrc and "--generate-lrc" in supported and "synced" in providers:
-                    args.append("--generate-lrc")
-        if (
-            job.job_type == "sync"
-            and job.sync_mode == "mirror"
-            and job.sync_remove_lrc
-            and "--sync-remove-lrc" in supported
-        ):
-            args.append("--sync-remove-lrc")
         return args
 
     @staticmethod
@@ -517,11 +452,6 @@ class DownloadManager:
                     if state in {"finished", "failed", "cancelled"}
                     else None
                 ),
-                job.lyrics_mode,
-                job.lyrics_fallback,
-                job.generate_lrc,
-                ",".join(job.lyrics_providers),
-                job.sync_remove_lrc,
             )
         if not self.callback:
             return
