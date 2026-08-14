@@ -386,9 +386,6 @@ class GrooviaWindow(Adw.ApplicationWindow):
         brand = Gtk.Label(label="Groovia")
         brand.add_css_class("title-2")
         header.set_title_widget(brand)
-        header.pack_end(
-            icon_button("view-list-symbolic", "Queue", lambda *_: self._show_page("queue"))
-        )
         menu = Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text="Main Menu")
         menu.set_menu_model(self._menu_model())
         header.pack_end(menu)
