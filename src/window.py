@@ -80,6 +80,13 @@ button.favorite-active { color: #f6d32d; }
 .download-workflow { padding: 9px 12px; border-radius: 10px; background: alpha(@window_fg_color, .06); }
 .download-phase { font-weight: 700; }
 .download-current { color: alpha(@window_fg_color, .72); }
+.song-info-hero { background: @card_bg_color; border-radius: 18px; padding: 18px; }
+.song-info-card { background: alpha(@window_fg_color, .055); border-radius: 14px; padding: 4px 14px; }
+.song-info-row { min-height: 38px; padding: 7px 0; }
+.song-info-key { color: alpha(@window_fg_color, .58); font-size: 12px; font-weight: 700; }
+.song-info-value { color: @window_fg_color; }
+.song-info-duration { background: alpha(@accent_color, .16); color: @accent_color; border-radius: 99px; padding: 4px 10px; font-weight: 700; }
+.song-info-path { background: alpha(@window_fg_color, .045); border-radius: 10px; padding: 10px 12px; font-family: monospace; color: alpha(@window_fg_color, .72); }
 .queue-badge { background: #ff725e; color: white; border-radius: 99px; padding: 2px 7px; }
 .auto-dj-badge { background: alpha(@accent_color, .18); color: @accent_color; border-radius: 99px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
 .empty-state { padding: 80px 24px; }
@@ -2730,49 +2737,131 @@ class GrooviaWindow(Adw.ApplicationWindow):
         LOGGER.info("song information requested track=%r path=%r", track.title, track.path)
         dialog = Gtk.Dialog(title="Song Information", transient_for=self, modal=True)
         dialog.add_button("Close", Gtk.ResponseType.CLOSE)
-        dialog.set_default_size(520, 480)
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        content.set_margin_top(18)
-        content.set_margin_bottom(18)
-        content.set_margin_start(18)
-        content.set_margin_end(18)
-        cover = cover_widget(track.cover_path, 180)
-        cover.set_halign(Gtk.Align.CENTER)
-        cover.set_margin_bottom(10)
-        content.append(cover)
+        dialog.set_default_size(660, 640)
+
+        scroll = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        content.set_margin_top(24)
+        content.set_margin_bottom(24)
+        content.set_margin_start(24)
+        content.set_margin_end(24)
+        scroll.set_child(content)
+
+        hero = Gtk.Box(spacing=20, css_classes=["song-info-hero"])
+        cover = cover_widget(track.cover_path, 156)
+        cover.set_valign(Gtk.Align.CENTER)
+        hero.append(cover)
+        identity = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=6,
+            valign=Gtk.Align.CENTER,
+            hexpand=True,
+        )
+        identity.append(Gtk.Label(label="SONG", xalign=0, css_classes=["eyebrow"]))
+        identity.append(
+            Gtk.Label(
+                label=track.title or "Unknown title",
+                xalign=0,
+                wrap=True,
+                css_classes=["hero-title"],
+            )
+        )
+        identity.append(
+            Gtk.Label(
+                label=track.artist or "Unknown artist",
+                xalign=0,
+                wrap=True,
+                css_classes=["title-3"],
+            )
+        )
+        identity.append(
+            Gtk.Label(
+                label=track.album or "Unknown album",
+                xalign=0,
+                wrap=True,
+                css_classes=["muted"],
+            )
+        )
+        duration = Gtk.Label(
+            label=track.duration_label,
+            halign=Gtk.Align.START,
+            css_classes=["song-info-duration"],
+        )
+        identity.append(duration)
+        hero.append(identity)
+        content.append(hero)
+
         technical = (
             self.scanner.inspect_track(track.path)
             if not track.path.startswith(("http://", "https://"))
             else {}
         )
-        for label, value in (
-            ("Title", track.title),
-            ("Artist", track.artist),
-            ("Album", track.album),
-            ("Album artist", track.album_artist),
-            ("Year", track.year),
-            ("Genre", track.genre),
-            ("Track", str(track.track_number)),
-            ("Duration", track.duration_label),
-            ("Codec", technical.get("codec", "Unknown")),
-            ("Bitrate", technical.get("bitrate", "Unknown")),
-            ("Sample rate", technical.get("sample_rate", "Unknown")),
-            ("Channels", technical.get("channels", "Unknown")),
-            ("File", track.path),
-        ):
-            line = Gtk.Box(spacing=12)
-            line.append(Gtk.Label(label=f"{label}:", xalign=0, css_classes=["muted"]))
-            line.append(
-                Gtk.Label(
-                    label=value or "—",
+
+        def append_section(title, rows):
+            group = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            group.append(Gtk.Label(label=title, xalign=0, css_classes=["section-title"]))
+            card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=["song-info-card"])
+            for index, (label, value) in enumerate(rows):
+                if index:
+                    card.append(Gtk.Separator())
+                row = Gtk.Box(spacing=16, css_classes=["song-info-row"])
+                key = Gtk.Label(
+                    label=label.upper(),
                     xalign=0,
-                    wrap=True,
-                    selectable=True,
-                    hexpand=True,
+                    valign=Gtk.Align.CENTER,
+                    width_chars=14,
+                    css_classes=["song-info-key"],
                 )
+                row.append(key)
+                row.append(
+                    Gtk.Label(
+                        label=str(value or "—"),
+                        xalign=0,
+                        valign=Gtk.Align.CENTER,
+                        wrap=True,
+                        selectable=True,
+                        hexpand=True,
+                        css_classes=["song-info-value"],
+                    )
+                )
+                card.append(row)
+            group.append(card)
+            content.append(group)
+
+        append_section(
+            "Music",
+            (
+                ("Album artist", track.album_artist),
+                ("Year", track.year),
+                ("Genre", track.genre),
+                ("Track", track.track_number or "—"),
+                ("Disc", track.disc_number or "—"),
+            ),
+        )
+        append_section(
+            "Audio",
+            (
+                ("Codec", technical.get("codec", "Unknown")),
+                ("Bitrate", technical.get("bitrate", "Unknown")),
+                ("Sample rate", technical.get("sample_rate", "Unknown")),
+                ("Channels", technical.get("channels", "Unknown")),
+            ),
+        )
+
+        file_group = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        file_group.append(Gtk.Label(label="File", xalign=0, css_classes=["section-title"]))
+        file_group.append(
+            Gtk.Label(
+                label=track.path or "—",
+                xalign=0,
+                wrap=True,
+                selectable=True,
+                css_classes=["song-info-path"],
             )
-            content.append(line)
-        dialog.get_content_area().append(content)
+        )
+        content.append(file_group)
+
+        dialog.get_content_area().append(scroll)
         dialog.connect("response", lambda current, *_: current.close())
         dialog.present()
 
