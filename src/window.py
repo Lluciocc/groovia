@@ -320,7 +320,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._palette_animation = GLib.timeout_add(16, self._animate_palette)
 
     def _animate_palette(self):
-        progress = min(1.0, (time.monotonic() - self._palette_started_at) / 0.72)
+        progress = min(1.0, (time.monotonic() - self._palette_started_at) / 1.0)
         accent = mix(self._palette_start[0], self._palette_target[0], progress)
         background = mix(self._palette_start[1], self._palette_target[1], progress)
         self._palette = (accent, background)
@@ -785,8 +785,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
             track.title, track.artist, getattr(track, "album", "") or ""
         )
         if cached:
-            if background is getattr(self, "_lyrics_fullscreen_background", None):
+            if background == getattr(self, "_lyrics_fullscreen_background", None):
                 self._set_fullscreen_lyrics_artwork(str(cached))
+            elif background == getattr(self, "_lyrics_widgets", {}).get("background"):
+                self._set_lyrics_artwork(background, str(cached))
             else:
                 background.set_filename(str(cached))
             return
@@ -808,8 +810,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if not self._prefers_lyrics_artwork():
             return GLib.SOURCE_REMOVE
         try:
-            if background is getattr(self, "_lyrics_fullscreen_background", None):
+            if background == getattr(self, "_lyrics_fullscreen_background", None):
                 self._set_fullscreen_lyrics_artwork(str(path))
+            elif background == getattr(self, "_lyrics_widgets", {}).get("background"):
+                self._set_lyrics_artwork(background, str(path))
             else:
                 background.set_filename(str(path))
         except (GLib.Error, OSError):
@@ -828,10 +832,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         widgets = self._lyrics_widgets
         same_track = getattr(self, "_lyrics_track", None) is track
         preferred_mode = widgets["view"].mode if same_track else "line"
-        if track.cover_path and Path(track.cover_path).is_file():
-            widgets["background"].set_filename(track.cover_path)
-        else:
-            widgets["background"].set_filename(None)
+        self._set_lyrics_artwork(
+            widgets["background"],
+            track.cover_path if track.cover_path and Path(track.cover_path).is_file() else None,
+        )
         self._request_lyrics_artwork(track, widgets["background"], generation)
         widgets["title"].set_label(track.title)
         widgets["subtitle"].set_label(f"{track.artist} · {track.album}")
@@ -1060,6 +1064,30 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         self._set_fullscreen_lyrics_artwork(cover_path)
 
+    def _set_lyrics_artwork(self, background, path):
+        """Fade in a new artwork on the regular lyrics page."""
+        path = str(path) if path else None
+        if path == getattr(self, "_lyrics_background_path", None):
+            return
+        self._lyrics_background_path = path
+        if getattr(self, "_lyrics_background_animation", None):
+            self._lyrics_background_animation.skip()
+        background.set_filename(path)
+        background.set_opacity(0.0)
+
+        def update(value):
+            background.set_opacity(float(value) * 0.12)
+            if value >= 0.999:
+                background.set_opacity(0.12)
+                self._lyrics_background_animation = None
+
+        animation = Adw.TimedAnimation.new(
+            self, 0.0, 1.0, 800, Adw.CallbackAnimationTarget.new(update)
+        )
+        animation.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
+        self._lyrics_background_animation = animation
+        animation.play()
+
     def _set_fullscreen_lyrics_artwork(self, path):
         """Crossfade fullscreen lyrics artwork instead of replacing it abruptly."""
         background = getattr(self, "_lyrics_fullscreen_background", None)
@@ -1070,41 +1098,22 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return
         self._lyrics_fullscreen_cover_path = path
 
-        gtk_settings = Gtk.Settings.get_default()
-        animate = bool(
-            gtk_settings is None or gtk_settings.get_property("gtk-enable-animations")
-        ) and (not self._settings or self._settings.get_boolean("animations"))
-        if not animate:
-            background.set_filename(path)
-            background.set_opacity(0.22)
-            return
-
         if getattr(self, "_lyrics_fullscreen_cover_animation", None):
-            self._lyrics_fullscreen_cover_animation.skip()
+            GLib.source_remove(self._lyrics_fullscreen_cover_animation)
+        background.set_filename(path)
+        background.set_opacity(0.0)
+        started_at = time.monotonic()
 
-        token = object()
-        self._lyrics_fullscreen_cover_animation_token = token
-        swapped = {"done": False}
-
-        def update(value):
-            if token is not getattr(self, "_lyrics_fullscreen_cover_animation_token", None):
-                return
-            progress = float(value)
-            if progress >= 0.5 and not swapped["done"]:
-                swapped["done"] = True
-                background.set_filename(path)
-            opacity = abs(progress * 2.0 - 1.0) * 0.22
-            background.set_opacity(opacity)
+        def update():
+            progress = min(1.0, (time.monotonic() - started_at) / 1.1)
+            background.set_opacity(progress * 0.22)
             if progress >= 0.999:
                 background.set_opacity(0.22)
                 self._lyrics_fullscreen_cover_animation = None
+                return GLib.SOURCE_REMOVE
+            return GLib.SOURCE_CONTINUE
 
-        animation = Adw.TimedAnimation.new(
-            self, 0.0, 1.0, 480, Adw.CallbackAnimationTarget.new(update)
-        )
-        animation.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
-        self._lyrics_fullscreen_cover_animation = animation
-        animation.play()
+        self._lyrics_fullscreen_cover_animation = GLib.timeout_add(16, update)
 
     def _playlist_page(self, playlist_id: int):
         root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
@@ -3047,18 +3056,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return
         old_cover = self.mini_cover
         new_cover = cover_widget(cover_path, 50)
-        gtk_settings = Gtk.Settings.get_default()
-        auto_dj_animation = (
-            not self._auto_dj_enabled
-            or not self._settings
-            or self._settings.get_boolean("auto-dj-artwork-animation")
-        )
-        animate = (
-            auto_dj_animation
-            and bool(gtk_settings is None or gtk_settings.get_property("gtk-enable-animations"))
-            and (not self._settings or self._settings.get_boolean("animations"))
-        )
-        if not animate or old_cover is None or old_cover.get_parent() is not slot:
+        if old_cover is None or old_cover.get_parent() != slot:
             slot.set_child(new_cover)
             self.mini_cover = new_cover
             return
@@ -3080,7 +3078,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 self._cover_transition_animation = None
 
         animation = Adw.TimedAnimation.new(
-            self, 0.0, 1.0, 420, Adw.CallbackAnimationTarget.new(update)
+            self, 0.0, 1.0, 750, Adw.CallbackAnimationTarget.new(update)
         )
         animation.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
         self._cover_transition_animation = animation

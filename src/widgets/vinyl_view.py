@@ -44,6 +44,8 @@ class VinylView(Gtk.DrawingArea):
         self.set_content_height(540)
         self.set_draw_func(self._draw)
         self.cover = None
+        self._previous_cover = None
+        self._cover_transition = 1.0
         self.angle = 0.0
         self._rotation_angle = 0.0
         self.progress = 0.0
@@ -79,13 +81,17 @@ class VinylView(Gtk.DrawingArea):
         self.add_controller(scroll)
 
     def set_cover(self, path):
-        self.cover = None
+        previous = self.cover
+        cover = None
         if path:
             try:
                 # Load once at a bounded size; never paint a full-resolution cover per frame.
-                self.cover = load_scaled_pixbuf(path, 512, 512)
+                cover = load_scaled_pixbuf(path, 512, 512)
             except Exception:
                 pass
+        self._previous_cover = previous if previous is not None and cover is not None else None
+        self.cover = cover
+        self._cover_transition = 0.0 if self._previous_cover is not None else 1.0
         self.queue_draw()
 
     def set_playing(self, playing):
@@ -175,7 +181,15 @@ class VinylView(Gtk.DrawingArea):
         self.arm_progress += (self.progress - self.arm_progress) * min(1.0, delta * 4.5)
         self._rotation_angle += delta * self.rotation_velocity
         self.angle = self._rotation_angle
-        if self.rotation_velocity > 0.002 or abs(self.arm_progress - self.progress) > 0.001:
+        if self._cover_transition < 1.0:
+            self._cover_transition = min(1.0, self._cover_transition + delta / 0.9)
+            if self._cover_transition >= 1.0:
+                self._previous_cover = None
+        if (
+            self.rotation_velocity > 0.002
+            or abs(self.arm_progress - self.progress) > 0.001
+            or self._cover_transition < 1.0
+        ):
             self.queue_draw()
         return True
 
@@ -204,8 +218,10 @@ class VinylView(Gtk.DrawingArea):
         cr.set_source_rgb(*self.accent)
         cr.arc(0, 0, label, 0, math.tau)
         cr.fill()
+        if self._previous_cover:
+            self._paint_cover(cr, label, self._previous_cover, 1.0 - self._cover_transition)
         if self.cover:
-            self._paint_cover(cr, label)
+            self._paint_cover(cr, label, self.cover, self._cover_transition)
         cr.set_source_rgb(0.055, 0.055, 0.065)
         cr.arc(0, 0, 7, 0, math.tau)
         cr.fill()
@@ -273,7 +289,7 @@ class VinylView(Gtk.DrawingArea):
 
         self._draw_tonearm(cr, cx, cy, radius)
 
-    def _paint_cover(self, cr, label):
+    def _paint_cover(self, cr, label, cover, opacity=1.0):
         try:
             diameter = (label - 3) * 2
             cr.save()
@@ -281,9 +297,9 @@ class VinylView(Gtk.DrawingArea):
             cr.clip()
             # Draw the already bounded Pixbuf into the exact label diameter.
             cr.translate(-diameter / 2, -diameter / 2)
-            cr.scale(diameter / self.cover.get_width(), diameter / self.cover.get_height())
-            Gdk.cairo_set_source_pixbuf(cr, self.cover, 0, 0)
-            cr.paint()
+            cr.scale(diameter / cover.get_width(), diameter / cover.get_height())
+            Gdk.cairo_set_source_pixbuf(cr, cover, 0, 0)
+            cr.paint_with_alpha(opacity)
             cr.restore()
         except Exception:
             pass
