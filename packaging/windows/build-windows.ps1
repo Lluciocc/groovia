@@ -158,6 +158,10 @@ foreach ($IconName in @("io.github.Lluciocc.Groovia", "io.github.Lluciocc.Groovi
     if (-not $Match) {
         throw "Groovia application icon is absent from the packaged hicolor theme: $IconName"
     }
+    $Match = Get-ChildItem -LiteralPath $AdwaitaIconRoot -Recurse -File | Where-Object { $_.BaseName -eq $IconName } | Select-Object -First 1
+    if (-not $Match) {
+        throw "Groovia application icon is absent from the packaged Adwaita theme: $IconName"
+    }
 }
 Write-Host "Validated Adwaita and hicolor icon themes ($($RequiredIconNames.Count) standard icons plus Groovia icons)"
 
