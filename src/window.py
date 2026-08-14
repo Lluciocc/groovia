@@ -3471,11 +3471,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._download_current = current
         self._download_log = log_view.get_buffer()
         for tag_name, color in (
-            ("step", "#62b0ff"),
-            ("success", "#70d890"),
-            ("warning", "#f6c85f"),
-            ("error", "#ff7b72"),
-            ("detail", "#a9a9b5"),
+            ("step", "#8ab4f8"),
+            ("success", "#81c995"),
+            ("warning", "#fdd663"),
+            ("error", "#f28b82"),
+            ("detail", "#b6b6c2"),
         ):
             self._download_log.create_tag(tag_name, foreground=color)
         self._download_sync = sync

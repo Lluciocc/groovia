@@ -13,6 +13,14 @@ _LEVEL_COLORS = {
     logging.ERROR: "\033[31m",
     logging.CRITICAL: "\033[1;31m",
 }
+_LOGGER_COLORS = {
+    "Groovia runtime": "\033[90m",
+    "Groovia window": "\033[94m",
+    "Groovia audio": "\033[95m",
+    "Groovia Auto DJ": "\033[92m",
+    "Groovia spotDL": "\033[93m",
+    "Groovia visuals": "\033[96m",
+}
 
 
 # This is a workaround for Windows, where the console does not support
@@ -42,8 +50,15 @@ class ConsoleFormatter(logging.Formatter):
         message = super().format(record)
         if not self.use_color:
             return message
-        color = _LEVEL_COLORS.get(record.levelno, "")
-        return f"{color}{message}{_RESET}" if color else message
+        prefix = f"[{self.label}]"
+        prefix_color = (
+            _LEVEL_COLORS.get(record.levelno, "")
+            if record.levelno >= logging.WARNING
+            else _LOGGER_COLORS.get(self.label, "\033[37m")
+        )
+        if not prefix_color:
+            return message
+        return f"{prefix_color}{prefix}{_RESET}{message[len(prefix) :]}"
 
 
 def configure_logger(logger: logging.Logger, label: str) -> None:
