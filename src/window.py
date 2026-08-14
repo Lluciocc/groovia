@@ -28,7 +28,7 @@ from html import escape
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, PangoCairo
 
 from .audio import AudioPlayer
 from .autodj import AutoDJService
@@ -126,6 +126,69 @@ def cover_widget(path: str | None, size: int = 72) -> Gtk.Widget:
     picture.set_size_request(size, size)
     picture.add_css_class("album-art")
     return picture
+
+
+class MarqueeLabel(Gtk.DrawingArea):
+    """A fixed-width label that smoothly scrolls only when its text overflows."""
+
+    _phase_started_at = time.monotonic()
+    _last_group_reset = 0.0
+    _pause_duration = 5.0
+    _scroll_duration = 14.0
+
+    def __init__(self, label: str = "", css_classes=None):
+        super().__init__(content_width=190, content_height=22)
+        self.set_size_request(190, 22)
+        self.set_hexpand(False)
+        self._text = label
+        self._muted = bool(css_classes and "muted" in css_classes)
+        if css_classes:
+            self.set_css_classes(css_classes)
+        self._offset = 0.0
+        self._last_frame = time.monotonic()
+        self.set_draw_func(self._draw_label)
+        self.add_tick_callback(self._tick)
+
+    def set_label(self, label: str):
+        self._text = label
+        self._offset = 0.0
+        now = time.monotonic()
+        if now - MarqueeLabel._last_group_reset > 0.05:
+            MarqueeLabel._phase_started_at = now
+            MarqueeLabel._last_group_reset = now
+        self.queue_draw()
+
+    def _draw_label(self, _area, cr, width, height):
+        separator = "   •   "
+        layout = self.create_pango_layout(self._text + separator + self._text)
+        text_width, text_height = layout.get_pixel_size()
+        cr.rectangle(0, 0, width, height)
+        cr.clip()
+        cr.move_to(-self._offset, max(0, (height - text_height) / 2))
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.58 if self._muted else 1.0)
+        PangoCairo.show_layout(cr, layout)
+
+    def _tick(self, _widget, _clock):
+        separator = "   •   "
+        text_layout = self.create_pango_layout(self._text)
+        separator_layout = self.create_pango_layout(separator)
+        text_width, _height = text_layout.get_pixel_size()
+        separator_width, _height = separator_layout.get_pixel_size()
+        cycle_width = text_width + separator_width
+        if text_width <= self.get_width():
+            self._offset = 0.0
+            return GLib.SOURCE_CONTINUE
+        now = time.monotonic()
+        phase = (now - MarqueeLabel._phase_started_at) % (
+            MarqueeLabel._pause_duration + MarqueeLabel._scroll_duration
+        )
+        if phase < MarqueeLabel._pause_duration:
+            self._offset = 0.0
+        else:
+            progress = (phase - MarqueeLabel._pause_duration) / MarqueeLabel._scroll_duration
+            self._offset = cycle_width * progress
+        self.queue_draw()
+        return GLib.SOURCE_CONTINUE
 
 
 class GrooviaWindow(Adw.ApplicationWindow):
@@ -1764,17 +1827,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.player_cover_slot = Gtk.Overlay()
         self.player_cover_slot.set_child(self.mini_cover)
         bar.append(self.player_cover_slot)
-        meta = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL,
-            valign=Gtk.Align.CENTER,
-            width_request=190,
-        )
-        self.bar_title = Gtk.Label(
-            label="Nothing playing", xalign=0, ellipsize=3, css_classes=["player-title"]
-        )
-        self.bar_artist = Gtk.Label(label="Groovia", xalign=0, ellipsize=3, css_classes=["muted"])
-        meta.append(self.bar_title)
-        meta.append(self.bar_artist)
+        meta = Gtk.Fixed(width_request=190, height_request=44)
+        meta.set_size_request(190, 44)
+        meta.set_hexpand(False)
+        self.bar_title = MarqueeLabel("Nothing playing", ["player-title"])
+        self.bar_artist = MarqueeLabel("Groovia", ["muted"])
+        self.bar_title.set_size_request(190, 22)
+        self.bar_artist.set_size_request(190, 22)
+        meta.put(self.bar_title, 0, 0)
+        meta.put(self.bar_artist, 0, 22)
         bar.append(meta)
         bar.append(
             icon_button("media-skip-backward-symbolic", "Previous", lambda *_: self._previous())
