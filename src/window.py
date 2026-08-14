@@ -35,18 +35,14 @@ from .autodj import AutoDJService
 from .downloads import SpotDLService, classify_input
 from .library import LibraryDatabase, LibraryScanner
 from .library.scanner import FORMATS
+from .logging_utils import configure_logger
 from .models import Playlist, Track
 from .platform_compat import IS_WINDOWS, iter_gtk_children, open_folder
 from .visuals import css_rgb, mix, palette_for
 from .widgets import LyricsView, VinylView
 
 LOGGER = logging.getLogger("groovia.window")
-if not LOGGER.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("[Groovia window] %(message)s"))
-    LOGGER.addHandler(handler)
-LOGGER.setLevel(logging.INFO)
-LOGGER.propagate = False
+configure_logger(LOGGER, "Groovia window")
 
 
 CSS = """
@@ -3474,6 +3470,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._download_status = download_status
         self._download_current = current
         self._download_log = log_view.get_buffer()
+        for tag_name, color in (
+            ("step", "#62b0ff"),
+            ("success", "#70d890"),
+            ("warning", "#f6c85f"),
+            ("error", "#ff7b72"),
+            ("detail", "#a9a9b5"),
+        ):
+            self._download_log.create_tag(tag_name, foreground=color)
         self._download_sync = sync
         self._download_source_entry = entry
         self._download_destination = destination
@@ -3821,10 +3825,33 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if buffer is None:
             return
         end = buffer.get_end_iter()
+        text = str(line)
+        lowered = text.lower()
+        if (
+            lowered.startswith(("error", "failed", "exception"))
+            or "could not" in lowered
+            or "unable" in lowered
+        ):
+            tag = "error"
+        elif lowered.startswith(("warning", "warn", "skipping")) or "already exists" in lowered:
+            tag = "warning"
+        elif (
+            lowered.startswith(("completed", "finished", "success"))
+            or " imported" in lowered
+            or " available" in lowered
+        ):
+            tag = "success"
+        elif (
+            lowered.startswith(("step", "starting", "destination", "format", "command"))
+            or "process started" in lowered
+        ):
+            tag = "step"
+        else:
+            tag = "detail"
         # GTK 4 bindings require the explicit text length.  -1 means the
         # supplied UTF-8 string is NUL-terminated and keeps this compatible
         # with non-ASCII downloader output as well.
-        buffer.insert(end, f"{line}\n", -1)
+        buffer.insert_with_tags_by_name(end, f"{text}\n", -1, tag)
 
     def _set_download_phase(self, message):
         phase = getattr(self, "_download_phase", None)

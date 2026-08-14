@@ -27,14 +27,10 @@ gi.require_version("Gst", "1.0")
 from gi.repository import GLib, GObject, Gst
 
 from ..autodj.planner import TransitionPlan
+from ..logging_utils import configure_logger
 
 LOGGER = logging.getLogger("groovia.audio")
-if not LOGGER.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("[Groovia audio] %(message)s"))
-    LOGGER.addHandler(handler)
-LOGGER.setLevel(logging.INFO)
-LOGGER.propagate = False
+configure_logger(LOGGER, "Groovia audio")
 
 
 class AudioPlayer(GObject.Object):

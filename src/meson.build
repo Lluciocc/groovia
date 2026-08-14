@@ -58,6 +58,7 @@ groovia_sources = [
   'preferences.py',
   'mpris.py',
   'platform_compat.py',
+  'logging_utils.py',
   'runtime.py',
   'visuals.py',
 ]

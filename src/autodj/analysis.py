@@ -33,12 +33,9 @@ from pathlib import Path
 from ..platform_compat import get_data_dir, get_managed_executable_name, subprocess_window_kwargs
 
 LOGGER = logging.getLogger("groovia.autodj")
-if not LOGGER.handlers:
-    _handler = logging.StreamHandler()
-    _handler.setFormatter(logging.Formatter("[Groovia Auto DJ] %(message)s"))
-    LOGGER.addHandler(_handler)
-LOGGER.setLevel(logging.INFO)
-LOGGER.propagate = False
+from ..logging_utils import configure_logger
+
+configure_logger(LOGGER, "Groovia Auto DJ")
 ANALYSIS_SCHEMA_VERSION = 5
 
 

@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import threading
@@ -31,9 +32,13 @@ from typing import Callable
 
 from gi.repository import GLib
 
+from ..logging_utils import configure_logger
 from ..platform_compat import IS_WINDOWS, subprocess_window_kwargs
 from ..runtime import bundled_tool_path
 from .spotdl import SpotDLCommandResolver, SpotDLUnavailable
+
+LOGGER = logging.getLogger("groovia.spotdl")
+configure_logger(LOGGER, "Groovia spotDL")
 
 EventCallback = Callable[[str, "DownloadJob", dict], None]
 
@@ -312,6 +317,7 @@ class DownloadManager:
         before = self._files(job.destination)
         try:
             command = self._command(job)
+            LOGGER.info("starting %s: %s", job.job_type, " ".join(command))
             self._emit("command", job, {"command": command})
             job.process = subprocess.Popen(
                 command,
@@ -326,6 +332,7 @@ class DownloadManager:
             parser = ProgressParser()
             assert job.process.stdout is not None
             for line in job.process.stdout:
+                LOGGER.info("%s", line.rstrip())
                 data = parser.parse(line)
                 previous_index = job.current_index
                 if (
@@ -377,6 +384,7 @@ class DownloadManager:
                 )
                 self._emit("output", job, data)
             returncode = job.process.wait()
+            LOGGER.info("spotDL process exited with status %s", returncode)
             if job.cancel_requested:
                 job.state = "cancelled"
                 self._emit(
@@ -413,6 +421,7 @@ class DownloadManager:
                     },
                 )
         except (OSError, SpotDLUnavailable, subprocess.SubprocessError) as error:
+            LOGGER.error("spotDL failed: %s", error)
             job.state = "failed"
             job.error = str(error)
             self._emit(

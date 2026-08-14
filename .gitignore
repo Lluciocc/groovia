@@ -51,3 +51,4 @@ build-check
 .mypycache/
 .mypy_cache/
 .flatpak-builder/
+run

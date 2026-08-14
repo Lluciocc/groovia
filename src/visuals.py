@@ -17,6 +17,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import logging
 from pathlib import Path
 
 import gi
@@ -24,6 +25,11 @@ import gi
 gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Gst", "1.0")
 from gi.repository import GdkPixbuf, GLib, Gst
+
+from .logging_utils import configure_logger
+
+LOGGER = logging.getLogger("groovia.visuals")
+configure_logger(LOGGER, "Groovia visuals")
 
 Gst.init(None)
 
@@ -105,18 +111,18 @@ def palette_for(
 ) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
     """Return an accent/background pair, cached so album changes do not resample every frame."""
     if not path or not Path(path).exists():
-        print("No album art found, using fallback palette.")
+        LOGGER.info("No album art found, using fallback palette.")
         return FALLBACK_PALETTE
     try:
         stat = Path(path).stat()
         key = f"{path}:{stat.st_mtime_ns}:{stat.st_size}"
-        print(f"Sampling palette for {path} (key: {key})")
+        LOGGER.debug("Sampling palette for %s (key: %s)", path, key)
 
         if key in cache:
             return cache[key]
-        print(f"Palette image path: {path!r}")
-        print(f"Exists: {Path(path).exists() if path else False}")
-        print(f"Resolved: {Path(path).resolve() if path else None}")
+        LOGGER.debug("Palette image path: %r", path)
+        LOGGER.debug("Exists: %s", Path(path).exists() if path else False)
+        LOGGER.debug("Resolved: %s", Path(path).resolve() if path else None)
         pixbuf = load_scaled_pixbuf(path, 64, 64)
         pixels = pixbuf.get_pixels()
         channels = pixbuf.get_n_channels()
@@ -131,7 +137,7 @@ def palette_for(
                 if 0.08 < brightness < 0.94:
                     candidates.append((saturation * (1 - abs(brightness - 0.5)), r, g, b))
         if not candidates:
-            print("No suitable colors found, using fallback palette.")
+            LOGGER.info("No suitable colors found, using fallback palette.")
             return FALLBACK_PALETTE
         candidates.sort(reverse=True)
         _, r, g, b = candidates[min(3, len(candidates) - 1)]
@@ -142,7 +148,7 @@ def palette_for(
         cache[key] = (accent, background)
         return cache[key]
     except Exception as e:
-        print(f"An error occurred while sampling the palette, using fallback palette: {e}")
+        LOGGER.warning("Could not sample palette, using fallback palette: %s", e)
         return FALLBACK_PALETTE
 
 
