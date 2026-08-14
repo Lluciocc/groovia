@@ -1211,7 +1211,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             status = f" · {playlist.sync_status.replace('_', ' ').title()}"
             if playlist.last_sync_at:
                 status += f" · Last sync {playlist.last_sync_at[:16].replace('T', ' ')}"
-        subtitle_text = f"{len(tracks)} tracks · {self._time_label(total)}{status}"
+        subtitle_text = f"{len(tracks)} tracks · {self._total_minutes_label(total)}{status}"
         if self._settings and self._settings.get_boolean("lyrics-show-availability"):
             coverage = self.database.lyrics_coverage(
                 [track.id for track in tracks if track.id is not None]
@@ -3092,6 +3092,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _time_label(seconds):
         seconds = max(0, int(seconds))
         return f"{seconds // 60}:{seconds % 60:02d}"
+
+    @staticmethod
+    def _total_minutes_label(seconds):
+        """Format a playlist duration as its total number of minutes."""
+        minutes = max(0, int(float(seconds) / 60))
+        return f"{minutes} min"
 
     def _on_nav_selected(self, _list, row):
         if row:
