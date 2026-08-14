@@ -785,7 +785,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
             track.title, track.artist, getattr(track, "album", "") or ""
         )
         if cached:
-            background.set_filename(str(cached))
+            if background is getattr(self, "_lyrics_fullscreen_background", None):
+                self._set_fullscreen_lyrics_artwork(str(cached))
+            else:
+                background.set_filename(str(cached))
             return
 
         def worker():
@@ -805,7 +808,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if not self._prefers_lyrics_artwork():
             return GLib.SOURCE_REMOVE
         try:
-            background.set_filename(str(path))
+            if background is getattr(self, "_lyrics_fullscreen_background", None):
+                self._set_fullscreen_lyrics_artwork(str(path))
+            else:
+                background.set_filename(str(path))
         except (GLib.Error, OSError):
             return GLib.SOURCE_REMOVE
         return GLib.SOURCE_REMOVE
@@ -1017,6 +1023,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._lyrics_fullscreen_window = window
         self._lyrics_fullscreen_view = view
         self._lyrics_fullscreen_background = background
+        self._lyrics_fullscreen_cover_path = cover_path
         self._request_lyrics_artwork(
             self.current, background, getattr(self, "_lyrics_generation", 0)
         )
@@ -1035,6 +1042,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._lyrics_fullscreen_window = None
         self._lyrics_fullscreen_view = None
         self._lyrics_fullscreen_background = None
+        self._lyrics_fullscreen_cover_path = None
         return False
 
     @staticmethod
@@ -1045,15 +1053,58 @@ class GrooviaWindow(Adw.ApplicationWindow):
         return False
 
     def _set_fullscreen_lyrics_cover(self, track):
-        background = getattr(self, "_lyrics_fullscreen_background", None)
-        if background is None:
-            return
         cover_path = (
             track.cover_path
             if track and track.cover_path and Path(track.cover_path).is_file()
             else None
         )
-        background.set_filename(cover_path)
+        self._set_fullscreen_lyrics_artwork(cover_path)
+
+    def _set_fullscreen_lyrics_artwork(self, path):
+        """Crossfade fullscreen lyrics artwork instead of replacing it abruptly."""
+        background = getattr(self, "_lyrics_fullscreen_background", None)
+        if background is None:
+            return
+        path = str(path) if path else None
+        if path == getattr(self, "_lyrics_fullscreen_cover_path", None):
+            return
+        self._lyrics_fullscreen_cover_path = path
+
+        gtk_settings = Gtk.Settings.get_default()
+        animate = bool(
+            gtk_settings is None or gtk_settings.get_property("gtk-enable-animations")
+        ) and (not self._settings or self._settings.get_boolean("animations"))
+        if not animate:
+            background.set_filename(path)
+            background.set_opacity(0.22)
+            return
+
+        if getattr(self, "_lyrics_fullscreen_cover_animation", None):
+            self._lyrics_fullscreen_cover_animation.skip()
+
+        token = object()
+        self._lyrics_fullscreen_cover_animation_token = token
+        swapped = {"done": False}
+
+        def update(value):
+            if token is not getattr(self, "_lyrics_fullscreen_cover_animation_token", None):
+                return
+            progress = float(value)
+            if progress >= 0.5 and not swapped["done"]:
+                swapped["done"] = True
+                background.set_filename(path)
+            opacity = abs(progress * 2.0 - 1.0) * 0.22
+            background.set_opacity(opacity)
+            if progress >= 0.999:
+                background.set_opacity(0.22)
+                self._lyrics_fullscreen_cover_animation = None
+
+        animation = Adw.TimedAnimation.new(
+            self, 0.0, 1.0, 480, Adw.CallbackAnimationTarget.new(update)
+        )
+        animation.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
+        self._lyrics_fullscreen_cover_animation = animation
+        animation.play()
 
     def _playlist_page(self, playlist_id: int):
         root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
@@ -2988,7 +3039,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         application.send_notification("now-playing", notification)
 
     def _replace_player_cover(self, cover_path):
-        """Crossfade the small player artwork only for an Auto DJ handoff."""
+        """Crossfade the small player artwork when the current track changes."""
         slot = getattr(self, "player_cover_slot", None)
         if slot is None:
             self.mini_cover = cover_widget(cover_path, 50)
@@ -2996,14 +3047,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return
         old_cover = self.mini_cover
         new_cover = cover_widget(cover_path, 50)
-        animate = bool(
-            self._auto_dj_enabled
-            and self._settings
-            and self._settings.get_boolean("auto-dj-artwork-animation")
-        )
         gtk_settings = Gtk.Settings.get_default()
+        auto_dj_animation = (
+            not self._auto_dj_enabled
+            or not self._settings
+            or self._settings.get_boolean("auto-dj-artwork-animation")
+        )
         animate = (
-            animate
+            auto_dj_animation
             and bool(gtk_settings is None or gtk_settings.get_property("gtk-enable-animations"))
             and (not self._settings or self._settings.get_boolean("animations"))
         )
