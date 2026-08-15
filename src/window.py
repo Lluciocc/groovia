@@ -66,6 +66,8 @@ CSS = """
 .album-title { font-weight: 700; margin-top: 8px; }
 .album-meta { color: alpha(white, .55); font-size: 12px; }
 .vinyl-panel { background: radial-gradient(circle at 50% 40%, #ff725e, #171721 53%, #111117 100%); border-radius: 22px; padding: 16px; }
+.vinyl-fullscreen-root { background: radial-gradient(circle at 50% 45%, alpha(@accent_color, .34), #111117 58%, #08080c 100%); }
+.vinyl-fullscreen-toolbar { background: alpha(#09090d, .72); border-radius: 14px; padding: 10px 14px; }
 .now-card { background: @headerbar_bg_color; border-radius: 18px; padding: 22px; }
 .now-title { font-size: 25px; font-weight: 800; }
 .track-row { padding: 9px 12px; border-radius: 10px; }
@@ -366,10 +368,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
         .headerbar, .player-bar {{ border-color: {accent_css}; }}
         .now-card {{ border: 1px solid {accent_css}; }}
         .vinyl-panel {{ background: radial-gradient(circle at 50% 40%, {accent_css}, {background_css} 54%, #111117 100%); }}
+        .vinyl-fullscreen-root {{ background: radial-gradient(circle at 50% 45%, {accent_css}, {background_css} 58%, #08080c 100%); }}
         """
         self._load_css(self._dynamic_provider, css)
         if hasattr(self, "vinyl"):
             self.vinyl.set_accent(accent)
+        fullscreen_vinyl = getattr(self, "_vinyl_fullscreen_view", None)
+        if fullscreen_vinyl is not None:
+            fullscreen_vinyl.set_accent(accent)
 
     def _set_album_palette(self, cover_path):
         if cover_path:
@@ -548,7 +554,20 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.vinyl.add_css_class("vinyl-panel")
         self.vinyl.connect("seek-requested", self._on_vinyl_seek)
         self.vinyl.connect("toggle-play", lambda *_: self._toggle_play())
-        now.append(self.vinyl)
+        vinyl_slot = Gtk.Overlay(halign=Gtk.Align.CENTER)
+        vinyl_slot.set_child(self.vinyl)
+        fullscreen = Gtk.Button(
+            icon_name="view-fullscreen-symbolic",
+            tooltip_text="Fullscreen vinyl",
+            halign=Gtk.Align.END,
+            valign=Gtk.Align.START,
+            margin_top=14,
+            margin_end=14,
+            css_classes=["circular"],
+        )
+        fullscreen.connect("clicked", lambda *_: self._open_vinyl_fullscreen())
+        vinyl_slot.add_overlay(fullscreen)
+        now.append(vinyl_slot)
         details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)
         details.append(Gtk.Label(label="NOW PLAYING", xalign=0, css_classes=["eyebrow"]))
         self.now_title = Gtk.Label(label="Choose an album to start listening", xalign=0, wrap=True)
@@ -2865,6 +2884,101 @@ class GrooviaWindow(Adw.ApplicationWindow):
         dialog.connect("response", lambda current, *_: current.close())
         dialog.present()
 
+    def _open_vinyl_fullscreen(self):
+        existing = getattr(self, "_vinyl_fullscreen_window", None)
+        if existing is not None:
+            existing.present()
+            return
+
+        window = Gtk.Window(title="Vinyl — Groovia", transient_for=self)
+        window.set_default_size(1100, 820)
+        root = Gtk.Overlay(css_classes=["vinyl-fullscreen-root"])
+
+        vinyl = VinylView(hexpand=True, vexpand=True, halign=Gtk.Align.FILL, valign=Gtk.Align.FILL)
+        vinyl.set_accent(self._palette[0])
+        vinyl.set_duration(getattr(self.player, "duration", 0.0))
+        vinyl.set_progress(
+            self.player.position / self.player.duration if self.player.duration else 0.0
+        )
+        vinyl.set_playing(bool(getattr(self.player, "playing", False)))
+        if self.current:
+            cover_path = (
+                self.current.cover_path
+                if self.current.cover_path and Path(self.current.cover_path).is_file()
+                else None
+            )
+            vinyl.set_cover(cover_path)
+        vinyl._rotation_angle = self.vinyl._rotation_angle
+        vinyl.angle = self.vinyl.angle
+        vinyl.connect("seek-requested", self._on_vinyl_seek)
+        vinyl.connect("toggle-play", lambda *_: self._toggle_play())
+        root.set_child(vinyl)
+
+        toolbar = Gtk.Box(
+            spacing=12,
+            halign=Gtk.Align.FILL,
+            valign=Gtk.Align.START,
+            margin_top=20,
+            margin_start=20,
+            margin_end=20,
+            css_classes=["vinyl-fullscreen-toolbar"],
+        )
+        metadata = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
+        title = Gtk.Label(
+            label=self.current.title if self.current else "Nothing playing",
+            xalign=0,
+            ellipsize=3,
+            css_classes=["title-3"],
+        )
+        artist = Gtk.Label(
+            label=self.current.artist if self.current else "Groovia",
+            xalign=0,
+            ellipsize=3,
+            css_classes=["muted"],
+        )
+        metadata.append(title)
+        metadata.append(artist)
+        toolbar.append(metadata)
+        close = Gtk.Button(
+            icon_name="view-restore-symbolic",
+            tooltip_text="Exit fullscreen",
+            css_classes=["circular"],
+        )
+        close.connect("clicked", lambda *_: window.close())
+        toolbar.append(close)
+        root.add_overlay(toolbar)
+        window.set_child(root)
+
+        self._vinyl_fullscreen_window = window
+        self._vinyl_fullscreen_view = vinyl
+        self._vinyl_fullscreen_title = title
+        self._vinyl_fullscreen_artist = artist
+
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self._vinyl_fullscreen_key_pressed, window)
+        window.add_controller(keys)
+        window.connect("close-request", self._close_vinyl_fullscreen)
+        window.present()
+        try:
+            window.fullscreen()
+        except AttributeError:
+            pass
+
+    @staticmethod
+    def _vinyl_fullscreen_key_pressed(_controller, keyval, _keycode, _state, window):
+        if keyval == Gdk.KEY_Escape:
+            window.close()
+            return True
+        return False
+
+    def _close_vinyl_fullscreen(self, _window):
+        self._vinyl_fullscreen_window = None
+        self._vinyl_fullscreen_view = None
+        self._vinyl_fullscreen_title = None
+        self._vinyl_fullscreen_artist = None
+        return False
+
     def _find_lyrics_for_track(self, track):
         self.download_service.find_lyrics(track, fallback=True)
         self._toast("Searching for lyrics…")
@@ -3160,6 +3274,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._replace_player_cover(cover_path)
         self.vinyl.set_cover(cover_path)
         self.vinyl.set_progress(0)
+        fullscreen_vinyl = getattr(self, "_vinyl_fullscreen_view", None)
+        if fullscreen_vinyl is not None:
+            fullscreen_vinyl.set_cover(cover_path)
+            fullscreen_vinyl.set_progress(0)
+            self._vinyl_fullscreen_title.set_label(track.title)
+            self._vinyl_fullscreen_artist.set_label(track.artist)
         self.now_play.set_label("Pause")
         if hasattr(self, "lyrics_button"):
             timeline, _row = self.download_service.lyrics.find(track)
@@ -3235,6 +3355,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.progress.set_value(position)
         self.vinyl.set_duration(duration)
         self.vinyl.set_progress(position / duration if duration else 0)
+        fullscreen_vinyl = getattr(self, "_vinyl_fullscreen_view", None)
+        if fullscreen_vinyl is not None:
+            fullscreen_vinyl.set_duration(duration)
+            fullscreen_vinyl.set_progress(position / duration if duration else 0)
         if hasattr(self, "_lyrics_widgets") and self.stack.get_visible_child_name() == "lyrics":
             self._lyrics_widgets["view"].update_position(int(position * 1000))
         if getattr(self, "_lyrics_fullscreen_view", None):
@@ -3260,6 +3384,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         self.play_button.set_tooltip_text("Pause" if playing else "Play")
         self.vinyl.set_playing(playing)
+        fullscreen_vinyl = getattr(self, "_vinyl_fullscreen_view", None)
+        if fullscreen_vinyl is not None:
+            fullscreen_vinyl.set_playing(playing)
         self.now_play.set_icon_name(
             "media-playback-pause-symbolic" if playing else "media-playback-start-symbolic"
         )
