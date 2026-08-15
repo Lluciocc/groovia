@@ -69,6 +69,39 @@ class GrooviaApplication(Adw.Application):
             "previous", lambda *_: self._window_action("_previous"), ["<primary>Left"]
         )
         self.create_action("mute", lambda *_: self._window_action("_toggle_mute"))
+        self.create_action("home", lambda *_: self._window_action("_show_home"), ["<primary>1"])
+        self.create_action(
+            "library", lambda *_: self._window_action("_show_library"), ["<primary>2"]
+        )
+        self.create_action("queue", lambda *_: self._window_action("_show_queue"), ["<primary>3"])
+        self.create_action(
+            "download", lambda *_: self._window_action("_download_url"), ["<primary>d"]
+        )
+        self.create_action(
+            "toggle-menu",
+            lambda *_: self._window_action("_toggle_main_menu"),
+            ["<primary>m"],
+        )
+        self.create_action(
+            "toggle-lyrics-mode",
+            lambda *_: self._window_action("_toggle_lyrics_mode"),
+            ["<primary>j"],
+        )
+        self.create_action(
+            "fullscreen-view",
+            lambda *_: self._window_action("_toggle_fullscreen_view"),
+            ["F11"],
+        )
+        self.create_action(
+            "fullscreen-vinyl",
+            lambda *_: self._window_action("_open_vinyl_fullscreen"),
+            ["<primary><shift>v"],
+        )
+        self.create_action(
+            "fullscreen-lyrics",
+            lambda *_: self._window_action("_open_lyrics_fullscreen"),
+            ["<primary><shift>l"],
+        )
 
     def do_activate(self):
         configure_icon_theme()

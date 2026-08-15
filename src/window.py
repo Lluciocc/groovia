@@ -460,6 +460,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         header.set_title_widget(brand)
         menu = Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text="Main Menu")
         menu.set_menu_model(self._menu_model())
+        self.main_menu_button = menu
         header.pack_end(menu)
         return header
 
@@ -3423,7 +3424,54 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._show_page(row.get_name())
 
     def _show_page(self, page):
+        # Keep the sidebar selection in sync when a shortcut changes page.
         self.stack.set_visible_child_name(page)
+        if page in {"home", "library", "queue"} and getattr(self, "nav_list", None):
+            for row in iter_gtk_children(self.nav_list):
+                if row.get_name() == page:
+                    self.nav_list.select_row(row)
+                    break
+
+    def _show_home(self):
+        self._show_page("home")
+
+    def _show_library(self):
+        self._show_page("library")
+
+    def _show_queue(self):
+        self._show_page("queue")
+
+    def _toggle_main_menu(self):
+        menu = getattr(self, "main_menu_button", None)
+        if menu is None:
+            return
+        popover = menu.get_popover()
+        if popover.get_visible():
+            popover.popdown()
+        else:
+            popover.popup()
+
+    def _toggle_lyrics_mode(self):
+        view = getattr(self, "_lyrics_widgets", {}).get("view")
+        if view is None or len(view.available_modes) < 2:
+            return
+        next_mode = "word" if view.mode == "line" else "line"
+        if next_mode in view.available_modes:
+            view.set_mode(next_mode)
+
+    def _toggle_fullscreen_view(self):
+        """Toggle the most relevant visual fullscreen view for the current page."""
+        page = self.stack.get_visible_child_name()
+        if page == "lyrics":
+            if getattr(self, "_lyrics_fullscreen_window", None):
+                self._lyrics_fullscreen_window.close()
+            else:
+                self._open_lyrics_fullscreen()
+        else:
+            if getattr(self, "_vinyl_fullscreen_window", None):
+                self._vinyl_fullscreen_window.close()
+            else:
+                self._open_vinyl_fullscreen()
 
     def _focus_search(self):
         self._show_page("library")
@@ -3506,6 +3554,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if keyval == Gdk.KEY_m and not state & modifiers and not self._search_has_focus():
             self._toggle_mute()
             return True
+        if keyval == Gdk.KEY_Escape:
+            for name in ("_lyrics_fullscreen_window", "_vinyl_fullscreen_window"):
+                window = getattr(self, name, None)
+                if window is not None:
+                    window.close()
+                    return True
         return False
 
     def _search_has_focus(self) -> bool:

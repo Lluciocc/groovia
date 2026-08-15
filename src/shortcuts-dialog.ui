@@ -35,6 +35,30 @@
             <property name="action-name">app.show-lyrics</property>
           </object>
         </child>
+        <child>
+          <object class="AdwShortcutsItem">
+            <property name="title" translatable="yes" context="shortcut window">Toggle lyrics Lines / Words</property>
+            <property name="action-name">app.toggle-lyrics-mode</property>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwShortcutsSection">
+        <property name="title" translatable="yes">Navigation</property>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Home</property><property name="action-name">app.home</property></object></child>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">All Music</property><property name="action-name">app.library</property></object></child>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Queue</property><property name="action-name">app.queue</property></object></child>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Download from URL</property><property name="action-name">app.download</property></object></child>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Open / Close menu</property><property name="action-name">app.toggle-menu</property></object></child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwShortcutsSection">
+        <property name="title" translatable="yes">Visuals</property>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Fullscreen current view</property><property name="action-name">app.fullscreen-view</property></object></child>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Fullscreen vinyl</property><property name="action-name">app.fullscreen-vinyl</property></object></child>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Fullscreen lyrics</property><property name="action-name">app.fullscreen-lyrics</property></object></child>
       </object>
     </child>
     <child>
