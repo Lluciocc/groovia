@@ -1116,7 +1116,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         keys = Gtk.EventControllerKey()
         keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-        keys.connect("key-pressed", self._fullscreen_lyrics_key_pressed, window)
+        keys.connect("key-pressed", self._fullscreen_key_pressed, window)
         window.add_controller(keys)
         window.connect("close-request", lambda current: self._close_lyrics_fullscreen(current))
         window.present()
@@ -1132,12 +1132,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._lyrics_fullscreen_cover_path = None
         return False
 
-    @staticmethod
-    def _fullscreen_lyrics_key_pressed(_controller, keyval, _keycode, _state, window):
+    def _fullscreen_key_pressed(self, _controller, keyval, _keycode, state, window):
         if keyval == Gdk.KEY_Escape:
             window.close()
             return True
-        return False
+        return self._handle_shortcut_key(keyval, state)
 
     def _set_fullscreen_lyrics_cover(self, track):
         cover_path = (
@@ -2957,7 +2956,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
         keys = Gtk.EventControllerKey()
         keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-        keys.connect("key-pressed", self._vinyl_fullscreen_key_pressed, window)
+        keys.connect("key-pressed", self._fullscreen_key_pressed, window)
         window.add_controller(keys)
         window.connect("close-request", self._close_vinyl_fullscreen)
         window.present()
@@ -2965,13 +2964,6 @@ class GrooviaWindow(Adw.ApplicationWindow):
             window.fullscreen()
         except AttributeError:
             pass
-
-    @staticmethod
-    def _vinyl_fullscreen_key_pressed(_controller, keyval, _keycode, _state, window):
-        if keyval == Gdk.KEY_Escape:
-            window.close()
-            return True
-        return False
 
     def _close_vinyl_fullscreen(self, _window):
         self._vinyl_fullscreen_window = None
@@ -3452,12 +3444,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
             popover.popup()
 
     def _toggle_lyrics_mode(self):
-        view = getattr(self, "_lyrics_widgets", {}).get("view")
+        fullscreen_view = getattr(self, "_lyrics_fullscreen_view", None)
+        view = fullscreen_view or getattr(self, "_lyrics_widgets", {}).get("view")
         if view is None or len(view.available_modes) < 2:
             return
         next_mode = "word" if view.mode == "line" else "line"
         if next_mode in view.available_modes:
             view.set_mode(next_mode)
+            regular_view = getattr(self, "_lyrics_widgets", {}).get("view")
+            if regular_view is not None and regular_view is not view:
+                regular_view.set_mode(next_mode)
 
     def _toggle_fullscreen_view(self):
         """Toggle the most relevant visual fullscreen view for the current page."""
@@ -3542,6 +3538,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 popover.popdown()
 
     def _global_key_pressed(self, _controller, keyval, _keycode, state):
+        return self._handle_shortcut_key(keyval, state)
+
+    def _handle_shortcut_key(self, keyval, state):
+        """Handle shortcuts locally so they also work in child fullscreen windows."""
         modifiers = (
             Gdk.ModifierType.CONTROL_MASK
             | Gdk.ModifierType.ALT_MASK
@@ -3553,6 +3553,38 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return True
         if keyval == Gdk.KEY_m and not state & modifiers and not self._search_has_focus():
             self._toggle_mute()
+            return True
+        primary = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
+        if primary and not shift:
+            actions = {
+                Gdk.KEY_1: self._show_home,
+                Gdk.KEY_2: self._show_library,
+                Gdk.KEY_3: self._show_queue,
+                Gdk.KEY_d: self._download_url,
+                Gdk.KEY_m: self._toggle_main_menu,
+                Gdk.KEY_j: self._toggle_lyrics_mode,
+                Gdk.KEY_f: self._focus_search,
+                Gdk.KEY_o: self._choose_folder,
+                Gdk.KEY_Left: self._previous,
+                Gdk.KEY_Right: self._next,
+            }
+            action = actions.get(keyval)
+            if action is not None:
+                action()
+                return True
+            if keyval == Gdk.KEY_q:
+                self.get_application().quit()
+                return True
+        if primary and shift:
+            if keyval == Gdk.KEY_v:
+                self._open_vinyl_fullscreen()
+                return True
+            if keyval == Gdk.KEY_l:
+                self._open_lyrics_fullscreen()
+                return True
+        if keyval == Gdk.KEY_F11:
+            self._toggle_fullscreen_view()
             return True
         if keyval == Gdk.KEY_Escape:
             for name in ("_lyrics_fullscreen_window", "_vinyl_fullscreen_window"):
