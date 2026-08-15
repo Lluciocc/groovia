@@ -26,8 +26,9 @@ for arg in "$@"; do
   case "$arg" in
     --skip-installer) ps_args+=(-SkipInstaller) ;;
     --console) ps_args+=(-Console) ;;
+    --dont-open-dist) ps_args+=(-DontOpenDist) ;;
     *)
-      echo "Usage: $0 [--skip-installer] [--console]" >&2
+      echo "Usage: $0 [--skip-installer] [--console] [--dont-open-dist]" >&2
       exit 2
       ;;
   esac

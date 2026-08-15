@@ -88,6 +88,19 @@ or:
 bash packaging/windows/build-windows.sh --skip-installer
 ```
 
+The build opens the `dist` directory in Windows Explorer after a successful
+build. To keep the build fully non-interactive, disable this with:
+
+```powershell
+.\packaging\windows\build-windows.ps1 -DontOpenDist
+```
+
+or:
+
+```sh
+bash packaging/windows/build-windows.sh --dont-open-dist
+```
+
 ## What the build does
 
 The reproducible Windows build:

@@ -37,7 +37,7 @@ try {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
             throw "Missing packaged tool: $path"
         }
-        Write-Host "Testing $($probe[0]) $($probe[1])"
+        Write-Host -ForegroundColor Yellow "Testing $($probe[0]) $($probe[1])"
         $output = & $path $probe[1] 2>&1
         if ($LASTEXITCODE -ne 0) {
             throw "$($probe[0]) version probe failed with exit code $LASTEXITCODE`n$output"

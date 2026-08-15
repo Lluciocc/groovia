@@ -30,7 +30,9 @@ the ICO used by the executable and installer.
 Run `build-windows.ps1` from PowerShell or `build-windows.sh` from MSYS2
 UCRT64. The build is a GUI application by default; pass `-Console` to the
 PowerShell script (or `--console` to the Bash wrapper) to keep a console
-attached to the executable. It stages only the pinned downloader artifacts from
+attached to the executable. The `dist` directory is opened in Explorer after a
+successful build by default; pass `-DontOpenDist` (or `--dont-open-dist`) to
+disable it. It stages only the pinned downloader artifacts from
 `dependencies.json`, then cleans only the
 repository's `build/windows`, `build/pyinstaller`, `dist/Groovia` and
 `dist/installer` outputs, compiles:
