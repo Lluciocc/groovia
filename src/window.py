@@ -31,14 +31,13 @@ from urllib.parse import unquote, urlparse
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, PangoCairo
 
 from .audio import AudioPlayer
-from .autodj import AutoDJService
 from .downloads import SpotDLService, classify_input
 from .library import LibraryDatabase, LibraryScanner
 from .library.scanner import FORMATS
 from .logging_utils import configure_logger
 from .models import Playlist, Track
 from .platform_compat import IS_WINDOWS, iter_gtk_children, open_folder
-from .visuals import css_rgb, mix, palette_for
+from .visuals import css_rgb, load_thumbnail, mix, palette_for
 from .widgets import LyricsView, VinylView
 
 LOGGER = logging.getLogger("groovia.window")
@@ -119,13 +118,19 @@ def icon_button(icon: str, tooltip: str, callback=None) -> Gtk.Button:
 
 def cover_widget(path: str | None, size: int = 72) -> Gtk.Widget:
     if path and Path(path).exists():
-        # Gtk.Image's pixel size is a hard visual bound; Gtk.Picture otherwise
-        # keeps the cover's natural resolution in the player bar.
-        picture = Gtk.Image.new_from_file(path)
-        picture.set_pixel_size(size)
-    else:
-        picture = Gtk.Image.new_from_icon_name("audio-x-generic-symbolic")
-        picture.set_pixel_size(max(28, size // 2))
+        try:
+            # pixel-size only changes layout; it does not prevent GTK from
+            # decoding the full source image. Feed it an actually scaled
+            # pixbuf so hundreds of large covers cannot fill the process RAM.
+            picture = Gtk.Image.new_from_pixbuf(load_thumbnail(path, size))
+            picture.set_pixel_size(size)
+            picture.set_hexpand(False)
+            picture.set_vexpand(False)
+            return picture
+        except Exception:
+            pass
+    picture = Gtk.Image.new_from_icon_name("audio-x-generic-symbolic")
+    picture.set_pixel_size(max(28, size // 2))
     picture.set_hexpand(False)
     picture.set_vexpand(False)
     picture.set_size_request(size, size)
@@ -152,7 +157,7 @@ class MarqueeLabel(Gtk.DrawingArea):
         self._offset = 0.0
         self._last_frame = time.monotonic()
         self.set_draw_func(self._draw_label)
-        self.add_tick_callback(self._tick)
+        self._tick_id = self.add_tick_callback(self._tick)
 
     def set_label(self, label: str):
         self._text = label
@@ -161,6 +166,8 @@ class MarqueeLabel(Gtk.DrawingArea):
         if now - MarqueeLabel._last_group_reset > 0.05:
             MarqueeLabel._phase_started_at = now
             MarqueeLabel._last_group_reset = now
+        if not self._tick_id:
+            self._tick_id = self.add_tick_callback(self._tick)
         self.queue_draw()
 
     def _draw_label(self, _area, cr, width, height):
@@ -182,7 +189,8 @@ class MarqueeLabel(Gtk.DrawingArea):
         cycle_width = text_width + separator_width
         if text_width <= self.get_width():
             self._offset = 0.0
-            return GLib.SOURCE_CONTINUE
+            self._tick_id = 0
+            return GLib.SOURCE_REMOVE
         now = time.monotonic()
         phase = (now - MarqueeLabel._phase_started_at) % (
             MarqueeLabel._pause_duration + MarqueeLabel._scroll_duration
@@ -211,10 +219,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.player = AudioPlayer()
         # Auto DJ may inspect already persisted lyrics, but the analyzer never
         # performs network work.  Missing lyrics simply remove that signal.
-        self.auto_dj = AutoDJService(
-            self._on_auto_dj_plan,
-            lyrics_provider=lambda track: self.download_service.lyrics.find(track),
-        )
+        self.auto_dj = None
         self.style_manager = Adw.StyleManager.get_default()
         self.style_manager.connect("notify::accent-color", self._on_system_style_changed)
         self.style_manager.connect("notify::dark", self._on_system_style_changed)
@@ -282,9 +287,21 @@ class GrooviaWindow(Adw.ApplicationWindow):
         enabled = enabled and self.repeat_mode != "one"
         self._auto_dj_enabled = enabled
         self.player.set_auto_dj_enabled(enabled)
-        if not enabled:
+        if enabled:
+            self._ensure_auto_dj()
+        elif self.auto_dj is not None:
             self.auto_dj.cancel()
             self.player.set_auto_dj_plan(None)
+
+    def _ensure_auto_dj(self):
+        if self.auto_dj is None:
+            from .autodj import AutoDJService
+
+            self.auto_dj = AutoDJService(
+                self._on_auto_dj_plan,
+                lyrics_provider=lambda track: self.download_service.lyrics.find(track),
+            )
+        return self.auto_dj
 
     def _on_auto_dj_setting_changed(self, *_args):
         self._apply_auto_dj_setting()
@@ -1950,10 +1967,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._library_cursor = 0
         self.library_items_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.library_content_box.append(self.library_items_box)
-        self._append_library_batch()
+        if self.stack.get_visible_child_name() == "library":
+            self._append_library_batch()
         for child in iter_gtk_children(self.album_flow):
             self.album_flow.remove(child)
-        for album in self.database.albums():
+        # This section is intentionally "Recently added", not a duplicate of
+        # the complete library. Bounding it avoids constructing and decoding
+        # every album card before the user has opened the library.
+        for album in self.database.recent_albums(12):
             self.album_flow.append(self._album_card(album))
         for child in iter_gtk_children(self.recent_box):
             self.recent_box.remove(child)
@@ -2481,14 +2502,20 @@ class GrooviaWindow(Adw.ApplicationWindow):
             popover.popdown()
             popover.unparent()
 
-    def _refresh_queue(self):
+    def _refresh_queue(self, force=False):
         LOGGER.info("queue refresh size=%s", len(self.queue))
+        self.database.save_queue(self.queue)
+        if (
+            not force
+            and getattr(self, "stack", None)
+            and self.stack.get_visible_child_name() != "queue"
+        ):
+            return
         for child in iter_gtk_children(self.queue_box):
             self.queue_box.remove(child)
         self.queue_empty.set_visible(not self.queue)
         for track in self.queue:
             self.queue_box.append(self._track_row(track, True))
-        self.database.save_queue(self.queue)
 
     def _restore_playback(self):
         saved = self.database.load_playback()
@@ -2536,11 +2563,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._playback_source = self.database.all_tracks()
         self.current = track
         self.player.set_track(track, autoplay=autoplay)
-        # set_track resets the secondary pipeline; prepare the transition
-        # only after the new primary track is installed.
-        self._prepare_next_track()
-        self.database.mark_played(track)
-        self.database.save_playback(track, 0.0)
+        if autoplay:
+            self.database.mark_played(track)
+            self.database.save_playback(track, 0.0)
 
     def _fill_random_library_queue(self):
         """Keep direct library playback supplied with random future tracks."""
@@ -2594,8 +2619,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
             and candidate
             and candidate.path != self.current.path
         ):
-            self.auto_dj.prepare(self.current, candidate, self._auto_dj_options())
-        else:
+            self._ensure_auto_dj().prepare(self.current, candidate, self._auto_dj_options())
+        elif self.auto_dj is not None:
             self.auto_dj.cancel()
             self.player.set_auto_dj_plan(None)
 
@@ -3388,6 +3413,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._lyrics_widgets["view"].set_playing(playing)
         if getattr(self, "_lyrics_fullscreen_view", None):
             self._lyrics_fullscreen_view.set_playing(playing)
+        if playing:
+            # Decoder/pre-roll work is delayed until playback begins, then the
+            # transition engine regains its normal one-track lookahead.
+            self._prepare_next_track()
         if not playing and self.current:
             self.database.save_playback(self.current, self.player.position)
 
@@ -3418,6 +3447,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _show_page(self, page):
         # Keep the sidebar selection in sync when a shortcut changes page.
         self.stack.set_visible_child_name(page)
+        if page == "library" and self.library_items_box.get_first_child() is None:
+            self._append_library_batch()
+        elif page == "queue":
+            self._refresh_queue(force=True)
         if page in {"home", "library", "queue"} and getattr(self, "nav_list", None):
             for row in iter_gtk_children(self.nav_list):
                 if row.get_name() == page:
@@ -4423,7 +4456,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._playback_source.clear()
         self._history.clear()
         self.player.close()
-        self.auto_dj.close()
+        if self.auto_dj is not None:
+            self.auto_dj.close()
 
         for target in (data_root, music_dir, cache_root):
             path = Path(target).expanduser().resolve()
@@ -4481,7 +4515,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
             popover.popdown()
         self.database.save_queue(self.queue)
         self.database.save_playback(self.current, self.player.position if self.current else 0.0)
-        self.auto_dj.close()
+        if self.auto_dj is not None:
+            self.auto_dj.close()
         self.player.close()
         self.database.close()
         super().close()

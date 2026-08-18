@@ -17,9 +17,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from .analysis import AnalysisCache, TrackAnalysis, TrackAnalyzer
-from .planner import TransitionPlan, TransitionPlanner
-from .service import AutoDJService
+from importlib import import_module
 
 __all__ = [
     "AnalysisCache",
@@ -29,3 +27,22 @@ __all__ = [
     "TransitionPlanner",
     "AutoDJService",
 ]
+
+_EXPORTS = {
+    "AnalysisCache": ("analysis", "AnalysisCache"),
+    "TrackAnalysis": ("analysis", "TrackAnalysis"),
+    "TrackAnalyzer": ("analysis", "TrackAnalyzer"),
+    "TransitionPlan": ("planner", "TransitionPlan"),
+    "TransitionPlanner": ("planner", "TransitionPlanner"),
+    "AutoDJService": ("service", "AutoDJService"),
+}
+
+
+def __getattr__(name):
+    """Avoid loading the analysis stack until Auto DJ is actually used."""
+    if name not in _EXPORTS:
+        raise AttributeError(name)
+    module_name, attribute = _EXPORTS[name]
+    value = getattr(import_module(f"{__name__}.{module_name}"), attribute)
+    globals()[name] = value
+    return value

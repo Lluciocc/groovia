@@ -18,6 +18,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import logging
+from collections import OrderedDict
 from pathlib import Path
 
 import gi
@@ -35,6 +36,8 @@ Gst.init(None)
 
 
 FALLBACK_PALETTE = ((0.98, 0.39, 0.30), (0.12, 0.10, 0.16))
+_THUMBNAIL_CACHE: OrderedDict[tuple[str, int, int, int], GdkPixbuf.Pixbuf] = OrderedDict()
+_THUMBNAIL_CACHE_LIMIT = 96
 
 
 def load_scaled_pixbuf(path: str, width: int = 64, height: int = 64):
@@ -104,6 +107,28 @@ def load_scaled_pixbuf(path: str, width: int = 64, height: int = 64):
         )
     finally:
         pipeline.set_state(Gst.State.NULL)
+
+
+def load_thumbnail(path: str, size: int) -> GdkPixbuf.Pixbuf:
+    """Load a bounded artwork thumbnail and retain only a small LRU cache."""
+    source = Path(path)
+    stat = source.stat()
+    key = (str(source.resolve()), stat.st_mtime_ns, stat.st_size, int(size))
+    cached = _THUMBNAIL_CACHE.get(key)
+    if cached is not None:
+        _THUMBNAIL_CACHE.move_to_end(key)
+        return cached
+    try:
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(source), int(size), int(size), True)
+    except Exception:
+        # Keep the GStreamer fallback used elsewhere for GNOME/Glycin builds
+        # that reject an otherwise valid embedded JPEG.
+        pixbuf = load_scaled_pixbuf(str(source), int(size), int(size))
+    _THUMBNAIL_CACHE[key] = pixbuf
+    _THUMBNAIL_CACHE.move_to_end(key)
+    while len(_THUMBNAIL_CACHE) > _THUMBNAIL_CACHE_LIMIT:
+        _THUMBNAIL_CACHE.popitem(last=False)
+    return pixbuf
 
 
 def palette_for(

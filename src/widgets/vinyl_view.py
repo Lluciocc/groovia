@@ -24,7 +24,7 @@ import gi
 
 gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Gdk, GObject, Gtk
+from gi.repository import Gdk, GLib, GObject, Gtk
 
 from ..visuals import load_scaled_pixbuf
 
@@ -62,7 +62,7 @@ class VinylView(Gtk.DrawingArea):
         self._drag_total_angle = 0.0
         self._drag_start_position = 0.0
         self.set_focusable(True)
-        self.add_tick_callback(self._tick)
+        self._tick_id = 0
 
         drag = Gtk.GestureDrag.new()
         drag.set_button(1)
@@ -92,17 +92,28 @@ class VinylView(Gtk.DrawingArea):
         self._previous_cover = previous if previous is not None and cover is not None else None
         self.cover = cover
         self._cover_transition = 0.0 if self._previous_cover is not None else 1.0
+        if self._cover_transition < 1.0:
+            self._ensure_tick()
         self.queue_draw()
 
     def set_playing(self, playing):
         self.is_playing = playing
+        if playing or self.rotation_velocity > 0.002:
+            self._ensure_tick()
 
     def set_duration(self, duration):
         self.duration = max(0.0, float(duration))
 
     def set_progress(self, progress):
         self.progress = max(0.0, min(1.0, progress))
+        if abs(self.arm_progress - self.progress) > 0.001:
+            self._ensure_tick()
         self.queue_draw()
+
+    def _ensure_tick(self):
+        if not self._tick_id:
+            self._last_frame = time.monotonic()
+            self._tick_id = self.add_tick_callback(self._tick)
 
     def set_accent(self, color):
         self.accent = tuple(color)
@@ -191,7 +202,9 @@ class VinylView(Gtk.DrawingArea):
             or self._cover_transition < 1.0
         ):
             self.queue_draw()
-        return True
+            return GLib.SOURCE_CONTINUE
+        self._tick_id = 0
+        return GLib.SOURCE_REMOVE
 
     def _draw(self, _area, cr, width, height):
         size = min(width, height) - 30

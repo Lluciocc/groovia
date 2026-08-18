@@ -1,6 +1,6 @@
 # player.py
 #
-# Copyright 2026 Lluciocc (llucio.cc00@gmail.com)
+#Copyright 2026 Lluciocc (llucio.cc00@gmail.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -72,16 +72,22 @@ class AudioPlayer(GObject.Object):
         self._tempo_filters = {}
         self._eq_filters = {}
         self._fx_filters = {}
+        self._bus_watches = {}
         # A playbin seek is reliable only after PAUSED preroll completes.
         self._pending_incoming_seeks = {}
         self._verified_incoming_seeks = {}
+        self._pending_primary_seek = None
         self.tempo_filter_name, self.tempo_matching_available = self._detect_tempo_filter()
         LOGGER.info(
             "tempo matching filter=%s available=%s",
             self.tempo_filter_name or "none",
             self.tempo_matching_available,
         )
-        GLib.timeout_add(200, self._tick)
+        self._tick_source = 0
+
+    def _ensure_tick(self):
+        if not self._tick_source:
+            self._tick_source = GLib.timeout_add(200, self._tick)
 
     @staticmethod
     def _detect_tempo_filter(factory_find=None):
@@ -140,7 +146,8 @@ class AudioPlayer(GObject.Object):
                 self._fx_filters[id(pipeline)] = effects
         bus = pipeline.get_bus()
         bus.add_signal_watch()
-        bus.connect("message", self._on_message, pipeline)
+        handler_id = bus.connect("message", self._on_message, pipeline)
+        self._bus_watches[id(pipeline)] = (bus, handler_id)
         return pipeline
 
     def _make_audio_filter(self):
@@ -208,14 +215,25 @@ class AudioPlayer(GObject.Object):
         self.track = track
         self.position = 0.0
         self.duration = track.duration
-        self.pipeline = self._new_pipeline(track, self.volume, self.auto_dj_enabled)
+        self._pending_primary_seek = None
+        # Restoring the previous session should not instantiate a decoder and
+        # its plugin graph before the user asks to play anything.
+        self.pipeline = (
+            self._new_pipeline(track, self.volume, self.auto_dj_enabled) if autoplay else None
+        )
         if self.pipeline:
-            self.pipeline.set_state(Gst.State.PLAYING if autoplay else Gst.State.PAUSED)
+            self.pipeline.set_state(Gst.State.PLAYING)
+            self._ensure_tick()
         self.playing = bool(autoplay)
         self.emit("track-changed", track)
         self.emit("state-changed", self.playing)
 
     def play(self):
+        if self.pipeline is None and self.track is not None:
+            restored_position = self.position
+            self.pipeline = self._new_pipeline(self.track, self.volume, self.auto_dj_enabled)
+            if self.pipeline and restored_position > 0:
+                self._pending_primary_seek = restored_position
         if self.auto_dj_enabled and self.next_track and not self.next_pipeline:
             self.next_pipeline = self._new_pipeline(self.next_track, 0.0, True)
             if self.next_pipeline:
@@ -223,6 +241,7 @@ class AudioPlayer(GObject.Object):
         if self.pipeline:
             self.pipeline.set_state(Gst.State.PLAYING)
             self.playing = True
+            self._ensure_tick()
             self.emit("state-changed", True)
 
     def pause(self):
@@ -237,15 +256,15 @@ class AudioPlayer(GObject.Object):
         self.pause() if self.playing else self.play()
 
     def seek(self, seconds):
+        self.position = max(0.0, float(seconds))
         if self.pipeline:
-            self.position = max(0.0, float(seconds))
             self.pipeline.seek_simple(
                 Gst.Format.TIME,
                 Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT,
                 max(0, int(seconds * Gst.SECOND)),
             )
             self._cancel_crossfade("seek", preserve_next=True)
-            self.emit("seeked", self.position)
+        self.emit("seeked", self.position)
 
     def set_volume(self, value):
         self.volume = max(0.0, min(1.0, value))
@@ -254,8 +273,9 @@ class AudioPlayer(GObject.Object):
         self.emit("volume-changed", self.volume)
 
     def _tick(self):
-        if not self.pipeline or not self.track:
-            return True
+        if not self.pipeline or not self.track or not self.playing:
+            self._tick_source = 0
+            return GLib.SOURCE_REMOVE
         try:
             position = self.pipeline.query_position(Gst.Format.TIME)[1] / Gst.SECOND
             duration = self.pipeline.query_duration(Gst.Format.TIME)[1] / Gst.SECOND
@@ -299,7 +319,7 @@ class AudioPlayer(GObject.Object):
                     self._start_crossfade()
         except Exception:
             LOGGER.exception("Audio position tick failed")
-        return True
+        return GLib.SOURCE_CONTINUE
 
     def _start_crossfade(self):
         if self._crossfading or not self.next_track:
@@ -810,6 +830,15 @@ class AudioPlayer(GObject.Object):
             error, _ = message.parse_error()
             LOGGER.error("GStreamer error: %s", error.message)
             self.emit("error", error.message)
+        elif message.type == Gst.MessageType.ASYNC_DONE and source is self.pipeline:
+            pending = self._pending_primary_seek
+            if pending is not None:
+                self._pending_primary_seek = None
+                self.pipeline.seek_simple(
+                    Gst.Format.TIME,
+                    Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT,
+                    max(0, int(pending * Gst.SECOND)),
+                )
         elif message.type == Gst.MessageType.ASYNC_DONE and source is self.next_pipeline:
             # playbin has completed its PAUSED preroll; only now is the
             # incoming timestamp seek considered valid for execution.
@@ -839,6 +868,17 @@ class AudioPlayer(GObject.Object):
     def _stop_pipeline(self, pipeline):
         if pipeline:
             pipeline.set_state(Gst.State.NULL)
+            watch = self._bus_watches.pop(id(pipeline), None)
+            if watch:
+                bus, handler_id = watch
+                try:
+                    bus.disconnect(handler_id)
+                except (TypeError, ValueError):
+                    pass
+                try:
+                    bus.remove_signal_watch()
+                except (AttributeError, TypeError):
+                    pass
             self._tempo_filters.pop(id(pipeline), None)
             self._eq_filters.pop(id(pipeline), None)
             self._fx_filters.pop(id(pipeline), None)
@@ -846,5 +886,9 @@ class AudioPlayer(GObject.Object):
             self._verified_incoming_seeks.pop(id(pipeline), None)
 
     def close(self):
+        if self._tick_source:
+            GLib.source_remove(self._tick_source)
+            self._tick_source = 0
         self._stop_pipeline(self.pipeline)
         self._stop_pipeline(self.next_pipeline)
+        self._pending_primary_seek = None

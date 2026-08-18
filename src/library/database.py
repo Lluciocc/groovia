@@ -183,6 +183,16 @@ class LibraryDatabase:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def recent_albums(self, limit: int = 12) -> list[dict]:
+        rows = self.connection.execute(
+            """SELECT album, album_artist, MAX(year) year, COUNT(*) track_count,
+                      MIN(cover_path) cover_path, MIN(id) id, MAX(added_at) latest
+               FROM tracks GROUP BY album, album_artist
+               ORDER BY latest DESC, album COLLATE NOCASE LIMIT ?""",
+            (max(1, int(limit)),),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def upsert_tracks(self, tracks: Iterable[Track]) -> int:
         count = 0
         for track in tracks:
