@@ -221,12 +221,20 @@ class SpotDLImportService:
 
     def import_async(self, job, payload: dict):
         thread = threading.Thread(
-            target=self._worker,
+            target=self._worker_safe,
             args=(job, payload),
             daemon=True,
             name=f"groovia-import-{job.id[:8]}",
         )
         thread.start()
+
+    def _worker_safe(self, job, payload):
+        try:
+            self._worker(job, payload)
+        except Exception as error:
+            # Keep an importer failure on the normal service event path so a
+            # provisional playlist can be cleaned up as well.
+            self._emit("import-failed", job, {"error": str(error)})
 
     def _worker(self, job, payload):
         self._emit("import-started", job, {})

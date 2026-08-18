@@ -124,6 +124,10 @@ class SpotDLService:
             "info": info,
             "replace": existing_action == "replace",
             "playlist": playlist,
+            # A newly-created import playlist is provisional until the whole
+            # download/import pipeline succeeds. Existing synchronized
+            # playlists must be kept when a later sync fails.
+            "created_playlist": False,
         }
         if info.kind == "track":
             destination = self.music_dir
@@ -153,6 +157,8 @@ class SpotDLService:
                     order_policy=order_policy,
                     sync_status="synchronizing",
                 )
+                context["created_playlist"] = True
+                context["playlist"] = playlist
             else:
                 destination = Path(playlist.managed_dir or self.sync_root / str(playlist.id))
                 sync_file = (
@@ -181,6 +187,7 @@ class SpotDLService:
                         "message": "Mirror synchronization is restricted to Groovia-managed directories."
                     },
                 )
+                self._discard_temporary_playlist(context)
                 return None
             context["playlist"] = playlist
             context["sync_enabled"] = sync_enabled
@@ -188,16 +195,20 @@ class SpotDLService:
             source = info.value
             if info.kind == "sync":
                 job_type = "sync"
-        job = self.manager.submit(
-            job_type,
-            source,
-            destination,
-            sync_file if job_type == "sync" else None,
-            sync_mode=sync_mode,
-            output_format=output_format,
-            bitrate=bitrate,
-            playlist_id=playlist.id if playlist else playlist_id,
-        )
+        try:
+            job = self.manager.submit(
+                job_type,
+                source,
+                destination,
+                sync_file if job_type == "sync" else None,
+                sync_mode=sync_mode,
+                output_format=output_format,
+                bitrate=bitrate,
+                playlist_id=playlist.id if playlist else playlist_id,
+            )
+        except Exception:
+            self._discard_temporary_playlist(context)
+            raise
         self._contexts[job.id] = context
         return job
 
@@ -304,6 +315,20 @@ class SpotDLService:
             index += 1
         return name
 
+    def _discard_temporary_playlist(self, context: dict) -> None:
+        """Remove a playlist created for an import that did not complete."""
+        if not context.get("created_playlist"):
+            return
+        playlist = context.get("playlist")
+        if not playlist:
+            return
+        try:
+            self.database.delete_playlist(playlist.id)
+        except Exception:
+            # Cleanup must not hide the original download error.
+            return
+        context["playlist"] = None
+
     def _manager_event(self, event, job, payload):
         if event == "finished":
             self.importer.import_async(job, payload)
@@ -313,7 +338,9 @@ class SpotDLService:
             else:
                 context = self._contexts.get(job.id, {})
                 playlist = context.get("playlist")
-                if playlist:
+                if context.get("created_playlist"):
+                    self._discard_temporary_playlist(context)
+                elif playlist:
                     self.database.update_playlist_source(
                         playlist.id,
                         sync_status="cancelled" if event == "cancelled" else "failed",
@@ -325,11 +352,27 @@ class SpotDLService:
 
     def _import_event(self, event, job, payload):
         if event != "import-finished":
+            if event == "import-failed":
+                context = self._contexts.get(job.id, {})
+                playlist = context.get("playlist")
+                if context.get("created_playlist"):
+                    self._discard_temporary_playlist(context)
+                elif playlist:
+                    self.database.update_playlist_source(
+                        playlist.id,
+                        sync_status="failed",
+                        last_sync_result=payload.get("error") or "library import failed",
+                    )
             self._emit(event, job, payload)
             return
         context = self._contexts.get(job.id, {})
         playlist = context.get("playlist")
         tracks = payload.get("tracks", [])
+        terminal_event = (
+            "completed"
+            if job.state == "finished"
+            else ("cancelled" if job.state == "cancelled" else "failed")
+        )
         # ``tracks`` are returned only after the importer has read the final
         # audio metadata and persisted each Track.  Start optional enrichment
         # here so Better Lyrics sees the authoritative title/artist/album and
@@ -375,21 +418,23 @@ class SpotDLService:
                         if track_id not in wanted:
                             self.database.remove_track_from_playlist(playlist.id, track_id)
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-            self.database.update_playlist_source(
-                playlist.id,
-                sync_status="synchronized" if job.state == "finished" else "failed",
-                last_sync_at=now if job.state == "finished" else playlist.last_sync_at,
-                last_sync_result=(
-                    f"{len(ordered)} tracks imported"
-                    if job.state == "finished"
-                    else (job.error or "partial failure")
-                ),
-            )
-        terminal_event = (
-            "completed"
-            if job.state == "finished"
-            else ("cancelled" if job.state == "cancelled" else "failed")
-        )
+            if terminal_event == "completed":
+                self.database.update_playlist_source(
+                    playlist.id,
+                    sync_status="synchronized",
+                    last_sync_at=now,
+                    last_sync_result=f"{len(ordered)} tracks imported",
+                )
+            elif context.get("created_playlist"):
+                self._discard_temporary_playlist(context)
+                playlist = None
+            else:
+                self.database.update_playlist_source(
+                    playlist.id,
+                    sync_status=terminal_event,
+                    last_sync_at=playlist.last_sync_at,
+                    last_sync_result=job.error or "partial failure",
+                )
         self._emit(
             terminal_event,
             job,
