@@ -65,7 +65,7 @@ CSS = """
 .album-title { font-weight: 700; margin-top: 8px; }
 .album-meta { color: alpha(white, .55); font-size: 12px; }
 .vinyl-panel { background: radial-gradient(circle at 50% 40%, #ff725e, #171721 53%, #111117 100%); border-radius: 22px; padding: 16px; }
-.vinyl-fullscreen-root { background: radial-gradient(circle at 50% 45%, alpha(@accent_color, .34), #111117 58%, #08080c 100%); }
+.vinyl-fullscreen-root { background: radial-gradient(circle at 50% 45%, alpha(#c2c2c2, .34), #111117 58%, #08080c 100%); }
 .vinyl-fullscreen-toolbar { background: alpha(#09090d, .72); border-radius: 14px; padding: 10px 14px; }
 .now-card { background: @headerbar_bg_color; border-radius: 18px; padding: 22px; }
 .now-title { font-size: 25px; font-weight: 800; }
@@ -86,19 +86,19 @@ button.favorite-active { color: #f6d32d; }
 .song-info-row { min-height: 38px; padding: 7px 0; }
 .song-info-key { color: alpha(@window_fg_color, .58); font-size: 12px; font-weight: 700; }
 .song-info-value { color: @window_fg_color; }
-.song-info-duration { background: alpha(@accent_color, .16); color: @accent_color; border-radius: 99px; padding: 4px 10px; font-weight: 700; }
+.song-info-duration { background: alpha(#c2c2c2, .16); color: #c2c2c2; border-radius: 99px; padding: 4px 10px; font-weight: 700; }
 .song-info-path { background: alpha(@window_fg_color, .045); border-radius: 10px; padding: 10px 12px; font-family: monospace; color: alpha(@window_fg_color, .72); }
 .queue-badge { background: #ff725e; color: white; border-radius: 99px; padding: 2px 7px; }
-.auto-dj-badge { background: alpha(@accent_color, .18); color: @accent_color; border-radius: 99px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
+.auto-dj-badge { background: alpha(#c2c2c2, .18); color: #c2c2c2; border-radius: 99px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
 .empty-state { padding: 80px 24px; }
 .lyrics-line { min-height: 50px; padding: 10px 18px; color: alpha(@window_fg_color, .52); font-size: 24px; font-weight: 650; }
 .lyrics-line:hover { color: @window_fg_color; background: alpha(@window_fg_color, .08); }
-.lyrics-line:focus-visible { outline: 2px solid @accent_color; outline-offset: 2px; }
+.lyrics-line:focus-visible { outline: 2px solid #c2c2c2; outline-offset: 2px; }
 .lyrics-current { color: @window_fg_color; font-size: 24px; font-weight: 800; }
 .lyrics-word-line { padding: 8px 12px; }
 .lyrics-word { padding: 2px 1px; margin: 0; color: alpha(@window_fg_color, .66); font-size: 20px; }
 .lyrics-word:hover { color: @window_fg_color; background: alpha(@window_fg_color, .08); }
-.lyrics-word:focus-visible { outline: 2px solid @accent_color; outline-offset: 2px; }
+.lyrics-word:focus-visible { outline: 2px solid #c2c2c2; outline-offset: 2px; }
 .lyrics-word-current { color: @window_fg_color; font-weight: 800; }
 .lyrics-word-previous { color: alpha(@window_fg_color, .82); }
 .lyrics-word-upcoming { color: alpha(@window_fg_color, .52); }
@@ -339,8 +339,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.player.set_auto_dj_plan(plan)
 
     def _system_palette(self):
-        rgba = self.style_manager.get_accent_color_rgba()
-        accent = (rgba.red, rgba.green, rgba.blue)
+        # Keep Groovia's neutral default independent from the desktop's
+        # accent (which is commonly blue). Album artwork can still provide a
+        # contextual palette when a track has a cover.
+        accent = (0.76, 0.76, 0.76)  # neutral light gray
         factor = 0.16 if self.style_manager.get_dark() else 0.72
         background = tuple(max(0.035, value * factor) for value in accent)
         return accent, background
@@ -377,15 +379,19 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _update_palette_css(self, accent, background):
         accent_css = css_rgb(accent)
         background_css = css_rgb(background)
+        accent_foreground = "#202124" if sum(accent) > 1.75 else "white"
         css = f"""
         .groovia-content, .groovia-content .toolbar-view {{ background: linear-gradient(135deg, {background_css}, @window_bg_color 78%); }}
         .brand-mark, .eyebrow {{ color: {accent_css}; }}
-        .nav-row:selected {{ background: {accent_css}; color: white; }}
-        button.suggested-action, .suggested-action {{ background-color: {accent_css}; color: white; }}
+        .nav-row:selected {{ background: {accent_css}; color: {accent_foreground}; }}
+        button.suggested-action, .suggested-action {{ background-color: {accent_css}; color: {accent_foreground}; }}
         .headerbar, .player-bar {{ border-color: {accent_css}; }}
         .now-card {{ border: 1px solid {accent_css}; }}
         .vinyl-panel {{ background: radial-gradient(circle at 50% 40%, {accent_css}, {background_css} 54%, #111117 100%); }}
         .vinyl-fullscreen-root {{ background: radial-gradient(circle at 50% 45%, {accent_css}, {background_css} 58%, #08080c 100%); }}
+        .song-info-duration {{ background: alpha({accent_css}, .16); color: {accent_css}; }}
+        .auto-dj-badge {{ background: alpha({accent_css}, .18); color: {accent_css}; }}
+        .lyrics-line:focus-visible, .lyrics-word:focus-visible {{ outline-color: {accent_css}; }}
         """
         self._load_css(self._dynamic_provider, css)
         if hasattr(self, "vinyl"):

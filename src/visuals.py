@@ -34,8 +34,7 @@ configure_logger(LOGGER, "Groovia visuals")
 
 Gst.init(None)
 
-
-FALLBACK_PALETTE = ((0.98, 0.39, 0.30), (0.12, 0.10, 0.16))
+FALLBACK_PALETTE = ((0.76, 0.76, 0.76), (0.12, 0.12, 0.12))
 _THUMBNAIL_CACHE: OrderedDict[tuple[str, int, int, int], GdkPixbuf.Pixbuf] = OrderedDict()
 _THUMBNAIL_CACHE_LIMIT = 96
 
