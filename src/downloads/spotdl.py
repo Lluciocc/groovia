@@ -334,6 +334,7 @@ def read_sync_metadata(path: str | Path) -> list[dict]:
                 "title": item.get("name") or item.get("title") or "",
                 "artist": artist,
                 "album": item.get("album") or item.get("album_name") or "",
+                "list_position": item.get("list_position"),
                 "list_name": item.get("list_name") or item.get("playlist_name") or "",
                 "cover_url": item.get("cover_url") or item.get("album_art") or item.get("image"),
             }
@@ -341,7 +342,15 @@ def read_sync_metadata(path: str | Path) -> list[dict]:
     unique = {}
     for entry in entries:
         unique.setdefault(entry["spotify_id"], entry)
-    return list(unique.values())
+    ordered = list(unique.values())
+    if any(item.get("list_position") is not None for item in ordered):
+        ordered.sort(
+            key=lambda item: (
+                item.get("list_position") is None,
+                item.get("list_position") or 0,
+            )
+        )
+    return ordered
 
 
 def read_sync_source(path: str | Path) -> tuple[str | None, str | None]:
