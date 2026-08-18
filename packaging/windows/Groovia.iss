@@ -28,7 +28,10 @@ CloseApplications=yes
 RestartApplications=no
 SetupIconFile=..\..\build\windows\Groovia.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
-ChangesAssociations=no
+; Register Groovia as an optional "Open with" handler for common audio files.
+; The OpenWithProgids entries make Groovia available without changing the
+; user's current default music player.
+ChangesAssociations=yes
 
 [Files]
 Source: "..\..\dist\Groovia\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -36,6 +39,25 @@ Source: "..\..\dist\Groovia\*"; DestDir: "{app}"; Flags: ignoreversion recursesu
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Registry]
+; ProgID shared by all supported audio extensions.
+Root: HKCU; Subkey: "Software\Classes\Groovia.Audio"; ValueType: string; ValueName: ""; ValueData: "Groovia audio file"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Groovia.Audio\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKCU; Subkey: "Software\Classes\Groovia.Audio\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+
+; Register only as an available "Open with" application, never as the
+; default handler. HKCU keeps the installation per-user as configured above.
+Root: HKCU; Subkey: "Software\Classes\.mp3\OpenWithProgids"; ValueType: string; ValueName: "Groovia.Audio"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.flac\OpenWithProgids"; ValueType: string; ValueName: "Groovia.Audio"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.ogg\OpenWithProgids"; ValueType: string; ValueName: "Groovia.Audio"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.oga\OpenWithProgids"; ValueType: string; ValueName: "Groovia.Audio"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.opus\OpenWithProgids"; ValueType: string; ValueName: "Groovia.Audio"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.wav\OpenWithProgids"; ValueType: string; ValueName: "Groovia.Audio"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.aac\OpenWithProgids"; ValueType: string; ValueName: "Groovia.Audio"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.m4a\OpenWithProgids"; ValueType: string; ValueName: "Groovia.Audio"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.m4b\OpenWithProgids"; ValueType: string; ValueName: "Groovia.Audio"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.mp4\OpenWithProgids"; ValueType: string; ValueName: "Groovia.Audio"; ValueData: ""; Flags: uninsdeletevalue
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
