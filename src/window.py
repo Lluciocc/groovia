@@ -3636,6 +3636,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._toast("Scanning dropped music…")
             self.scanner.scan_async(folders, self._scan_update)
         if tracks:
+            # Opening a file from the desktop can target a track that is
+            # already in Groovia's library. Re-importing it is unnecessary
+            # and used to hide the track's existing lyrics behind playback.
+            # Reuse the persisted record and open its lyrics directly.
+            existing = self.database.track_by_path(tracks[0].path)
+            if existing:
+                self._show_lyrics(existing)
+                return
             self.database.upsert_tracks(tracks)
             tracks = [self.database.track_by_path(track.path) or track for track in tracks]
             self.download_service.enrich_tracks_async(tracks)

@@ -63,3 +63,10 @@ The runtime does not provide this element by default, so Groovia logs:
 
 The Flatpak requests network access and scoped read/write access to the user's
 Music directory. No home-directory permission is used.
+
+You can also use this command to install the flatpak with `flatpak-builder`
+```bash
+flatpak-builder --user --install --force-clean \
+  build-flatpak \
+  io.github.Lluciocc.Groovia.json
+```

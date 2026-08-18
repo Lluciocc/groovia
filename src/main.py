@@ -38,7 +38,7 @@ if supports_mpris():
 else:
     MprisService = None
 
-DEFAULT_VERSION = "1.1.1"
+DEFAULT_VERSION = "1.2.0.dev"
 
 
 class GrooviaApplication(Adw.Application):
