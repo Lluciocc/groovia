@@ -177,6 +177,7 @@ class SpotDLService:
                     cover_policy=cover_policy,
                     order_policy=order_policy,
                 )
+                playlist = self.database.playlist(playlist.id)
             destination.mkdir(parents=True, exist_ok=True)
             sync_file.parent.mkdir(parents=True, exist_ok=True)
             if sync_mode == "mirror" and not self._within(destination, self.sync_root):
@@ -200,7 +201,7 @@ class SpotDLService:
                 job_type,
                 source,
                 destination,
-                sync_file if job_type == "sync" else None,
+                sync_file if job_type in {"sync", "playlist"} else None,
                 sync_mode=sync_mode,
                 output_format=output_format,
                 bitrate=bitrate,

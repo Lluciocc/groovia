@@ -1272,7 +1272,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         sort.connect(
             "notify::selected",
-            lambda _dropdown, pid=playlist_id: self._refresh_playlist_page(pid),
+            lambda _dropdown, _pspec, pid=playlist_id: self._refresh_playlist_page(pid),
         )
         return root
 

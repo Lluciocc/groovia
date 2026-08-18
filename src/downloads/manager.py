@@ -267,6 +267,8 @@ class DownloadManager:
                     args.append("--sync-without-deleting")
         else:
             args = [*command, "download", job.source]
+            if job.sync_file:
+                args.extend(["--save-file", str(job.sync_file)])
         args.extend(
             [
                 "--output",
