@@ -1,5 +1,7 @@
 #define MyAppName "Groovia"
-#define MyAppVersion "1.2.0"
+#ifndef MyAppVersion
+  #error "MyAppVersion must be provided by build-windows.ps1"
+#endif
 #define MyAppPublisher "Lluciocc"
 #define MyAppExeName "Groovia.exe"
 

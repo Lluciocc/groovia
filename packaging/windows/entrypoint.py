@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import traceback
 from pathlib import Path
@@ -33,6 +34,17 @@ def _bundle_root() -> Path:
         return Path(bundle_root)
 
     return Path(sys.executable).resolve().parent
+
+
+def _application_version() -> str:
+    version_file = _bundle_root() / "VERSION"
+    try:
+        version = version_file.read_text(encoding="utf-8").strip()
+    except OSError as error:
+        raise RuntimeError(f"Bundled VERSION file is missing: {version_file}") from error
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise RuntimeError(f"Invalid bundled application version: {version!r}")
+    return version
 
 
 def _configure_frozen_environment() -> None:
@@ -165,7 +177,7 @@ def main() -> int:
 
         from groovia import main as groovia_main
 
-        return int(groovia_main.main("1.2.0"))
+        return int(groovia_main.main(_application_version()))
     except BaseException as error:
         _startup_error(error)
         return 1

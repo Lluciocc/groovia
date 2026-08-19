@@ -1,5 +1,10 @@
 project('groovia',
-          version: '1.2.0',
+          version: run_command(
+            find_program('python3', 'python'),
+            '-c',
+            'from pathlib import Path; print(Path("VERSION").read_text(encoding="utf-8").strip())',
+            check: true,
+          ).stdout().strip(),
     meson_version: '>= 1.0.0',
   default_options: [ 'warning_level=2', 'werror=false', ],
 )

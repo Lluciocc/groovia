@@ -18,6 +18,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import sys
+from pathlib import Path
 
 import gi
 
@@ -38,7 +39,16 @@ if supports_mpris():
 else:
     MprisService = None
 
-DEFAULT_VERSION = "1.2.0.dev"
+def _default_version():
+    version_file = Path(__file__).resolve().parents[1] / "VERSION"
+    try:
+        version = version_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "dev"
+    return version or "dev"
+
+
+DEFAULT_VERSION = _default_version()
 
 
 class GrooviaApplication(Adw.Application):

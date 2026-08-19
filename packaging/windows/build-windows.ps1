@@ -26,6 +26,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$VersionFile = Join-Path $RepoRoot "VERSION"
 $BuildRoot = Join-Path $RepoRoot "build\windows"
 $PackageRoot = Join-Path $BuildRoot "package\groovia"
 $DistRoot = Join-Path $RepoRoot "dist"
@@ -34,6 +35,14 @@ $InstallerRoot = Join-Path $DistRoot "installer"
 $BuildTimer = $null
 $InstallerTimer = $null
 $TotalTimer = $null
+
+if (-not (Test-Path -LiteralPath $VersionFile -PathType Leaf)) {
+    throw "Missing project version file: $VersionFile"
+}
+$Version = (Get-Content -LiteralPath $VersionFile -Raw).Trim()
+if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+    throw "Invalid project version '$Version' in $VersionFile; expected MAJOR.MINOR.PATCH"
+}
 
 function Write-Instruction([string]$Title, [string]$Message) {
     # Color the instruction title and keep informational text readable in gray.
@@ -100,6 +109,7 @@ New-Item -ItemType Directory -Force -Path $BuildRoot, $DistRoot | Out-Null
 $TotalTimer = [System.Diagnostics.Stopwatch]::StartNew()
 $BuildTimer = [System.Diagnostics.Stopwatch]::StartNew()
 Write-Instruction "BUILD" "Preparing Windows build outputs"
+Write-Status "VERSION" $Version
 foreach ($Target in @($AppRoot, $InstallerRoot, (Join-Path $RepoRoot "build\pyinstaller"), (Join-Path $BuildRoot "package"))) {
     if (Test-Path -LiteralPath $Target) {
         $ResolvedTarget = (Resolve-Path -LiteralPath $Target).Path
@@ -248,7 +258,7 @@ if (-not $SkipInstaller) {
     $InstallerTimer = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Instruction "INSTALLER" "Generating the Inno Setup installer"
     New-Item -ItemType Directory -Force -Path $InstallerRoot | Out-Null
-    Invoke-NativeLogged { & iscc (Join-Path $RepoRoot "packaging\windows\Groovia.iss") }
+    Invoke-NativeLogged { & iscc "/DMyAppVersion=$Version" (Join-Path $RepoRoot "packaging\windows\Groovia.iss") }
     if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
     $InstallerTimer.Stop()
     Write-Instruction "VALIDATE" "Installer output: $InstallerRoot"

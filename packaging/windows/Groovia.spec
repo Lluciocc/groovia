@@ -32,6 +32,43 @@ TOOLS_ROOT = BUILD_ROOT / "tools"
 LICENSE_ROOT = BUILD_ROOT / "licenses"
 ADWAITA_ROOT = Path(sys.prefix) / "share" / "icons" / "Adwaita"
 HICOLOR_ROOT = Path(sys.prefix) / "share" / "icons" / "hicolor"
+VERSION_FILE = ROOT / "VERSION"
+
+try:
+    APP_VERSION = VERSION_FILE.read_text(encoding="utf-8").strip()
+except OSError as error:
+    raise SystemExit(f"Missing {VERSION_FILE}; add the project VERSION file first") from error
+
+VERSION_PARTS = APP_VERSION.split(".")
+if len(VERSION_PARTS) != 3 or not all(part.isdigit() for part in VERSION_PARTS):
+    raise SystemExit(
+        f"Invalid Windows version {APP_VERSION!r} in {VERSION_FILE}; expected MAJOR.MINOR.PATCH"
+    )
+
+VERSION_INFO = BUILD_ROOT / "version_info.generated.txt"
+VERSION_INFO.write_text(
+    f"""VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=({VERSION_PARTS[0]}, {VERSION_PARTS[1]}, {VERSION_PARTS[2]}, 0),
+    prodvers=({VERSION_PARTS[0]}, {VERSION_PARTS[1]}, {VERSION_PARTS[2]}, 0),
+    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[StringFileInfo([
+    StringTable('040904B0', [
+      StringStruct('CompanyName', 'Lluciocc'),
+      StringStruct('FileDescription', 'Groovia music player'),
+      StringStruct('FileVersion', '{APP_VERSION}'),
+      StringStruct('InternalName', 'Groovia'),
+      StringStruct('OriginalFilename', 'Groovia.exe'),
+      StringStruct('ProductName', 'Groovia'),
+      StringStruct('ProductVersion', '{APP_VERSION}'),
+      StringStruct('LegalCopyright', 'Copyright 2026 Lluciocc'),
+    ])
+  ]), VarFileInfo([VarStruct('Translation', [1033, 1200])])]
+)\n""",
+    encoding="utf-8",
+)
 
 if not RESOURCE.is_file():
     raise SystemExit(f"Missing {RESOURCE}; run build-windows.ps1 first")
@@ -67,6 +104,7 @@ def collect_tree(root: Path, destination: str) -> list[tuple[str, str]]:
 
 
 datas = [
+    (str(VERSION_FILE), "."),
     (str(RESOURCE), "."),
     (str(COMPILED_SCHEMAS), "schemas"),
     (str(ROOT / "data" / "icons" / "hicolor" / "scalable" / "apps" / "io.github.Lluciocc.Groovia.svg"), "share/icons/hicolor/scalable/apps"),
@@ -181,11 +219,7 @@ exe = EXE(
         if (BUILD_ROOT / "Groovia.ico").is_file()
         else None
     ),
-    version=(
-        str(ROOT / "packaging" / "windows" / "version_info.txt")
-        if (ROOT / "packaging" / "windows" / "version_info.txt").is_file()
-        else None
-    ),
+    version=str(VERSION_INFO),
 )
 
 coll = COLLECT(

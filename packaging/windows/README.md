@@ -44,7 +44,8 @@ repository's `build/windows`, `build/pyinstaller`, `dist/Groovia` and
 - a GStreamer runtime subset and scanner discovered from `sys.prefix`
 
 The final artifacts are `dist/Groovia/Groovia.exe` and
-`dist/installer/Groovia-1.2.0-Setup.exe`. The installer defaults to
+`dist/installer/Groovia-<version>-Setup.exe`, where `<version>` comes from
+the repository's root `VERSION` file. The installer defaults to
 `%LOCALAPPDATA%\Programs\Groovia`, creates a Start Menu shortcut, offers an
 unchecked desktop shortcut, and never removes user data during uninstall.
 
