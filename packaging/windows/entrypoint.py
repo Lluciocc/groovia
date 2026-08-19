@@ -165,7 +165,7 @@ def main() -> int:
 
         from groovia import main as groovia_main
 
-        return int(groovia_main.main("0.1.0"))
+        return int(groovia_main.main("1.2.0"))
     except BaseException as error:
         _startup_error(error)
         return 1

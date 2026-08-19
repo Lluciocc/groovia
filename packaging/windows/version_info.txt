@@ -8,11 +8,11 @@ VSVersionInfo(
     StringTable('040904B0', [
       StringStruct('CompanyName', 'Lluciocc'),
       StringStruct('FileDescription', 'Groovia music player'),
-      StringStruct('FileVersion', '0.1.0'),
+      StringStruct('FileVersion', '1.2.0'),
       StringStruct('InternalName', 'Groovia'),
       StringStruct('OriginalFilename', 'Groovia.exe'),
       StringStruct('ProductName', 'Groovia'),
-      StringStruct('ProductVersion', '0.1.0'),
+      StringStruct('ProductVersion', '1.2.0'),
       StringStruct('LegalCopyright', 'Copyright 2026 Lluciocc'),
     ])
   ]), VarFileInfo([VarStruct('Translation', [1033, 1200])])]

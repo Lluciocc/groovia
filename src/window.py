@@ -228,6 +228,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.repeat_all = True
         self.shuffle = False
         self._library_random_mode = False
+        self._auto_dj_enabled = False
         self._playback_source: list[Track] = []
         self._history: list[Track] = []
         self.current: Track | None = None
@@ -237,7 +238,6 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.playlist_assets_dir.mkdir(parents=True, exist_ok=True)
         self._settings = self._load_settings()
         self._apply_crossfade_setting()
-        self._apply_auto_dj_setting()
         if self._settings:
             self._settings.connect("changed::crossfade-index", self._on_crossfade_setting_changed)
             self._settings.connect("changed::auto-dj-enabled", self._on_auto_dj_setting_changed)
@@ -264,8 +264,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._connect_player()
         self._refresh_library()
         self._refresh_playlist_sidebar()
-        self._restore_playback()
+        # Restore Auto DJ and playback only after the window has been
+        # presented.  A persisted Auto DJ session can trigger expensive
+        # analysis during startup, which otherwise leaves Windows showing
+        # only a background process until the work finishes.
+        GLib.idle_add(self._initialize_playback)
         GLib.idle_add(self._automatic_playlist_sync)
+
+    def _initialize_playback(self):
+        self._apply_auto_dj_setting()
+        self._restore_playback()
+        return GLib.SOURCE_REMOVE
 
     def _load_settings(self):
         try:
