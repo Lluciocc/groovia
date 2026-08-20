@@ -62,7 +62,12 @@ function Get-Artifact([object]$Spec, [string]$Name) {
         $downloadPath = "$cachePath.download"
         Remove-Item -LiteralPath $downloadPath -Force -ErrorAction SilentlyContinue
         Write-Host "Downloading pinned $Name artifact..."
-        & curl.exe --fail --location --retry 3 --output $downloadPath $Spec.url
+        # curl writes its progress meter to stderr even when the download
+        # succeeds.  PowerShell 5.1 turns native stderr into an error record,
+        # and this script deliberately uses ErrorActionPreference=Stop.
+        # Suppress only the progress meter; --show-error keeps real failures
+        # visible.
+        & curl.exe --fail --silent --show-error --location --retry 3 --output $downloadPath $Spec.url
         if ($LASTEXITCODE -ne 0) { throw "Download failed for $Name" }
         Assert-Hash $downloadPath $Spec.sha256
         Move-Item -LiteralPath $downloadPath -Destination $cachePath

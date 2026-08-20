@@ -11,11 +11,11 @@
     "license_name": "spotDL-LICENSE.txt"
   },
   "ffmpeg": {
-    "version": "autobuild-2026-08-06-13-39 / N-125978-g95c43d7df7",
-    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-06-13-39/ffmpeg-N-125978-g95c43d7df7-win64-gpl.zip",
-    "sha256": "ee299bc305e69ebec53c7eb4419a0397df12aaebb9f3c51552ab937248ba9fa9",
+    "version": "autobuild-2026-08-20-13-45 / N-126229-gf101fce22d",
+    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-20-13-45/ffmpeg-N-126229-gf101fce22d-win64-gpl.zip",
+    "sha256": "c4e072ab7d22f9bfddfedc0acd3c0613120475345b51a6a245d42faa05a7349b",
     "kind": "archive",
-    "cache_name": "ffmpeg-N-125978-g95c43d7df7-win64-gpl.zip",
+    "cache_name": "ffmpeg-N-126229-gf101fce22d-win64-gpl.zip",
     "files": {
       "ffmpeg.exe": "ffmpeg.exe",
       "ffprobe.exe": "ffprobe.exe"
