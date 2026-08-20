@@ -174,6 +174,9 @@ add_file(scanner, "gstreamer-1.0")
 hiddenimports = [
     "cairo",
     "gi._gi_cairo",
+    # Auto DJ is loaded through groovia.autodj.__getattr__, so PyInstaller's
+    # static import analysis cannot reliably discover its service module.
+    "groovia.autodj.service",
     "gi.repository.Adw", "gi.repository.Gdk", "gi.repository.GdkPixbuf",
     "gi.repository.Gio", "gi.repository.GLib", "gi.repository.GObject",
     "gi.repository.Gst", "gi.repository.GstPbutils", "gi.repository.Gtk",

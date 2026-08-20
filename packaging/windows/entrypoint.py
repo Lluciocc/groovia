@@ -135,6 +135,7 @@ def main() -> int:
             import numpy
             import scipy
             from scipy import signal
+            from groovia.autodj import AutoDJService
 
             gi.require_version("Gst", "1.0")
             from gi.repository import Gst
@@ -158,7 +159,8 @@ def main() -> int:
                 f"Groovia Auto DJ smoke test: numpy={numpy.__version__} scipy={scipy.__version__} "
                 f"gstreamer={Gst.version_string()} tempo={tempo_factory.get_name()} "
                 f"plugin={plugin.get_name() if plugin else 'unknown'} "
-                f"filename={plugin.get_filename() if plugin else 'unknown'}"
+                f"filename={plugin.get_filename() if plugin else 'unknown'} "
+                f"service={AutoDJService.__name__}"
             )
             return 0
 
