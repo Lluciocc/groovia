@@ -66,6 +66,8 @@ class LibraryScanner:
     def _read_track(self, path: Path) -> Track:
         title = path.stem.replace("_", " ").replace("-", " – ")
         artist, album = "Unknown Artist", "Unknown Album"
+        album_artist, year = "", ""
+        track_number, disc_number = 0, 1
         parts = path.stem.split(" - ", 1)
         if len(parts) == 2:
             artist, title = parts[0].strip(), parts[1].strip()
@@ -89,16 +91,47 @@ class LibraryScanner:
                     ok, value = tags.get_string(name)
                     return value if ok and value else default
 
+                def number_tag(name, default):
+                    try:
+                        ok, value = tags.get_uint(name)
+                        return int(value) if ok and value is not None else default
+                    except (AttributeError, TypeError, ValueError):
+                        return default
+
                 title, artist, album = (
                     tag("title", title),
                     tag("artist", artist),
                     tag("album", album),
                 )
+                album_artist = tag("album-artist", artist)
+                track_number = number_tag("track-number", 0)
+                disc_number = number_tag("album-disc-number", 1)
+                for date_tag in ("datetime", "date-time", "date"):
+                    try:
+                        ok, value = tags.get_date_time(date_tag)
+                        if ok and value:
+                            year = str(value.get_year())
+                            break
+                    except (AttributeError, TypeError, ValueError):
+                        continue
                 if not cover:
                     cover = self._extract_embedded_cover(tags, path)
         except Exception:
             pass
-        return Track(None, title, artist, album, artist, "", "", 0, 1, duration, str(path), cover)
+        return Track(
+            None,
+            title,
+            artist,
+            album,
+            album_artist or artist,
+            year,
+            "",
+            track_number,
+            disc_number,
+            duration,
+            str(path),
+            cover,
+        )
 
     def read_track(self, path: str) -> Track:
         """Read one file on demand, useful for libraries imported before artwork support."""

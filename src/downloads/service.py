@@ -352,9 +352,10 @@ class SpotDLService:
             self._emit(event, job, payload)
 
     def _import_event(self, event, job, payload):
+        job_id = getattr(job, "id", None)
         if event != "import-finished":
             if event == "import-failed":
-                context = self._contexts.get(job.id, {})
+                context = self._contexts.get(job_id, {})
                 playlist = context.get("playlist")
                 if context.get("created_playlist"):
                     self._discard_temporary_playlist(context)
@@ -366,7 +367,7 @@ class SpotDLService:
                     )
             self._emit(event, job, payload)
             return
-        context = self._contexts.get(job.id, {})
+        context = self._contexts.get(job_id, {})
         playlist = context.get("playlist")
         tracks = payload.get("tracks", [])
         terminal_event = (

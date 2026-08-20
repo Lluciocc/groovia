@@ -18,6 +18,34 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from .database import LibraryDatabase
-from .scanner import LibraryScanner
+from .grouping import (
+    AlbumGroup,
+    ArtistGroup,
+    group_albums,
+    group_artists,
+    normalize_group_name,
+    parse_artists,
+)
 
-__all__ = ["LibraryDatabase", "LibraryScanner"]
+
+def __getattr__(name):
+    # Keep pure grouping/database imports usable in non-GTK tooling and tests.
+    # The scanner initializes GStreamer, so load it only when the application
+    # actually asks for it.
+    if name == "LibraryScanner":
+        from .scanner import LibraryScanner
+
+        return LibraryScanner
+    raise AttributeError(name)
+
+
+__all__ = [
+    "AlbumGroup",
+    "ArtistGroup",
+    "LibraryDatabase",
+    "LibraryScanner",
+    "group_albums",
+    "group_artists",
+    "normalize_group_name",
+    "parse_artists",
+]

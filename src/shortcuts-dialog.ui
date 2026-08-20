@@ -48,6 +48,8 @@
         <property name="title" translatable="yes">Navigation</property>
         <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Home</property><property name="action-name">app.home</property></object></child>
         <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">All Music</property><property name="action-name">app.library</property></object></child>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Albums</property><property name="action-name">app.albums</property></object></child>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Artists</property><property name="action-name">app.artists</property></object></child>
         <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Queue</property><property name="action-name">app.queue</property></object></child>
         <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Download from URL</property><property name="action-name">app.download</property></object></child>
         <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Open / Close menu</property><property name="action-name">app.toggle-menu</property></object></child>

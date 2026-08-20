@@ -47,6 +47,7 @@ pip
 dist/
 tests/*
 !tests/test_lyrics_better.py
+!tests/test_grouping.py
 build-check
 .mypycache/
 .mypy_cache/

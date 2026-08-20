@@ -170,7 +170,7 @@ class LibraryDatabase:
 
     def recent_tracks(self, limit: int = 8) -> list[Track]:
         rows = self.connection.execute(
-            "SELECT * FROM tracks ORDER BY COALESCE(last_played, added_at) DESC LIMIT ?",
+            "SELECT * FROM tracks WHERE last_played IS NOT NULL ORDER BY last_played DESC LIMIT ?",
             (limit,),
         ).fetchall()
         return [self._track(row) for row in rows]

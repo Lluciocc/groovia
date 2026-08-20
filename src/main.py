@@ -39,6 +39,7 @@ if supports_mpris():
 else:
     MprisService = None
 
+
 def _default_version():
     version_file = Path(__file__).resolve().parents[1] / "VERSION"
     try:
@@ -83,7 +84,11 @@ class GrooviaApplication(Adw.Application):
         self.create_action(
             "library", lambda *_: self._window_action("_show_library"), ["<primary>2"]
         )
-        self.create_action("queue", lambda *_: self._window_action("_show_queue"), ["<primary>3"])
+        self.create_action("albums", lambda *_: self._window_action("_show_albums"), ["<primary>3"])
+        self.create_action(
+            "artists", lambda *_: self._window_action("_show_artists"), ["<primary>4"]
+        )
+        self.create_action("queue", lambda *_: self._window_action("_show_queue"), ["<primary>5"])
         self.create_action(
             "download", lambda *_: self._window_action("_download_url"), ["<primary>d"]
         )

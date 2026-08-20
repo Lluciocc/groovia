@@ -32,7 +32,16 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, PangoCairo
 
 from .audio import AudioPlayer
 from .downloads import SpotDLService, classify_input
-from .library import LibraryDatabase, LibraryScanner
+from .library import (
+    AlbumGroup,
+    ArtistGroup,
+    LibraryDatabase,
+    LibraryScanner,
+    group_albums,
+    group_artists,
+    normalize_group_name,
+    parse_artists,
+)
 from .library.scanner import FORMATS
 from .logging_utils import configure_logger
 from .models import Playlist, Track
@@ -64,6 +73,10 @@ CSS = """
 .album-art { border-radius: 10px; }
 .album-title { font-weight: 700; margin-top: 8px; }
 .album-meta { color: alpha(white, .55); font-size: 12px; }
+.collection-card { min-width: 164px; }
+.artist-avatar { min-width: 144px; min-height: 144px; border-radius: 999px; background: alpha(@window_fg_color, .09); color: alpha(@window_fg_color, .84); font-size: 42px; font-weight: 800; }
+.collection-hero { background: @card_bg_color; border-radius: 18px; padding: 22px; }
+.collection-actions { margin-top: 8px; }
 .vinyl-panel { background: radial-gradient(circle at 50% 40%, #ff725e, #171721 53%, #111117 100%); border-radius: 22px; padding: 16px; }
 .vinyl-fullscreen-root { background: radial-gradient(circle at 50% 45%, alpha(#c2c2c2, .34), #111117 58%, #08080c 100%); }
 .vinyl-fullscreen-toolbar { background: alpha(#09090d, .72); border-radius: 14px; padding: 10px 14px; }
@@ -234,6 +247,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.current: Track | None = None
         self._current_playlist_id: int | None = None
         self._playlist_views: dict[int, dict] = {}
+        self._library_tracks_snapshot: list[Track] = []
+        self._album_groups: list[AlbumGroup] = []
+        self._artist_groups: list[ArtistGroup] = []
+        self._album_groups_by_key: dict[tuple[str, str], AlbumGroup] = {}
+        self._artist_groups_by_key: dict[str, ArtistGroup] = {}
+        self._library_group_signature = None
+        self._library_groups_dirty = True
+        self._albums_view_dirty = True
+        self._artists_view_dirty = True
         self.playlist_assets_dir = self.database.path.parent / "playlists"
         self.playlist_assets_dir.mkdir(parents=True, exist_ok=True)
         self._settings = self._load_settings()
@@ -439,9 +461,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.stack.set_vexpand(True)
         self.stack.add_named(self._home_page(), "home")
         self.stack.add_named(self._library_page(), "library")
+        self.stack.add_named(self._albums_page(), "albums")
+        self.stack.add_named(self._artists_page(), "artists")
         self.stack.add_named(self._queue_page(), "queue")
-        self.stack.add_named(self._collection_page("album"), "album-detail")
-        self.stack.add_named(self._collection_page("artist"), "artist-detail")
+        self.stack.add_named(self._album_detail_page(), "album-detail")
+        self.stack.add_named(self._artist_detail_page(), "artist-detail")
         self.stack.add_named(self._lyrics_page(), "lyrics")
 
         sidebar = self._sidebar()
@@ -521,6 +545,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         for title, icon, page in (
             ("Home", "go-home-symbolic", "home"),
             ("All Music", "audio-x-generic-symbolic", "library"),
+            ("Albums", "media-optical-symbolic", "albums"),
+            ("Artists", "avatar-default-symbolic", "artists"),
             ("Queue", "view-list-symbolic", "queue"),
         ):
             row = Gtk.ListBoxRow()
@@ -654,6 +680,18 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         self.recent_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         content.append(self.recent_box)
+        self.most_played_albums_header = self._collection_section_header(
+            "Most played albums", "albums"
+        )
+        content.append(self.most_played_albums_header)
+        self.most_played_albums_flow = self._collection_flow(max_per_line=6)
+        content.append(self.most_played_albums_flow)
+        self.most_played_artists_header = self._collection_section_header(
+            "Most played artists", "artists"
+        )
+        content.append(self.most_played_artists_header)
+        self.most_played_artists_flow = self._collection_flow(max_per_line=6)
+        content.append(self.most_played_artists_flow)
         empty = Gtk.Label(
             label="Import a folder to bring your records into Groovia.",
             css_classes=["muted", "empty-state"],
@@ -662,6 +700,25 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content.append(empty)
         root.set_child(content)
         return root
+
+    def _collection_section_header(self, title, target_page):
+        header = Gtk.Box(spacing=8, margin_top=28)
+        header.append(Gtk.Label(label=title, xalign=0, hexpand=True, css_classes=["section-title"]))
+        see_all = Gtk.Button(label="See all", css_classes=["flat"])
+        see_all.connect("clicked", lambda *_: self._show_page(target_page))
+        header.append(see_all)
+        return header
+
+    @staticmethod
+    def _collection_flow(max_per_line=6):
+        return Gtk.FlowBox(
+            max_children_per_line=max_per_line,
+            min_children_per_line=1,
+            selection_mode=Gtk.SelectionMode.NONE,
+            row_spacing=14,
+            column_spacing=14,
+            homogeneous=True,
+        )
 
     def _library_page(self):
         root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
@@ -674,7 +731,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.search_entry = Gtk.SearchEntry(placeholder_text="Search your library", hexpand=True)
         self.search_entry.set_margin_bottom(18)
         self.search_entry.connect(
-            "search-changed", lambda entry: self._refresh_library(entry.get_text())
+            "search-changed",
+            lambda entry: self._refresh_library(entry.get_text(), refresh_collections=False),
         )
         self.library_box.append(self.search_entry)
         self.library_content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -685,6 +743,54 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._library_batch_size = 40
         self._library_loading = False
         root.set_child(self.library_box)
+        return root
+
+    def _albums_page(self):
+        root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content.set_margin_top(28)
+        content.set_margin_bottom(28)
+        content.set_margin_start(38)
+        content.set_margin_end(38)
+        content.append(Gtk.Label(label="Albums", xalign=0, css_classes=["hero-title"]))
+        self.albums_subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
+        content.append(self.albums_subtitle)
+        self.albums_search = Gtk.SearchEntry(placeholder_text="Search albums…", hexpand=True)
+        self.albums_search.connect(
+            "search-changed", lambda entry: self._refresh_albums_page(entry.get_text())
+        )
+        content.append(self.albums_search)
+        self.albums_flow = self._collection_flow(max_per_line=6)
+        content.append(self.albums_flow)
+        self.albums_empty = Gtk.Label(
+            label="No albums match this search.", css_classes=["muted", "empty-state"]
+        )
+        content.append(self.albums_empty)
+        root.set_child(content)
+        return root
+
+    def _artists_page(self):
+        root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content.set_margin_top(28)
+        content.set_margin_bottom(28)
+        content.set_margin_start(38)
+        content.set_margin_end(38)
+        content.append(Gtk.Label(label="Artists", xalign=0, css_classes=["hero-title"]))
+        self.artists_subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
+        content.append(self.artists_subtitle)
+        self.artists_search = Gtk.SearchEntry(placeholder_text="Search artists…", hexpand=True)
+        self.artists_search.connect(
+            "search-changed", lambda entry: self._refresh_artists_page(entry.get_text())
+        )
+        content.append(self.artists_search)
+        self.artists_flow = self._collection_flow(max_per_line=6)
+        content.append(self.artists_flow)
+        self.artists_empty = Gtk.Label(
+            label="No artists match this search.", css_classes=["muted", "empty-state"]
+        )
+        content.append(self.artists_empty)
+        root.set_child(content)
         return root
 
     def _queue_page(self):
@@ -708,29 +814,121 @@ class GrooviaWindow(Adw.ApplicationWindow):
         root.set_child(box)
         return root
 
-    def _collection_page(self, kind: str):
+    def _album_detail_page(self):
         root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         box.set_margin_top(28)
         box.set_margin_start(38)
         box.set_margin_end(38)
         box.set_margin_bottom(28)
         back = Gtk.Button(
-            label="Back to All Music",
+            label="Back to Albums",
             icon_name="go-previous-symbolic",
             halign=Gtk.Align.START,
         )
-        back.connect("clicked", lambda *_: self._show_page("library"))
+        back.connect(
+            "clicked", lambda *_: self._show_page(getattr(self, "_album_detail_origin", "albums"))
+        )
         box.append(back)
-        heading = Gtk.Label(xalign=0, css_classes=["hero-title"])
+        hero = Gtk.Box(spacing=22, css_classes=["collection-hero"])
+        cover_slot = Gtk.Box(width_request=220, height_request=220)
+        hero.append(cover_slot)
+        identity = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=7,
+            valign=Gtk.Align.CENTER,
+            hexpand=True,
+        )
+        identity.append(Gtk.Label(label="ALBUM", xalign=0, css_classes=["eyebrow"]))
+        heading = Gtk.Label(xalign=0, wrap=True, css_classes=["hero-title"])
+        artist = Gtk.Label(xalign=0, wrap=True, css_classes=["title-3"])
         subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
+        identity.append(heading)
+        identity.append(artist)
+        identity.append(subtitle)
+        actions = Gtk.Box(spacing=8, css_classes=["collection-actions"])
+        play = Gtk.Button(label="Play Album", icon_name="media-playback-start-symbolic")
+        play.add_css_class("suggested-action")
+        add = Gtk.Button(label="Add to Queue", icon_name="list-add-symbolic")
+        play.connect("clicked", lambda *_: self._play_current_album())
+        add.connect("clicked", lambda *_: self._queue_current_album())
+        actions.append(play)
+        actions.append(add)
+        identity.append(actions)
+        hero.append(identity)
+        box.append(hero)
+        box.append(Gtk.Label(label="Songs", xalign=0, css_classes=["section-title"]))
         items = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        box.append(heading)
-        box.append(subtitle)
         box.append(items)
-        setattr(self, f"{kind}_detail_heading", heading)
-        setattr(self, f"{kind}_detail_subtitle", subtitle)
-        setattr(self, f"{kind}_detail_items", items)
+        self._album_detail_widgets = {
+            "cover": cover_slot,
+            "heading": heading,
+            "artist": artist,
+            "subtitle": subtitle,
+            "tracks": items,
+            "play": play,
+            "add": add,
+        }
+        root.set_child(box)
+        return root
+
+    def _artist_detail_page(self):
+        root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        box.set_margin_top(28)
+        box.set_margin_start(38)
+        box.set_margin_end(38)
+        box.set_margin_bottom(28)
+        back = Gtk.Button(
+            label="Back to Artists",
+            icon_name="go-previous-symbolic",
+            halign=Gtk.Align.START,
+        )
+        back.connect(
+            "clicked",
+            lambda *_: self._show_page(getattr(self, "_artist_detail_origin", "artists")),
+        )
+        box.append(back)
+        hero = Gtk.Box(spacing=22, css_classes=["collection-hero"])
+        image_slot = Gtk.Box(width_request=180, height_request=180)
+        hero.append(image_slot)
+        identity = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=7,
+            valign=Gtk.Align.CENTER,
+            hexpand=True,
+        )
+        identity.append(Gtk.Label(label="ARTIST", xalign=0, css_classes=["eyebrow"]))
+        heading = Gtk.Label(xalign=0, wrap=True, css_classes=["hero-title"])
+        subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
+        identity.append(heading)
+        identity.append(subtitle)
+        actions = Gtk.Box(spacing=8, css_classes=["collection-actions"])
+        play = Gtk.Button(label="Play Artist", icon_name="media-playback-start-symbolic")
+        play.add_css_class("suggested-action")
+        add = Gtk.Button(label="Add to Queue", icon_name="list-add-symbolic")
+        play.connect("clicked", lambda *_: self._play_current_artist())
+        add.connect("clicked", lambda *_: self._queue_current_artist())
+        actions.append(play)
+        actions.append(add)
+        identity.append(actions)
+        hero.append(identity)
+        box.append(hero)
+        box.append(Gtk.Label(label="Albums", xalign=0, css_classes=["section-title"]))
+        albums = self._collection_flow(max_per_line=6)
+        box.append(albums)
+        box.append(Gtk.Label(label="Songs", xalign=0, css_classes=["section-title"]))
+        tracks = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.append(tracks)
+        self._artist_detail_widgets = {
+            "image": image_slot,
+            "heading": heading,
+            "subtitle": subtitle,
+            "albums": albums,
+            "tracks": tracks,
+            "play": play,
+            "add": add,
+        }
         root.set_child(box)
         return root
 
@@ -1964,8 +2162,68 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self.auto_dj_badge.set_visible(False)
         return GLib.SOURCE_REMOVE
 
-    def _refresh_library(self, search=""):
-        tracks = self.database.all_tracks(search)
+    @staticmethod
+    def _groups_signature(tracks):
+        return tuple(
+            (
+                track.id,
+                track.path,
+                track.title,
+                track.artist,
+                track.album,
+                track.album_artist,
+                track.year,
+                track.track_number,
+                track.disc_number,
+                track.duration,
+                track.cover_path,
+                track.play_count,
+            )
+            for track in tracks
+        )
+
+    def _ensure_library_groups(self, force=False):
+        if (
+            not force
+            and not self._library_groups_dirty
+            and self._library_group_signature is not None
+        ):
+            return False
+        tracks = self.database.all_tracks()
+        signature = self._groups_signature(tracks)
+        albums = group_albums(tracks)
+        artists = group_artists(tracks, albums)
+        self._library_tracks_snapshot = tracks
+        self._album_groups = albums
+        self._artist_groups = artists
+        self._album_groups_by_key = {album.key: album for album in albums}
+        self._artist_groups_by_key = {artist.key: artist for artist in artists}
+        self._library_group_signature = signature
+        self._library_groups_dirty = False
+        self._albums_view_dirty = True
+        self._artists_view_dirty = True
+        return True
+
+    @staticmethod
+    def _matches_library_search(track, search):
+        needle = normalize_group_name(search)
+        if not needle:
+            return True
+        return any(
+            needle in normalize_group_name(value)
+            for value in (track.title, track.artist, track.album, track.album_artist, track.genre)
+        )
+
+    def _refresh_library(self, search="", *, refresh_collections=True):
+        if refresh_collections:
+            self._library_groups_dirty = True
+        if refresh_collections or not self._library_tracks_snapshot:
+            self._ensure_library_groups()
+        tracks = [
+            track
+            for track in self._library_tracks_snapshot
+            if self._matches_library_search(track, search)
+        ]
         for child in iter_gtk_children(self.library_content_box):
             self.library_content_box.remove(child)
         self.library_content_box.append(
@@ -1984,19 +2242,39 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.library_content_box.append(self.library_items_box)
         if self.stack.get_visible_child_name() == "library":
             self._append_library_batch()
+        if not refresh_collections:
+            return
         for child in iter_gtk_children(self.album_flow):
             self.album_flow.remove(child)
         # This section is intentionally "Recently added", not a duplicate of
         # the complete library. Bounding it avoids constructing and decoding
         # every album card before the user has opened the library.
         for album in self.database.recent_albums(12):
-            self.album_flow.append(self._album_card(album))
+            card = self._recent_album_card(album)
+            if card is not None:
+                self.album_flow.append(card)
         for child in iter_gtk_children(self.recent_box):
             self.recent_box.remove(child)
         recent = self.database.recent_tracks()
         for track in recent:
             self.recent_box.append(self._track_row(track, False))
-        self.empty_home.set_visible(not tracks)
+        self._refresh_home_discovery()
+        visible_page = self.stack.get_visible_child_name()
+        if visible_page == "albums":
+            self._refresh_albums_page(self.albums_search.get_text())
+        elif visible_page == "artists":
+            self._refresh_artists_page(self.artists_search.get_text())
+        current_album = getattr(self, "_current_album_group", None)
+        current_artist = getattr(self, "_current_artist_group", None)
+        if visible_page == "album-detail" and current_album:
+            refreshed = self._album_groups_by_key.get(current_album.key)
+            if refreshed:
+                self._show_album_group(refreshed, origin=self._album_detail_origin)
+        elif visible_page == "artist-detail" and current_artist:
+            refreshed = self._artist_groups_by_key.get(current_artist.key)
+            if refreshed:
+                self._show_artist_group(refreshed, origin=self._artist_detail_origin)
+        self.empty_home.set_visible(not self._library_tracks_snapshot)
         self._refresh_queue()
         self._refresh_playlist_sidebar()
         self._refresh_playlist_pages()
@@ -2017,18 +2295,43 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if adjustment.get_value() + adjustment.get_page_size() >= adjustment.get_upper() - 320:
             self._append_library_batch()
 
-    def _album_card(self, album):
+    @staticmethod
+    def _clear_container(container):
+        for child in iter_gtk_children(container):
+            container.remove(child)
+
+    def _recent_album_card(self, album):
+        group = next(
+            (
+                candidate
+                for candidate in self._album_groups
+                if any(track.id == album.get("id") for track in candidate.tracks)
+            ),
+            None,
+        )
+        key = (
+            normalize_group_name(album.get("album") or "Unknown Album"),
+            normalize_group_name(album.get("album_artist") or "Unknown Artist"),
+        )
+        group = group or self._album_groups_by_key.get(key)
+        return self._album_group_card(group, origin="home") if group else None
+
+    def _album_group_card(self, album, *, origin="albums", show_plays=False):
         button = Gtk.Button()
         button.add_css_class("flat")
+        button.add_css_class("collection-card")
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
         box.add_css_class("album-card")
-        box.append(cover_widget(album.get("cover_path"), 144))
-        box.append(
-            Gtk.Label(label=album["album"], xalign=0, ellipsize=3, css_classes=["album-title"])
-        )
+        box.append(cover_widget(album.cover_path, 144))
+        box.append(Gtk.Label(label=album.title, xalign=0, ellipsize=3, css_classes=["album-title"]))
+        details = f"{album.album_artist} · {album.track_count} tracks"
+        if album.year:
+            details += f" · {album.year}"
+        if show_plays:
+            details += f" · {album.play_count} plays"
         box.append(
             Gtk.Label(
-                label=f"{album['album_artist']} · {album['track_count']} tracks",
+                label=details,
                 xalign=0,
                 ellipsize=3,
                 css_classes=["album-meta"],
@@ -2037,9 +2340,93 @@ class GrooviaWindow(Adw.ApplicationWindow):
         button.set_child(box)
         button.connect(
             "clicked",
-            lambda *_: self._play_album(album["album"], album["album_artist"]),
+            lambda *_: self._show_album_group(album, origin=origin),
         )
         return button
+
+    def _artist_avatar(self, artist, size=144):
+        if artist.image_path and Path(artist.image_path).is_file():
+            return cover_widget(artist.image_path, size)
+        initial = next((char.upper() for char in artist.name if char.isalnum()), "?")
+        avatar = Gtk.Label(label=initial, css_classes=["artist-avatar"])
+        avatar.set_size_request(size, size)
+        avatar.set_halign(Gtk.Align.CENTER)
+        avatar.set_valign(Gtk.Align.CENTER)
+        return avatar
+
+    def _artist_group_card(self, artist, *, origin="artists", show_plays=False):
+        button = Gtk.Button(css_classes=["flat", "collection-card"])
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.add_css_class("album-card")
+        box.append(self._artist_avatar(artist))
+        box.append(Gtk.Label(label=artist.name, xalign=0, ellipsize=3, css_classes=["album-title"]))
+        details = f"{artist.album_count} albums · {artist.track_count} songs"
+        if show_plays:
+            details += f" · {artist.play_count} plays"
+        box.append(Gtk.Label(label=details, xalign=0, ellipsize=3, css_classes=["album-meta"]))
+        button.set_child(box)
+        button.connect("clicked", lambda *_: self._show_artist_group(artist, origin=origin))
+        return button
+
+    def _refresh_home_discovery(self):
+        self._clear_container(self.most_played_albums_flow)
+        self._clear_container(self.most_played_artists_flow)
+        albums = sorted(
+            (album for album in self._album_groups if album.play_count > 0),
+            key=lambda album: (-album.play_count, normalize_group_name(album.title)),
+        )[:6]
+        artists = sorted(
+            (artist for artist in self._artist_groups if artist.play_count > 0),
+            key=lambda artist: (-artist.play_count, normalize_group_name(artist.name)),
+        )[:6]
+        for album in albums:
+            self.most_played_albums_flow.append(
+                self._album_group_card(album, origin="home", show_plays=True)
+            )
+        for artist in artists:
+            self.most_played_artists_flow.append(
+                self._artist_group_card(artist, origin="home", show_plays=True)
+            )
+        self.most_played_albums_flow.set_visible(bool(albums))
+        self.most_played_artists_flow.set_visible(bool(artists))
+        self.most_played_albums_header.set_visible(bool(albums))
+        self.most_played_artists_header.set_visible(bool(artists))
+
+    def _refresh_albums_page(self, search=""):
+        if not hasattr(self, "albums_flow"):
+            return
+        self._clear_container(self.albums_flow)
+        needle = normalize_group_name(search)
+        albums = [
+            album
+            for album in self._album_groups
+            if not needle
+            or any(
+                needle in normalize_group_name(value)
+                for value in (album.title, album.album_artist, *album.artist_names)
+            )
+        ]
+        self.albums_subtitle.set_label(f"{len(albums)} albums in your collection")
+        for album in albums:
+            self.albums_flow.append(self._album_group_card(album, origin="albums"))
+        self.albums_empty.set_visible(not albums)
+        self._albums_view_dirty = False
+
+    def _refresh_artists_page(self, search=""):
+        if not hasattr(self, "artists_flow"):
+            return
+        self._clear_container(self.artists_flow)
+        needle = normalize_group_name(search)
+        artists = [
+            artist
+            for artist in self._artist_groups
+            if not needle or needle in normalize_group_name(artist.name)
+        ]
+        self.artists_subtitle.set_label(f"{len(artists)} artists in your collection")
+        for artist in artists:
+            self.artists_flow.append(self._artist_group_card(artist, origin="artists"))
+        self.artists_empty.set_visible(not artists)
+        self._artists_view_dirty = False
 
     def _track_row(
         self,
@@ -2047,6 +2434,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         show_cover=True,
         playlist: Playlist | None = None,
         position: int | None = None,
+        source_tracks: list[Track] | None = None,
     ):
         row = Gtk.Box(spacing=12)
         box = row
@@ -2077,15 +2465,25 @@ class GrooviaWindow(Adw.ApplicationWindow):
             icon_button(
                 "media-playback-start-symbolic",
                 "Play",
-                lambda *_: self._play_selected_track(track, playlist),
+                lambda *_: self._play_selected_track(track, playlist, source_tracks),
             )
         )
         click = Gtk.GestureClick()
         click.set_button(0)
-        click.connect("pressed", self._on_track_row_pressed, box, box, track, playlist)
+        click.connect(
+            "pressed", self._on_track_row_pressed, box, box, track, playlist, source_tracks
+        )
         box.add_controller(click)
         keys = Gtk.EventControllerKey()
-        keys.connect("key-pressed", self._track_context_key_pressed, box, box, track, playlist)
+        keys.connect(
+            "key-pressed",
+            self._track_context_key_pressed,
+            box,
+            box,
+            track,
+            playlist,
+            source_tracks,
+        )
         box.add_controller(keys)
         if playlist and track.id is not None:
             drag_source = Gtk.DragSource(actions=Gdk.DragAction.MOVE)
@@ -2125,7 +2523,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._toast(f"{'Added to' if favorite else 'Removed from'} Favorites")
         self._refresh_library(self.search_entry.get_text())
 
-    def _on_track_row_pressed(self, gesture, n_press, x, y, row, box, track, playlist):
+    def _on_track_row_pressed(
+        self, gesture, n_press, x, y, row, box, track, playlist, source_tracks
+    ):
         button = gesture.get_current_button()
         LOGGER.info(
             "track row gesture button=%s presses=%s track=%r path=%r point=(%.1f, %.1f)",
@@ -2137,13 +2537,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
             y,
         )
         if button == Gdk.BUTTON_PRIMARY and n_press == 1:
-            self._play_selected_track(track, playlist)
+            self._play_selected_track(track, playlist, source_tracks)
         elif button == Gdk.BUTTON_SECONDARY:
             gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-            self._show_track_menu(row, box, track, x, y, playlist)
+            self._show_track_menu(row, box, track, x, y, playlist, source_tracks)
 
     def _track_context_key_pressed(
-        self, _controller, keyval, _keycode, state, row, box, track, playlist
+        self, _controller, keyval, _keycode, state, row, box, track, playlist, source_tracks
     ):
         menu_key = keyval in (Gdk.KEY_Menu, getattr(Gdk, "KEY_KP_Menu", Gdk.KEY_Menu))
         shift_f10 = keyval == Gdk.KEY_F10 and state & Gdk.ModifierType.SHIFT_MASK
@@ -2156,11 +2556,20 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 return True
         if menu_key or shift_f10:
             box.grab_focus()
-            self._show_track_menu(row, box, track, 0, 0, playlist)
+            self._show_track_menu(row, box, track, 0, 0, playlist, source_tracks)
             return True
         return False
 
-    def _show_track_menu(self, parent, source, track, x, y, playlist: Playlist | None = None):
+    def _show_track_menu(
+        self,
+        parent,
+        source,
+        track,
+        x,
+        y,
+        playlist: Playlist | None = None,
+        source_tracks: list[Track] | None = None,
+    ):
         if getattr(self, "_track_popover", None):
             self._track_popover.popdown()
 
@@ -2206,7 +2615,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             "Remove from Favorites" if self.database.is_favorite(track) else "Add to Favorites"
         )
         direct_items = [
-            ("play", "Play", lambda: self._play_selected_track(track, playlist)),
+            ("play", "Play", lambda: self._play_selected_track(track, playlist, source_tracks)),
             ("play-next", "Play Next", lambda: self._play_next(track)),
             ("add-to-queue", "Add to Queue", lambda: self._add_to_queue(track)),
             ("go-to-album", "Go to Album", lambda: self._go_to_album(track)),
@@ -2281,7 +2690,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             button.connect(
                 "clicked",
                 lambda _button, anchor=button, items=items: self._show_track_submenu(
-                    track, anchor, items, lyrics_available, playlist
+                    track, anchor, items, lyrics_available, playlist, source_tracks
                 ),
             )
             menu_box.append(button)
@@ -2291,12 +2700,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._track_popover = popover
         popover.popup()
 
-    def _show_track_submenu(self, track, anchor, items, lyrics_available, playlist):
+    def _show_track_submenu(
+        self, track, anchor, items, lyrics_available, playlist, source_tracks=None
+    ):
         if getattr(self, "_track_subpopover", None):
             self._track_subpopover.popdown()
 
         callbacks = {
-            "play": lambda: self._play_selected_track(track, playlist),
+            "play": lambda: self._play_selected_track(track, playlist, source_tracks),
             "play-next": lambda: self._play_next(track),
             "add-to-queue": lambda: self._add_to_queue(track),
             "favorite": lambda: self._toggle_favorite(track),
@@ -2550,17 +2961,29 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self.database.save_playback(track, self.player.position)
 
     def _play_album(self, album, artist):
-        tracks = [
-            track
-            for track in self.database.all_tracks()
-            if track.album == album and track.album_artist == artist
-        ]
-        if tracks:
-            self._library_random_mode = False
-            self._history.clear()
-            self._playback_source = tracks
-            self.queue = tracks[1:]
-            self._play_track(tracks[0])
+        key = (normalize_group_name(album), normalize_group_name(artist))
+        group = self._album_groups_by_key.get(key)
+        if group:
+            self._play_collection_tracks(group.tracks)
+
+    def _play_collection_tracks(self, tracks, start_track=None):
+        source = list(tracks)
+        if not source:
+            self._toast("This collection is empty")
+            return
+        start = start_track or source[0]
+        self.shuffle = False
+        self._play_selected_track(start, source_tracks=source)
+
+    def _add_collection_to_queue(self, tracks, label="collection"):
+        source = list(tracks)
+        if not source:
+            self._toast("This collection is empty")
+            return
+        self.queue.extend(source)
+        self._prepare_next_track()
+        self._refresh_queue()
+        self._toast(f"Added {len(source)} {label} tracks to the queue")
 
     def _play_first(self):
         tracks = self.database.all_tracks()
@@ -2580,7 +3003,32 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.player.set_track(track, autoplay=autoplay)
         if autoplay:
             self.database.mark_played(track)
+            track.play_count = max(0, int(track.play_count or 0)) + 1
+            self._library_groups_dirty = True
+            if not getattr(self, "_play_stats_refresh_pending", False):
+                self._play_stats_refresh_pending = True
+                GLib.idle_add(self._refresh_play_statistics)
             self.database.save_playback(track, 0.0)
+
+    def _refresh_play_statistics(self):
+        self._play_stats_refresh_pending = False
+        self._ensure_library_groups()
+        page = self.stack.get_visible_child_name()
+        if page == "home":
+            self._refresh_home_discovery()
+        elif page == "albums":
+            self._refresh_albums_page(self.albums_search.get_text())
+        elif page == "artists":
+            self._refresh_artists_page(self.artists_search.get_text())
+        elif page == "album-detail" and getattr(self, "_current_album_group", None):
+            album = self._album_groups_by_key.get(self._current_album_group.key)
+            if album:
+                self._show_album_group(album, origin=self._album_detail_origin)
+        elif page == "artist-detail" and getattr(self, "_current_artist_group", None):
+            artist = self._artist_groups_by_key.get(self._current_artist_group.key)
+            if artist:
+                self._show_artist_group(artist, origin=self._artist_detail_origin)
+        return GLib.SOURCE_REMOVE
 
     def _fill_random_library_queue(self):
         """Keep direct library playback supplied with random future tracks."""
@@ -2639,17 +3087,27 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self.auto_dj.cancel()
             self.player.set_auto_dj_plan(None)
 
-    def _play_selected_track(self, track, playlist: Playlist | None = None):
+    def _play_selected_track(
+        self,
+        track,
+        playlist: Playlist | None = None,
+        source_tracks: list[Track] | None = None,
+    ):
         """Start a selected track with playlist order or random library mode."""
         LOGGER.info("play selected track=%r path=%r", track.title, track.path)
         if playlist:
             source = self.database.playlist_tracks(playlist.id)
+        elif source_tracks:
+            source = list(source_tracks)
         else:
             source = self.database.all_tracks()
         if not any(item.path == track.path for item in source):
             source = self.database.all_tracks()
         if playlist:
             self._current_playlist_id = playlist.id
+            self._library_random_mode = False
+        elif source_tracks:
+            self._current_playlist_id = None
             self._library_random_mode = False
         else:
             self._current_playlist_id = None
@@ -2710,13 +3168,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
             track.album,
             track.album_artist,
         )
-        album = track.album or "Unknown Album"
-        tracks = [
-            item
-            for item in self.database.all_tracks()
-            if item.album == track.album and item.album_artist == track.album_artist
-        ]
-        self._populate_collection("album", album, track.album_artist or "Unknown Artist", tracks)
+        self._ensure_library_groups()
+        album = next(
+            (
+                group
+                for group in self._album_groups
+                if any(item.path == track.path for item in group.tracks)
+            ),
+            None,
+        )
+        if album:
+            self._show_album_group(album, origin=self.stack.get_visible_child_name())
 
     def _go_to_artist(self, track):
         LOGGER.info(
@@ -2725,23 +3187,86 @@ class GrooviaWindow(Adw.ApplicationWindow):
             track.artist,
             track.album_artist,
         )
-        artist = track.artist or track.album_artist or "Unknown Artist"
-        tracks = [
-            item
-            for item in self.database.all_tracks()
-            if item.artist == track.artist or item.album_artist == track.album_artist
-        ]
-        self._populate_collection("artist", artist, f"{len(tracks)} tracks", tracks)
+        self._ensure_library_groups()
+        names = parse_artists(track.artist) or parse_artists(track.album_artist)
+        key = normalize_group_name(names[0] if names else "Unknown Artist")
+        artist = self._artist_groups_by_key.get(key)
+        if artist:
+            self._show_artist_group(artist, origin=self.stack.get_visible_child_name())
 
-    def _populate_collection(self, kind, title, subtitle, tracks):
-        getattr(self, f"{kind}_detail_heading").set_label(title)
-        getattr(self, f"{kind}_detail_subtitle").set_label(subtitle)
-        items = getattr(self, f"{kind}_detail_items")
-        for child in iter_gtk_children(items):
-            items.remove(child)
-        for item in tracks:
-            items.append(self._track_row(item, True))
-        self._show_page(f"{kind}-detail")
+    def _show_album_group(self, album, *, origin="albums"):
+        self._current_album_group = album
+        self._album_detail_origin = origin if origin != "album-detail" else "albums"
+        widgets = self._album_detail_widgets
+        self._clear_container(widgets["cover"])
+        widgets["cover"].append(cover_widget(album.cover_path, 220))
+        widgets["heading"].set_label(album.title)
+        widgets["artist"].set_label(album.album_artist)
+        details = [album.year] if album.year else []
+        details.extend(
+            [
+                f"{album.track_count} songs",
+                self._total_minutes_label(album.duration),
+                f"{album.play_count} plays",
+            ]
+        )
+        widgets["subtitle"].set_label(" · ".join(details))
+        self._clear_container(widgets["tracks"])
+        for position, track in enumerate(album.tracks, 1):
+            widgets["tracks"].append(
+                self._track_row(
+                    track,
+                    True,
+                    position=position,
+                    source_tracks=album.tracks,
+                )
+            )
+        self._show_page("album-detail")
+
+    def _show_artist_group(self, artist, *, origin="artists"):
+        self._current_artist_group = artist
+        self._artist_detail_origin = origin if origin != "artist-detail" else "artists"
+        widgets = self._artist_detail_widgets
+        self._clear_container(widgets["image"])
+        widgets["image"].append(self._artist_avatar(artist, 180))
+        widgets["heading"].set_label(artist.name)
+        widgets["subtitle"].set_label(
+            f"{artist.album_count} albums · {artist.track_count} songs · {artist.play_count} plays"
+        )
+        self._clear_container(widgets["albums"])
+        for album in artist.albums:
+            widgets["albums"].append(self._album_group_card(album, origin="artist-detail"))
+        self._clear_container(widgets["tracks"])
+        for position, track in enumerate(artist.tracks, 1):
+            widgets["tracks"].append(
+                self._track_row(
+                    track,
+                    True,
+                    position=position,
+                    source_tracks=artist.tracks,
+                )
+            )
+        self._show_page("artist-detail")
+
+    def _play_current_album(self):
+        album = getattr(self, "_current_album_group", None)
+        if album:
+            self._play_collection_tracks(album.tracks)
+
+    def _queue_current_album(self):
+        album = getattr(self, "_current_album_group", None)
+        if album:
+            self._add_collection_to_queue(album.tracks, "album")
+
+    def _play_current_artist(self):
+        artist = getattr(self, "_current_artist_group", None)
+        if artist:
+            self._play_collection_tracks(artist.tracks)
+
+    def _queue_current_artist(self):
+        artist = getattr(self, "_current_artist_group", None)
+        if artist:
+            self._add_collection_to_queue(artist.tracks, "artist")
 
     def _show_in_file_manager(self, track):
         LOGGER.info("show in file manager track=%r path=%r", track.title, track.path)
@@ -3469,12 +3994,22 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _show_page(self, page):
         # Keep the sidebar selection in sync when a shortcut changes page.
+        if page in {"home", "albums", "artists"}:
+            changed = self._ensure_library_groups()
+            if page == "home" and changed:
+                self._refresh_home_discovery()
+            if page == "albums" and (changed or self._albums_view_dirty):
+                self._refresh_albums_page(self.albums_search.get_text())
+            elif page == "artists" and (changed or self._artists_view_dirty):
+                self._refresh_artists_page(self.artists_search.get_text())
         self.stack.set_visible_child_name(page)
         if page == "library" and self.library_items_box.get_first_child() is None:
             self._append_library_batch()
         elif page == "queue":
             self._refresh_queue(force=True)
-        if page in {"home", "library", "queue"} and getattr(self, "nav_list", None):
+        if page in {"home", "library", "albums", "artists", "queue"} and getattr(
+            self, "nav_list", None
+        ):
             for row in iter_gtk_children(self.nav_list):
                 if row.get_name() == page:
                     self.nav_list.select_row(row)
@@ -3485,6 +4020,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _show_library(self):
         self._show_page("library")
+
+    def _show_albums(self):
+        self._show_page("albums")
+
+    def _show_artists(self):
+        self._show_page("artists")
 
     def _show_queue(self):
         self._show_page("queue")
@@ -3526,8 +4067,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 self._open_vinyl_fullscreen()
 
     def _focus_search(self):
-        self._show_page("library")
-        self.search_entry.grab_focus()
+        page = self.stack.get_visible_child_name()
+        if page == "albums":
+            self.albums_search.grab_focus()
+        elif page == "artists":
+            self.artists_search.grab_focus()
+        else:
+            self._show_page("library")
+            self.search_entry.grab_focus()
 
     def _install_global_key_controller(self):
         controller = Gtk.EventControllerKey()
@@ -3616,7 +4163,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
             actions = {
                 Gdk.KEY_1: self._show_home,
                 Gdk.KEY_2: self._show_library,
-                Gdk.KEY_3: self._show_queue,
+                Gdk.KEY_3: self._show_albums,
+                Gdk.KEY_4: self._show_artists,
+                Gdk.KEY_5: self._show_queue,
                 Gdk.KEY_d: self._download_url,
                 Gdk.KEY_m: self._toggle_main_menu,
                 Gdk.KEY_j: self._toggle_lyrics_mode,
