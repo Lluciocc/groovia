@@ -48,6 +48,7 @@ dist/
 tests/*
 !tests/test_lyrics_better.py
 !tests/test_grouping.py
+!tests/test_artist_info.py
 build-check
 .mypycache/
 .mypy_cache/

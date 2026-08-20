@@ -23,13 +23,15 @@ import shlex
 import shutil
 import threading
 import time
+import weakref
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, PangoCairo
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango, PangoCairo
 
+from .artists import ArtistInfoService, TheAudioDBArtistProvider
 from .audio import AudioPlayer
 from .downloads import SpotDLService, classify_input
 from .library import (
@@ -225,6 +227,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.set_default_size(1180, 780)
         self.set_size_request(720, 520)
         self.database = LibraryDatabase()
+        application_version = getattr(self.get_application(), "version", "dev")
+        self.artist_info = ArtistInfoService(
+            self.database.path.parent / "artists",
+            TheAudioDBArtistProvider(version=application_version),
+            dispatcher=lambda callback, result: GLib.idle_add(callback, result),
+            activity_callback=self._on_artist_info_activity,
+        )
         self.scanner = LibraryScanner(self.database)
         self.download_service = SpotDLService(
             self.database, self.scanner, callback=self._download_event
@@ -784,6 +793,28 @@ class GrooviaWindow(Adw.ApplicationWindow):
             "search-changed", lambda entry: self._refresh_artists_page(entry.get_text())
         )
         content.append(self.artists_search)
+        self.artist_info_indicator = Gtk.Box(spacing=10, css_classes=["card"])
+        self.artist_info_indicator.set_margin_top(4)
+        self.artist_info_indicator.set_margin_bottom(4)
+        self.artist_info_spinner = Gtk.Spinner(spinning=False)
+        self.artist_info_spinner.set_margin_start(12)
+        self.artist_info_spinner.set_margin_top(10)
+        self.artist_info_spinner.set_margin_bottom(10)
+        self.artist_info_indicator.append(self.artist_info_spinner)
+        self.artist_info_status = Gtk.Label(
+            xalign=0,
+            wrap=True,
+            hexpand=True,
+        )
+        self.artist_info_indicator.append(self.artist_info_status)
+        cancel_artist_info = Gtk.Button(label="Cancel")
+        cancel_artist_info.set_margin_end(8)
+        cancel_artist_info.set_margin_top(6)
+        cancel_artist_info.set_margin_bottom(6)
+        cancel_artist_info.connect("clicked", lambda *_: self._cancel_artist_info_lookup())
+        self.artist_info_indicator.append(cancel_artist_info)
+        self.artist_info_indicator.set_visible(False)
+        content.append(self.artist_info_indicator)
         self.artists_flow = self._collection_flow(max_per_line=6)
         content.append(self.artists_flow)
         self.artists_empty = Gtk.Label(
@@ -792,6 +823,24 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content.append(self.artists_empty)
         root.set_child(content)
         return root
+
+    def _on_artist_info_activity(self, pending_count):
+        if not hasattr(self, "artist_info_indicator"):
+            return GLib.SOURCE_REMOVE
+        active = pending_count > 0
+        self.artist_info_spinner.set_spinning(active)
+        self.artist_info_status.set_label(
+            "Groovia is retrieving information about your artists. "
+            f"This may take a while… {pending_count} remaining."
+            if active
+            else ""
+        )
+        self.artist_info_indicator.set_visible(active)
+        return GLib.SOURCE_REMOVE
+
+    def _cancel_artist_info_lookup(self):
+        if self.artist_info.cancel_pending():
+            self._toast("Artist information retrieval cancelled")
 
     def _queue_page(self):
         root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
@@ -900,8 +949,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         identity.append(Gtk.Label(label="ARTIST", xalign=0, css_classes=["eyebrow"]))
         heading = Gtk.Label(xalign=0, wrap=True, css_classes=["hero-title"])
+        metadata_summary = Gtk.Label(xalign=0, wrap=True, css_classes=["title-3"])
+        metadata_summary.set_visible(False)
+        activity = Gtk.Label(xalign=0, wrap=True, css_classes=["muted"])
+        activity.set_visible(False)
         subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
         identity.append(heading)
+        identity.append(metadata_summary)
+        identity.append(activity)
         identity.append(subtitle)
         actions = Gtk.Box(spacing=8, css_classes=["collection-actions"])
         play = Gtk.Button(label="Play Artist", icon_name="media-playback-start-symbolic")
@@ -911,9 +966,30 @@ class GrooviaWindow(Adw.ApplicationWindow):
         add.connect("clicked", lambda *_: self._queue_current_artist())
         actions.append(play)
         actions.append(add)
+        website = Gtk.Button(
+            label="Artist website",
+            icon_name="web-browser-symbolic",
+            tooltip_text="Open the artist website",
+        )
+        website.add_css_class("flat")
+        website.set_visible(False)
+        website.connect("clicked", lambda *_: self._open_current_artist_website())
+        actions.append(website)
         identity.append(actions)
         hero.append(identity)
         box.append(hero)
+        about_title = Gtk.Label(label="About", xalign=0, css_classes=["section-title"])
+        about_title.set_visible(False)
+        biography = Gtk.Label(xalign=0, wrap=True, selectable=True)
+        biography.set_max_width_chars(100)
+        biography.set_visible(False)
+        biography_more = Gtk.Button(label="Read more", halign=Gtk.Align.START)
+        biography_more.add_css_class("flat")
+        biography_more.set_visible(False)
+        biography_more.connect("clicked", lambda *_: self._toggle_artist_biography())
+        box.append(about_title)
+        box.append(biography)
+        box.append(biography_more)
         box.append(Gtk.Label(label="Albums", xalign=0, css_classes=["section-title"]))
         albums = self._collection_flow(max_per_line=6)
         box.append(albums)
@@ -923,11 +999,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._artist_detail_widgets = {
             "image": image_slot,
             "heading": heading,
+            "metadata_summary": metadata_summary,
+            "activity": activity,
             "subtitle": subtitle,
+            "about_title": about_title,
+            "biography": biography,
+            "biography_more": biography_more,
             "albums": albums,
             "tracks": tracks,
             "play": play,
             "add": add,
+            "website": website,
         }
         root.set_child(box)
         return root
@@ -2193,6 +2275,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         signature = self._groups_signature(tracks)
         albums = group_albums(tracks)
         artists = group_artists(tracks, albums)
+        for artist in artists:
+            metadata = self.artist_info.get_cached(artist.name)
+            if metadata and metadata.artwork_available:
+                artist.image_path = metadata.image_path
         self._library_tracks_snapshot = tracks
         self._album_groups = albums
         self._artist_groups = artists
@@ -2344,9 +2430,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         return button
 
-    def _artist_avatar(self, artist, size=144):
-        if artist.image_path and Path(artist.image_path).is_file():
-            return cover_widget(artist.image_path, size)
+    @staticmethod
+    def _artist_fallback(artist, size):
         initial = next((char.upper() for char in artist.name if char.isalnum()), "?")
         avatar = Gtk.Label(label=initial, css_classes=["artist-avatar"])
         avatar.set_size_request(size, size)
@@ -2354,11 +2439,131 @@ class GrooviaWindow(Adw.ApplicationWindow):
         avatar.set_valign(Gtk.Align.CENTER)
         return avatar
 
+    def _artist_avatar(self, artist, size=144, *, priority="normal"):
+        metadata = self.artist_info.get_cached(artist.name)
+        if metadata and metadata.artwork_available:
+            artist.image_path = metadata.image_path
+        slot = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+        slot.set_size_request(size, size)
+        slot.append(
+            cover_widget(artist.image_path, size)
+            if artist.image_path and Path(artist.image_path).is_file()
+            else self._artist_fallback(artist, size)
+        )
+        slot_ref = weakref.ref(slot)
+        self.artist_info.resolve_async(
+            artist.name,
+            callback=lambda artist_metadata: self._apply_artist_metadata(
+                slot_ref, artist, size, artist_metadata
+            ),
+            priority=priority,
+        )
+        return slot
+
+    def _apply_artist_metadata(self, slot_ref, artist, size, metadata):
+        slot = slot_ref()
+        if metadata and slot is not None and slot.get_root() is not None:
+            self._clear_container(slot)
+            if metadata.artwork_available:
+                artist.image_path = metadata.image_path
+                slot.append(cover_widget(metadata.image_path, size))
+            else:
+                artist.image_path = None
+                slot.append(self._artist_fallback(artist, size))
+        if metadata:
+            self._update_artist_detail_metadata(artist, metadata)
+        return GLib.SOURCE_REMOVE
+
+    @staticmethod
+    def _artist_website_url(value):
+        if not value:
+            return None
+        url = str(value).strip()
+        if "://" not in url:
+            url = f"https://{url}"
+        parsed = urlparse(url)
+        return url if parsed.scheme in {"http", "https"} and parsed.netloc else None
+
+    def _update_artist_detail_metadata(self, artist, metadata=None):
+        current = getattr(self, "_current_artist_group", None)
+        if not current or current.key != artist.key or not hasattr(self, "_artist_detail_widgets"):
+            return
+        metadata = metadata or self.artist_info.get_cached(artist.name)
+        widgets = self._artist_detail_widgets
+        summary = []
+        if metadata:
+            for value in (metadata.country, metadata.genre, metadata.style):
+                if value and normalize_group_name(value) not in {
+                    normalize_group_name(item) for item in summary
+                }:
+                    summary.append(value)
+        widgets["metadata_summary"].set_label(" • ".join(summary))
+        widgets["metadata_summary"].set_visible(bool(summary))
+        activity = None
+        if metadata:
+            if metadata.formed_year and metadata.formed_year != "0":
+                activity = f"Active since {metadata.formed_year}"
+            elif metadata.born_year and metadata.born_year != "0":
+                activity = f"Born in {metadata.born_year}"
+            if metadata.died_year and metadata.died_year != "0":
+                activity = (
+                    f"{activity} • Died in {metadata.died_year}"
+                    if activity
+                    else f"Died in {metadata.died_year}"
+                )
+        widgets["activity"].set_label(activity or "")
+        widgets["activity"].set_visible(bool(activity))
+        biography = metadata.biography if metadata else None
+        if biography != getattr(self, "_current_artist_biography_text", None):
+            self._current_artist_biography_text = biography
+            self._artist_biography_expanded = False
+        widgets["biography"].set_label(biography or "")
+        widgets["biography"].set_visible(bool(biography))
+        widgets["about_title"].set_visible(bool(biography))
+        self._update_artist_biography_layout()
+        website = self._artist_website_url(metadata.website if metadata else None)
+        self._current_artist_website_url = website
+        widgets["website"].set_visible(bool(website))
+
+    def _update_artist_biography_layout(self):
+        if not hasattr(self, "_artist_detail_widgets"):
+            return
+        widgets = self._artist_detail_widgets
+        biography = getattr(self, "_current_artist_biography_text", None) or ""
+        is_long = len(biography) > 200 or biography.count("\n") >= 2
+        expanded = bool(getattr(self, "_artist_biography_expanded", False))
+        widgets["biography"].set_lines(-1 if expanded or not is_long else 2)
+        widgets["biography"].set_ellipsize(
+            Pango.EllipsizeMode.NONE if expanded or not is_long else Pango.EllipsizeMode.END
+        )
+        widgets["biography_more"].set_label("Show less" if expanded else "Read more")
+        widgets["biography_more"].set_visible(bool(biography) and is_long)
+
+    def _toggle_artist_biography(self):
+        self._artist_biography_expanded = not bool(
+            getattr(self, "_artist_biography_expanded", False)
+        )
+        self._update_artist_biography_layout()
+
+    def _open_current_artist_website(self):
+        website = getattr(self, "_current_artist_website_url", None)
+        if not website:
+            return
+        try:
+            Gio.AppInfo.launch_default_for_uri(website, None)
+        except GLib.Error as error:
+            self._toast(f"Could not open the artist website: {error.message}")
+
     def _artist_group_card(self, artist, *, origin="artists", show_plays=False):
         button = Gtk.Button(css_classes=["flat", "collection-card"])
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         box.add_css_class("album-card")
-        box.append(self._artist_avatar(artist))
+        box.append(
+            self._artist_avatar(
+                artist,
+                priority="high" if origin == "home" else "normal",
+            )
+        )
         box.append(Gtk.Label(label=artist.name, xalign=0, ellipsize=3, css_classes=["album-title"]))
         details = f"{artist.album_count} albums · {artist.track_count} songs"
         if show_plays:
@@ -3225,14 +3430,18 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _show_artist_group(self, artist, *, origin="artists"):
         self._current_artist_group = artist
+        self._current_artist_biography_text = None
+        self._artist_biography_expanded = False
         self._artist_detail_origin = origin if origin != "artist-detail" else "artists"
         widgets = self._artist_detail_widgets
         self._clear_container(widgets["image"])
-        widgets["image"].append(self._artist_avatar(artist, 180))
+        widgets["image"].append(self._artist_avatar(artist, 180, priority="high"))
         widgets["heading"].set_label(artist.name)
         widgets["subtitle"].set_label(
             f"{artist.album_count} albums · {artist.track_count} songs · {artist.play_count} plays"
         )
+        self._current_artist_website_url = None
+        self._update_artist_detail_metadata(artist)
         self._clear_container(widgets["albums"])
         for album in artist.albums:
             widgets["albums"].append(self._album_group_card(album, origin="artist-detail"))
@@ -5028,6 +5237,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._playback_source.clear()
         self._history.clear()
         self.player.close()
+        self.artist_info.close()
         if self.auto_dj is not None:
             self.auto_dj.close()
 
@@ -5089,6 +5299,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.database.save_playback(self.current, self.player.position if self.current else 0.0)
         if self.auto_dj is not None:
             self.auto_dj.close()
+        self.artist_info.close()
         self.player.close()
         self.database.close()
         super().close()

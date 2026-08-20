@@ -64,6 +64,10 @@ groovia_sources = [
 ]
 
 install_data(groovia_sources, install_dir: moduledir)
+install_data(
+  ['artists/__init__.py', 'artists/info.py', 'artists/models.py', 'artists/theaudiodb.py'],
+  install_dir: moduledir / 'artists',
+)
 install_data(['audio/__init__.py', 'audio/player.py'], install_dir: moduledir / 'audio')
 install_data(['autodj/__init__.py', 'autodj/analysis.py', 'autodj/planner.py', 'autodj/service.py'], install_dir: moduledir / 'autodj')
 install_data(
