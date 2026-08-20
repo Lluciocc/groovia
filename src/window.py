@@ -2932,7 +2932,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
         window = Gtk.Window(title="Vinyl — Groovia", transient_for=self)
         window.set_default_size(1100, 820)
-        root = Gtk.Overlay(css_classes=["vinyl-fullscreen-root"])
+        # Keep the toolbar in the layout flow.  An overlay lets the drawing
+        # area occupy the whole window, so the record can be painted over the
+        # title/artist banner.
+        root = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            hexpand=True,
+            vexpand=True,
+            css_classes=["vinyl-fullscreen-root"],
+        )
 
         vinyl = VinylView(hexpand=True, vexpand=True, halign=Gtk.Align.FILL, valign=Gtk.Align.FILL)
         vinyl.set_accent(self._palette[0])
@@ -2952,7 +2960,6 @@ class GrooviaWindow(Adw.ApplicationWindow):
         vinyl.angle = self.vinyl.angle
         vinyl.connect("seek-requested", self._on_vinyl_seek)
         vinyl.connect("toggle-play", lambda *_: self._toggle_play())
-        root.set_child(vinyl)
 
         toolbar = Gtk.Box(
             spacing=12,
@@ -2986,7 +2993,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         close.connect("clicked", lambda *_: window.close())
         toolbar.append(close)
-        root.add_overlay(toolbar)
+        root.append(toolbar)
+        root.append(vinyl)
         window.set_child(root)
 
         self._vinyl_fullscreen_window = window
