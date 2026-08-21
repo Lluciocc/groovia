@@ -15,7 +15,8 @@ vinyl deck, queue and playback bar.
 
 <img width="2557" height="1554" alt="image" src="https://github.com/user-attachments/assets/786e458a-9d5d-4446-96b4-8db511d3e705" />
 
-<img width="2556" height="1554" alt="ezgif-8ecf7e24ffaf5aa9" src="https://github.com/user-attachments/assets/d717bfc1-4611-4e4b-9804-d6edae2d14b9" />
+<img width="2556" height="1554" alt="infinite" src="https://github.com/user-attachments/assets/c9f25a22-6e0b-4cca-a710-ad12fc7c2e2e" />
+
 
 
 
