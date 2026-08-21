@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -34,7 +35,7 @@ from gi.repository import GLib
 
 from ..logging_utils import configure_logger
 from ..platform_compat import IS_WINDOWS, subprocess_window_kwargs
-from ..runtime import bundled_tool_path
+from ..runtime import bundled_tool_path, get_python_interpreter_for_tools, is_frozen
 from .spotdl import SpotDLCommandResolver, SpotDLUnavailable
 
 LOGGER = logging.getLogger("groovia.spotdl")
@@ -518,6 +519,14 @@ class DownloadManager:
             self._dependency_cancel_requested = False
             try:
                 status = self.resolver.dependency_status()
+                LOGGER.info(
+                    "Downloader setup: frozen=%s platform=%s executable=%s tool_python=%s environment=%s",
+                    is_frozen(),
+                    sys.platform,
+                    sys.executable,
+                    self._tool_python_for_log(),
+                    self.resolver.venv_dir,
+                )
                 emit("dependency-started", {"status": status})
                 if IS_WINDOWS:
                     missing = [
@@ -561,7 +570,7 @@ class DownloadManager:
                         self.resolver.installation_command(),
                         "Creating private Python environment",
                     )
-                    python = venv / "bin" / "python"
+                    python = self.resolver._venv_python()
                     run_command(
                         [str(python), "-m", "pip", "install", "--upgrade", "spotdl"],
                         "Installing spotDL",
@@ -601,6 +610,13 @@ class DownloadManager:
                 self._dependency_cancel_requested = False
 
         threading.Thread(target=worker, daemon=True, name="groovia-dependency-install").start()
+
+    @staticmethod
+    def _tool_python_for_log() -> str:
+        try:
+            return str(get_python_interpreter_for_tools())
+        except Exception as error:
+            return f"unavailable: {error}"
 
     def cancel_dependency_installation(self) -> bool:
         if self._dependency_process is None:

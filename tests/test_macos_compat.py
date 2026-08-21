@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from src import platform_compat, runtime
 from src.audio.capabilities import select_tempo_filter
 from src.downloads import spotdl as spotdl_module
@@ -160,3 +162,102 @@ def test_missing_tempo_plugin_keeps_normal_audio_fallback():
     assert select_tempo_filter(lambda _name: None) is None
     available = {"scaletempo": object()}
     assert select_tempo_filter(available.get) == "scaletempo"
+
+
+def test_tool_python_preserves_linux_source_interpreter(monkeypatch):
+    monkeypatch.setattr(runtime, "IS_MACOS", False)
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    expected = Path(sys.executable)
+    assert runtime.get_python_interpreter_for_tools() == expected
+
+
+def test_tool_python_preserves_linux_flatpak_interpreter(monkeypatch):
+    monkeypatch.setattr(runtime, "IS_MACOS", False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    expected = Path(sys.executable)
+    assert runtime.get_python_interpreter_for_tools() == expected
+
+
+def test_tool_python_preserves_windows_source_and_frozen_interpreter(monkeypatch):
+    monkeypatch.setattr(runtime, "IS_MACOS", False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    expected = Path(sys.executable)
+    assert runtime.get_python_interpreter_for_tools() == expected
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert runtime.get_python_interpreter_for_tools() == expected
+
+
+def test_linux_candidate_keeps_python_module_fallback(monkeypatch, tmp_path):
+    resolver = spotdl_module.SpotDLCommandResolver(tmp_path)
+    monkeypatch.setattr(spotdl_module, "IS_MACOS", False)
+    monkeypatch.setattr(spotdl_module, "IS_WINDOWS", False)
+    monkeypatch.setattr(spotdl_module, "bundled_tool_path", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        spotdl_module.shutil,
+        "which",
+        lambda name: "/usr/bin/python3" if name == "python3" else None,
+    )
+    assert ("/usr/bin/python3", "-m", "spotdl") in resolver.candidates()
+
+
+def test_windows_frozen_does_not_enter_macos_candidate_path(monkeypatch, tmp_path):
+    resolver = spotdl_module.SpotDLCommandResolver(tmp_path)
+    monkeypatch.setattr(spotdl_module, "IS_MACOS", False)
+    monkeypatch.setattr(spotdl_module, "IS_WINDOWS", True)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(spotdl_module, "bundled_tool_path", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(spotdl_module.shutil, "which", lambda _name: "/tools/spotdl.exe")
+    assert all("-m" not in candidate for candidate in resolver.candidates())
+
+
+def test_tool_python_preserves_macos_source_interpreter(monkeypatch):
+    monkeypatch.setattr(runtime, "IS_MACOS", True)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    assert runtime.get_python_interpreter_for_tools() == Path(sys.executable)
+
+
+def test_frozen_macos_selects_valid_bundled_python(monkeypatch, tmp_path):
+    contents = tmp_path / "Groovia.app/Contents"
+    candidate = contents / "Resources/python/bin/python3"
+    candidate.parent.mkdir(parents=True)
+    candidate.touch()
+    monkeypatch.setattr(runtime, "IS_MACOS", True)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(contents / "MacOS/Groovia"))
+    monkeypatch.setattr(runtime, "macos_bundle_contents", lambda: contents)
+    monkeypatch.setattr(runtime.os, "access", lambda _path, _mode: True)
+    monkeypatch.setattr(runtime, "_tool_python_works", lambda path: path == candidate)
+    assert runtime.get_python_interpreter_for_tools() == candidate
+
+
+def test_frozen_macos_without_python_reports_clear_error(monkeypatch, tmp_path):
+    contents = tmp_path / "Groovia.app/Contents"
+    monkeypatch.setattr(runtime, "IS_MACOS", True)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(contents / "MacOS/Groovia"))
+    monkeypatch.setattr(runtime, "macos_bundle_contents", lambda: contents)
+    monkeypatch.setattr(runtime, "_tool_python_works", lambda _path: False)
+    monkeypatch.setattr(runtime.shutil, "which", lambda _name: None)
+    with pytest.raises(runtime.ToolPythonUnavailable, match="No Python runtime"):
+        runtime.get_python_interpreter_for_tools()
+
+
+def test_macos_frozen_venv_command_never_uses_groovia(monkeypatch, tmp_path):
+    resolver = spotdl_module.SpotDLCommandResolver(tmp_path)
+    groovia = tmp_path / "Groovia.app/Contents/MacOS/Groovia"
+    tool_python = tmp_path / "python3"
+    monkeypatch.setattr(spotdl_module, "IS_MACOS", True)
+    monkeypatch.setattr(spotdl_module, "IS_WINDOWS", False)
+    monkeypatch.setattr(spotdl_module, "ToolPythonUnavailable", runtime.ToolPythonUnavailable)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "executable", str(groovia))
+    monkeypatch.setattr(spotdl_module, "get_python_interpreter_for_tools", lambda: tool_python)
+    command = resolver.installation_command()
+    assert command == [str(tool_python), "-m", "venv", str(resolver.venv_dir)]
+    assert command[0] != str(groovia)

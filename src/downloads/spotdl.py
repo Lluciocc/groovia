@@ -29,12 +29,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..platform_compat import (
+    IS_MACOS,
     IS_WINDOWS,
     get_data_dir,
     get_managed_executable_name,
     subprocess_window_kwargs,
 )
-from ..runtime import bundled_tool_path, is_frozen
+from ..runtime import (
+    ToolPythonUnavailable,
+    bundled_tool_path,
+    get_python_interpreter_for_tools,
+    is_frozen,
+)
 
 SPOTIFY_ID = re.compile(r"^[A-Za-z0-9]{22}$")
 SPOTIFY_URL = re.compile(
@@ -151,13 +157,19 @@ class SpotDLCommandResolver:
         bundled = bundled_tool_path("spotdl")
         if bundled:
             candidates.append((str(bundled),))
-        spotdl = shutil.which(get_managed_executable_name("spotdl"))
-        if spotdl and not (IS_WINDOWS and is_frozen()):
-            candidates.append((spotdl,))
+        if IS_MACOS and is_frozen():
+            try:
+                candidates.append((str(get_python_interpreter_for_tools()), "-m", "spotdl"))
+            except ToolPythonUnavailable:
+                pass
+        else:
+            spotdl = shutil.which(get_managed_executable_name("spotdl"))
+            if spotdl and not (IS_WINDOWS and is_frozen()):
+                candidates.append((spotdl,))
         venv_spotdl = self.venv_dir / "bin" / get_managed_executable_name("spotdl")
         if not IS_WINDOWS and venv_spotdl.is_file():
             candidates.append((str(venv_spotdl),))
-        if not IS_WINDOWS:
+        if not IS_WINDOWS and not (IS_MACOS and is_frozen()):
             python = shutil.which("python3") or shutil.which("python") or sys.executable
             candidates.append((python, "-m", "spotdl"))
         return candidates
@@ -250,7 +262,11 @@ class SpotDLCommandResolver:
                 "runtime venv and pip installation are disabled."
             )
         self.venv_dir.parent.mkdir(parents=True, exist_ok=True)
-        return [sys.executable, "-m", "venv", str(self.venv_dir)]
+        try:
+            python = get_python_interpreter_for_tools()
+        except ToolPythonUnavailable as error:
+            raise SpotDLUnavailable(str(error)) from error
+        return [str(python), "-m", "venv", str(self.venv_dir)]
 
     def _venv_python(self) -> Path:
         return (

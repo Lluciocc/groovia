@@ -23,7 +23,10 @@ import gettext
 import locale
 import logging
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from .logging_utils import configure_logger
@@ -40,8 +43,81 @@ configure_logger(LOGGER, "Groovia runtime")
 _RESOURCE_REGISTERED = False
 
 
+class ToolPythonUnavailable(RuntimeError):
+    """Raised when no real Python CLI is available for managed tools."""
+
+
 def is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
+
+
+def _tool_python_works(candidate: Path) -> bool:
+    if not candidate.is_file() or not os.access(candidate, os.X_OK):
+        return False
+    try:
+        version = subprocess.run(
+            [str(candidate), "--version"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        with tempfile.TemporaryDirectory(prefix="groovia-python-check-") as directory:
+            venv = subprocess.run(
+                [str(candidate), "-m", "venv", directory],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        return version.returncode == 0 and venv.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def get_python_interpreter_for_tools() -> Path:
+    """Return a real Python CLI for venv/module subprocesses."""
+    if not (IS_MACOS and is_frozen()):
+        return Path(sys.executable)
+
+    candidates: list[Path] = []
+    if contents := macos_bundle_contents():
+        resources = contents / "Resources"
+        candidates.extend(
+            resources / relative
+            for relative in (
+                Path("python") / "bin" / "python3",
+                Path("python") / "bin" / f"python{sys.version_info.major}.{sys.version_info.minor}",
+            )
+        )
+        framework_bin = (
+            contents / "Frameworks" / "Python.framework" / "Versions" / "Current" / "bin"
+        )
+        candidates.extend(
+            framework_bin / name
+            for name in ("python3", f"python{sys.version_info.major}.{sys.version_info.minor}")
+        )
+
+    candidates.extend(
+        Path(path) for path in ("/opt/homebrew/bin/python3", "/usr/local/bin/python3")
+    )
+    if path_python := shutil.which("python3"):
+        candidates.append(Path(path_python))
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        candidate = candidate.expanduser()
+        if candidate in seen or str(candidate) in {"/usr/bin/python3", "/usr/bin/python"}:
+            continue
+        seen.add(candidate)
+        if _tool_python_works(candidate):
+            LOGGER.info("Tool Python selected: %s", candidate)
+            return candidate
+    raise ToolPythonUnavailable(
+        "No Python runtime suitable for installing downloader dependencies was found."
+    )
 
 
 def macos_bundle_contents(executable: str | Path | None = None) -> Path | None:
