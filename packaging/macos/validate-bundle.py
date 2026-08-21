@@ -12,6 +12,28 @@ from pathlib import Path
 
 BREW_ROOTS = ("/opt/homebrew/", "/usr/local/Cellar/", "/usr/local/opt/")
 SYSTEM_ROOTS = ("/System/Library/", "/usr/lib/")
+REQUIRED_TYPELIBS = (
+    "Adw-1.typelib",
+    "Gdk-4.0.typelib",
+    "GdkPixbuf-2.0.typelib",
+    "Gio-2.0.typelib",
+    "GLib-2.0.typelib",
+    "GObject-2.0.typelib",
+    "Graphene-1.0.typelib",
+    "Gsk-4.0.typelib",
+    "Gst-1.0.typelib",
+    "GstAudio-1.0.typelib",
+    "GstBase-1.0.typelib",
+    "GstController-1.0.typelib",
+    "GstNet-1.0.typelib",
+    "GstPbutils-1.0.typelib",
+    "GstTag-1.0.typelib",
+    "GstVideo-1.0.typelib",
+    "Gtk-4.0.typelib",
+    "Pango-1.0.typelib",
+    "PangoCairo-1.0.typelib",
+    "cairo-1.0.typelib",
+)
 
 
 def run(*command: str, check: bool = True, env=None) -> subprocess.CompletedProcess:
@@ -63,13 +85,13 @@ def main() -> int:
         "VERSION",
         "Groovia.icns",
         "schemas/gschemas.compiled",
-        "typelibs/Gtk-4.0.typelib",
-        "typelibs/Adw-1.typelib",
-        "typelibs/Gst-1.0.typelib",
         "libexec/gstreamer-1.0/gst-plugin-scanner",
     ):
         if not (resources / relative).exists():
             fail(f"missing bundled resource: Contents/Resources/{relative}")
+    for typelib in REQUIRED_TYPELIBS:
+        if not (resources / "typelibs" / typelib).is_file():
+            fail(f"missing bundled resource: Contents/Resources/typelibs/{typelib}")
     if not any((resources / "gstreamer-1.0").glob("*")):
         fail("bundled GStreamer plugin directory is empty")
 

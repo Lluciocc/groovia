@@ -65,7 +65,6 @@ hiddenimports = [
 hiddenimports += collect_submodules("groovia")
 hiddenimports += collect_submodules("numpy")
 hiddenimports += collect_submodules("scipy")
-datas += collect_data_files("gi", includes=["*.typelib"])
 datas += collect_data_files("numpy")
 datas += collect_data_files("scipy")
 binaries += collect_dynamic_libs("gi")

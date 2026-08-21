@@ -55,10 +55,24 @@ while IFS= read -r language; do
   msgfmt "$catalog" -o "$destination/groovia.mo"
 done < "$repo_root/po/LINGUAS"
 
-for root in "$(brew --prefix)/lib/girepository-1.0" \
-  "$(brew --prefix gobject-introspection)/lib/girepository-1.0"; do
-  [[ -d "$root" ]] && rsync -a "$root/" "$stage/typelibs/"
-done
+typelib_roots=()
+while IFS= read -r formula; do
+  prefix="$(brew --prefix "$formula")"
+  root="$prefix/lib/girepository-1.0"
+  [[ -d "$root" ]] && typelib_roots+=("$root")
+done < <(brew list --formula)
+if [[ "${#typelib_roots[@]}" -eq 0 ]]; then
+  echo "No Homebrew GObject Introspection typelib directories found." >&2
+  exit 1
+fi
+find -L "${typelib_roots[@]}" -type f -name '*.typelib' -print0 |
+  while IFS= read -r -d '' typelib; do
+    cp "$typelib" "$stage/typelibs/"
+  done
+if [[ -z "$(find "$stage/typelibs" -type f -name '*.typelib' -print -quit)" ]]; then
+  echo "Homebrew GObject Introspection typelibs were not found." >&2
+  exit 1
+fi
 for theme in Adwaita hicolor; do
   source_theme="$(brew --prefix)/share/icons/$theme"
   [[ -d "$source_theme" ]] && rsync -a "$source_theme/" "$stage/share/icons/$theme/"
