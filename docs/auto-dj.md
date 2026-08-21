@@ -271,6 +271,7 @@ decoding every track from scratch. The default cache location is:
 | --- | --- |
 | Linux | `$XDG_DATA_HOME/groovia/autodj/analysis.json` or `~/.local/share/groovia/autodj/analysis.json` |
 | Windows | `%LOCALAPPDATA%\\Groovia\\autodj\\analysis.json` |
+| macOS | `~/Library/Application Support/Groovia/autodj/analysis.json` |
 
 Each entry is keyed by the resolved file path, modification timestamp, file
 size, and the current analysis schema version. Editing or replacing a music

@@ -31,6 +31,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from ..platform_compat import get_data_dir, get_managed_executable_name, subprocess_window_kwargs
+from ..runtime import bundled_tool_path
 
 LOGGER = logging.getLogger("groovia.autodj")
 from ..logging_utils import configure_logger
@@ -172,8 +173,12 @@ class TrackAnalyzer:
     def __init__(self, cache: AnalysisCache | None = None, lyrics_provider=None):
         self.cache = cache or AnalysisCache()
         self.lyrics_provider = lyrics_provider
-        self.ffmpeg = shutil.which(get_managed_executable_name("ffmpeg"))
-        self.ffprobe = shutil.which(get_managed_executable_name("ffprobe"))
+        self.ffmpeg = str(bundled_tool_path("ffmpeg") or "") or shutil.which(
+            get_managed_executable_name("ffmpeg")
+        )
+        self.ffprobe = str(bundled_tool_path("ffprobe") or "") or shutil.which(
+            get_managed_executable_name("ffprobe")
+        )
 
     def analyze(self, track) -> TrackAnalysis:
         started = time.perf_counter()

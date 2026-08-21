@@ -17,6 +17,13 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from .player import AudioPlayer
+
+def __getattr__(name):
+    if name == "AudioPlayer":
+        from .player import AudioPlayer
+
+        return AudioPlayer
+    raise AttributeError(name)
+
 
 __all__ = ["AudioPlayer"]

@@ -17,16 +17,30 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from .manager import DownloadJob, DownloadManager, ProgressParser
-from .service import SpotDLService
-from .spotdl import (
-    DependencyStatus,
-    SourceInfo,
-    SpotDLCommandResolver,
-    SpotDLUnavailable,
-    classify_input,
-    read_sync_source,
-)
+from importlib import import_module
+
+_EXPORTS = {
+    "DependencyStatus": ("spotdl", "DependencyStatus"),
+    "DownloadJob": ("manager", "DownloadJob"),
+    "DownloadManager": ("manager", "DownloadManager"),
+    "ProgressParser": ("manager", "ProgressParser"),
+    "SourceInfo": ("spotdl", "SourceInfo"),
+    "SpotDLCommandResolver": ("spotdl", "SpotDLCommandResolver"),
+    "SpotDLService": ("service", "SpotDLService"),
+    "SpotDLUnavailable": ("spotdl", "SpotDLUnavailable"),
+    "classify_input": ("spotdl", "classify_input"),
+    "read_sync_source": ("spotdl", "read_sync_source"),
+}
+
+
+def __getattr__(name):
+    if name not in _EXPORTS:
+        raise AttributeError(name)
+    module_name, attribute = _EXPORTS[name]
+    value = getattr(import_module(f"{__name__}.{module_name}"), attribute)
+    globals()[name] = value
+    return value
+
 
 __all__ = [
     "DependencyStatus",

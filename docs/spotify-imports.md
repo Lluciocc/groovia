@@ -32,6 +32,19 @@ The Inno Setup uninstaller owns packaged files.
 
 Music, database, lyrics, cache and configuration remain outside `{app}`.
 
+## macOS
+
+Development mode uses spotDL, FFmpeg, FFprobe and Deno from Homebrew or PATH.
+spotDL can also use Groovia's private POSIX environment at
+`~/Library/Application Support/Groovia/downloader/venv`, whose executables are
+`venv/bin/python` and `venv/bin/spotdl`.
+
+The experimental app bundle does not download native executables while it is
+built. Runtime support is ready for pinned future tools below
+`Groovia.app/Contents/Resources/tools`, but the current dependency manifest
+deliberately leaves these optional payloads disabled. Downloader caches and
+HOME remain private to Groovia's Application Support directory.
+
 ## Download destinations
 
 Spotify-imported files are written to:

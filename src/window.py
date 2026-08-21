@@ -47,7 +47,8 @@ from .library import (
 from .library.scanner import FORMATS
 from .logging_utils import configure_logger
 from .models import Playlist, Track
-from .platform_compat import IS_WINDOWS, iter_gtk_children, open_folder
+from .platform_compat import IS_MACOS, IS_WINDOWS, iter_gtk_children, show_item_in_file_manager
+from .runtime import create_settings
 from .visuals import css_rgb, load_thumbnail, mix, palette_for
 from .widgets import LyricsView, VinylView
 
@@ -309,8 +310,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _load_settings(self):
         try:
-            return Gio.Settings.new("io.github.Lluciocc.Groovia")
-        except Exception:
+            return create_settings()
+        except RuntimeError as error:
+            LOGGER.error("Preferences are unavailable: %s", error)
             return None
 
     def _apply_crossfade_setting(self):
@@ -514,6 +516,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _header(self):
         header = Adw.HeaderBar()
         header.set_show_title(False)
+        if IS_MACOS and hasattr(header, "set_decoration_layout"):
+            # GTK's macOS backend can render window controls in the expected
+            # leading position. Older Libadwaita builds keep their fallback.
+            try:
+                header.set_decoration_layout("close,minimize,maximize:")
+            except (TypeError, ValueError):
+                LOGGER.info("Native macOS window-control layout is unavailable")
         toggle = icon_button(
             "sidebar-show-symbolic",
             "Toggle navigation",
@@ -3512,48 +3521,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
             LOGGER.warning("file manager action skipped; file does not exist path=%r", track.path)
             self._toast("The audio file is no longer available")
             return
-        if IS_WINDOWS:
-            try:
-                open_folder(Path(track.path).parent)
-            except OSError as error:
-                LOGGER.warning("Windows file manager launch failed: %s", error)
-                self._toast("Could not open the file manager")
-            return
-        file = Gio.File.new_for_path(str(Path(track.path).resolve()))
-        try:
-            proxy = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SESSION,
-                Gio.DBusProxyFlags.DO_NOT_AUTO_START,
-                None,
-                "org.freedesktop.FileManager1",
-                "/org/freedesktop/FileManager1",
-                "org.freedesktop.FileManager1",
-                None,
-            )
-            proxy.call_sync(
-                "ShowItems",
-                GLib.Variant("(ass)", ([file.get_uri()], "")),
-                Gio.DBusCallFlags.NONE,
-                1000,
-                None,
-            )
-            LOGGER.info("file manager ShowItems succeeded uri=%r", file.get_uri())
-            return
-        except (GLib.Error, TypeError) as error:
-            LOGGER.warning(
-                "file manager ShowItems unavailable uri=%r error=%s",
-                file.get_uri(),
-                error,
-            )
-
-        parent = file.get_parent()
-        if parent:
-            try:
-                Gio.AppInfo.launch_default_for_uri(parent.get_uri(), None)
-                LOGGER.info("file manager fallback launched uri=%r", parent.get_uri())
-            except GLib.Error as error:
-                LOGGER.exception("file manager fallback failed uri=%r", parent.get_uri())
-                self._toast(f"Could not open the file manager: {error.message}")
+        if not show_item_in_file_manager(track.path):
+            LOGGER.warning("Native file manager could not reveal path=%r", track.path)
+            self._toast("Could not open the file manager")
 
     def _show_song_information(self, track):
         LOGGER.info("song information requested track=%r path=%r", track.title, track.path)
@@ -4383,11 +4353,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _handle_shortcut_key(self, keyval, state):
         """Handle shortcuts locally so they also work in child fullscreen windows."""
+        meta_mask = getattr(Gdk.ModifierType, "META_MASK", Gdk.ModifierType.SUPER_MASK)
         modifiers = (
             Gdk.ModifierType.CONTROL_MASK
             | Gdk.ModifierType.ALT_MASK
             | Gdk.ModifierType.SHIFT_MASK
             | Gdk.ModifierType.SUPER_MASK
+            | meta_mask
         )
         if keyval == Gdk.KEY_space and not state & modifiers and not self._search_has_focus():
             self._toggle_play()
@@ -4395,7 +4367,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if keyval == Gdk.KEY_m and not state & modifiers and not self._search_has_focus():
             self._toggle_mute()
             return True
-        primary = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        primary_mask = (
+            meta_mask | Gdk.ModifierType.SUPER_MASK if IS_MACOS else Gdk.ModifierType.CONTROL_MASK
+        )
+        primary = bool(state & primary_mask)
         shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
         if primary and not shift:
             actions = {

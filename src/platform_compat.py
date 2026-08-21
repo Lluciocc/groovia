@@ -27,6 +27,7 @@ from pathlib import Path
 
 IS_WINDOWS = os.name == "nt"
 IS_LINUX = sys.platform.startswith("linux")
+IS_MACOS = sys.platform == "darwin"
 
 
 def _env_path(name: str, fallback: Path) -> Path:
@@ -46,6 +47,8 @@ def get_data_dir() -> Path:
     """Return Groovia's application data directory."""
     if IS_WINDOWS:
         return _windows_local_appdata() / "Groovia"
+    if IS_MACOS:
+        return Path.home() / "Library" / "Application Support" / "Groovia"
     return _env_path("XDG_DATA_HOME", Path.home() / ".local" / "share") / "groovia"
 
 
@@ -53,6 +56,8 @@ def get_cache_dir() -> Path:
     """Return Groovia's disposable cache directory."""
     if IS_WINDOWS:
         return _windows_local_appdata() / "Groovia" / "cache"
+    if IS_MACOS:
+        return Path.home() / "Library" / "Caches" / "Groovia"
     return _env_path("XDG_CACHE_HOME", Path.home() / ".cache") / "groovia"
 
 
@@ -60,6 +65,8 @@ def get_config_dir() -> Path:
     """Return Groovia's configuration directory."""
     if IS_WINDOWS:
         return _env_path("APPDATA", _windows_local_appdata()) / "Groovia"
+    if IS_MACOS:
+        return Path.home() / "Library" / "Preferences" / "Groovia"
     return _env_path("XDG_CONFIG_HOME", Path.home() / ".config") / "groovia"
 
 
@@ -67,18 +74,81 @@ def get_music_dir() -> Path:
     """Return the user's Music directory, without Groovia's subdirectory."""
     if configured := os.environ.get("GROOVIA_MUSIC_DIR"):
         return Path(configured).expanduser().resolve()
+    if IS_MACOS:
+        return Path.home() / "Music"
     if configured := os.environ.get("XDG_MUSIC_DIR"):
         return Path(configured).expanduser()
     return Path.home() / "Music"
 
 
 def open_folder(path: str | Path) -> None:
-    """Open a folder using the native Windows shell."""
+    """Open a folder using the platform's native file manager."""
     target = str(Path(path).expanduser().resolve())
     if IS_WINDOWS:
         os.startfile(target)  # type: ignore[attr-defined]
         return
+    if IS_MACOS:
+        subprocess.run(["open", target], check=False, **subprocess_window_kwargs())
+        return
     webbrowser.open(Path(target).as_uri())
+
+
+def show_item_in_file_manager(path: str | Path) -> bool:
+    """Reveal a file in Explorer, Finder, or a freedesktop file manager.
+
+    The Linux D-Bus import is intentionally kept inside the Linux-only branch:
+    Finder must never cause a call to ``org.freedesktop.FileManager1``.
+    """
+    target = Path(path).expanduser().resolve()
+    if IS_WINDOWS:
+        # Preserve Groovia's established Explorer behavior: open the parent
+        # folder instead of changing Windows selection semantics.
+        try:
+            os.startfile(  # type: ignore[attr-defined]
+                str(target if target.is_dir() else target.parent)
+            )
+            return True
+        except OSError:
+            return False
+    if IS_MACOS:
+        command = ["open", str(target)] if target.is_dir() else ["open", "-R", str(target)]
+        try:
+            return subprocess.run(command, check=False).returncode == 0
+        except OSError:
+            return False
+    if IS_LINUX:
+        uri = target.as_uri()
+        try:
+            import gi
+
+            gi.require_version("Gio", "2.0")
+            from gi.repository import Gio, GLib
+
+            proxy = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SESSION,
+                Gio.DBusProxyFlags.DO_NOT_AUTO_START,
+                None,
+                "org.freedesktop.FileManager1",
+                "/org/freedesktop/FileManager1",
+                "org.freedesktop.FileManager1",
+                None,
+            )
+            proxy.call_sync(
+                "ShowItems",
+                GLib.Variant("(ass)", ([uri], "")),
+                Gio.DBusCallFlags.NONE,
+                -1,
+                None,
+            )
+            return True
+        except Exception:
+            fallback_uri = (target if target.is_dir() else target.parent).as_uri()
+            try:
+                Gio.AppInfo.launch_default_for_uri(fallback_uri, None)
+                return True
+            except Exception:
+                return bool(webbrowser.open(fallback_uri))
+    return bool(webbrowser.open(target.as_uri()))
 
 
 def open_uri(uri: str) -> bool:
@@ -89,6 +159,11 @@ def open_uri(uri: str) -> bool:
 def supports_mpris() -> bool:
     """MPRIS is intentionally limited to Linux session-bus environments."""
     return IS_LINUX
+
+
+def media_backend_name() -> str | None:
+    """Return the supported desktop media backend, ready for future ports."""
+    return "mpris" if supports_mpris() else None
 
 
 def get_managed_executable_name(name: str) -> str:

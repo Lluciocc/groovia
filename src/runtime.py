@@ -27,7 +27,13 @@ import sys
 from pathlib import Path
 
 from .logging_utils import configure_logger
-from .platform_compat import IS_WINDOWS, get_cache_dir, get_config_dir, get_managed_executable_name
+from .platform_compat import (
+    IS_MACOS,
+    IS_WINDOWS,
+    get_cache_dir,
+    get_config_dir,
+    get_managed_executable_name,
+)
 
 LOGGER = logging.getLogger("groovia.runtime")
 configure_logger(LOGGER, "Groovia runtime")
@@ -38,10 +44,26 @@ def is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def macos_bundle_contents(executable: str | Path | None = None) -> Path | None:
+    """Return ``*.app/Contents`` for a bundled executable, if applicable."""
+    candidate = Path(executable or sys.executable).expanduser().resolve()
+    for parent in (candidate, *candidate.parents):
+        if parent.name == "Contents" and parent.parent.suffix == ".app":
+            return parent
+    return None
+
+
+def is_standalone_bundle(executable: str | Path | None = None) -> bool:
+    """Whether strict, bundle-only dependency paths are appropriate."""
+    return is_frozen() or bool(IS_MACOS and macos_bundle_contents(executable))
+
+
 def _resource_roots(resource_dir: str | Path | None = None) -> list[Path]:
     roots: list[Path] = []
     if resource_dir:
         roots.append(Path(resource_dir))
+    if contents := macos_bundle_contents():
+        roots.append(contents / "Resources")
     if bundle_root := getattr(sys, "_MEIPASS", None):
         roots.append(Path(bundle_root))
     if configured := os.environ.get("GROOVIA_RESOURCE_DIR"):
@@ -75,7 +97,7 @@ def bundled_tool_path(name: str, tools_dir: str | Path | None = None) -> Path | 
         roots.append(Path(tools_dir))
     if configured := os.environ.get("GROOVIA_TOOLS_DIR"):
         roots.append(Path(configured))
-    if is_frozen() or IS_WINDOWS:
+    if is_standalone_bundle() or IS_WINDOWS or IS_MACOS:
         roots.append(bundled_resource_path("tools"))
     for root in roots:
         candidate = root / executable
@@ -86,7 +108,7 @@ def bundled_tool_path(name: str, tools_dir: str | Path | None = None) -> Path | 
 
 def _set_if_directory(name: str, path: Path) -> None:
     if path.is_dir():
-        os.environ.setdefault(name, str(path))
+        _prepend_path_environment(name, path)
 
 
 def _prepend_path_environment(name: str, path: Path) -> None:
@@ -97,61 +119,117 @@ def _prepend_path_environment(name: str, path: Path) -> None:
     os.environ[name] = os.pathsep.join([value, *entries])
 
 
+def gstreamer_scanner_name() -> str:
+    return get_managed_executable_name("gst-plugin-scanner")
+
+
+def find_gstreamer_scanner(resource_dir=None) -> Path | None:
+    """Find the scanner in bundle layouts used by GStreamer and Homebrew."""
+    scanner = gstreamer_scanner_name()
+    candidates = [
+        bundled_resource_path(Path("gstreamer-1.0") / scanner, resource_dir),
+        bundled_resource_path(Path("libexec/gstreamer-1.0") / scanner, resource_dir),
+        bundled_resource_path(Path("tools") / scanner, resource_dir),
+    ]
+    if contents := macos_bundle_contents():
+        candidates.extend(
+            (
+                contents / "Frameworks" / "libexec" / "gstreamer-1.0" / scanner,
+                contents / "Resources" / "libexec" / "gstreamer-1.0" / scanner,
+            )
+        )
+    return next((candidate for candidate in candidates if candidate.is_file()), None)
+
+
+def tool_process_environment(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Return a child-process environment with private bundled tools."""
+    environment = dict(os.environ if base is None else base)
+    tools = bundled_resource_path("tools")
+    if tools.is_dir():
+        entries = [str(tools), *filter(None, environment.get("PATH", "").split(os.pathsep))]
+        environment["PATH"] = os.pathsep.join(dict.fromkeys(entries))
+        for name, variable in (
+            ("ffmpeg", "FFMPEG_BINARY"),
+            ("ffprobe", "FFPROBE_BINARY"),
+            ("deno", "DENO_BINARY"),
+        ):
+            if tool := bundled_tool_path(name, tools):
+                environment[variable] = str(tool)
+    return environment
+
+
 def _configure_bundle_environment(resource_dir=None) -> None:
+    standalone = is_standalone_bundle()
     if IS_WINDOWS:
         # The keyfile backend is portable and keeps preferences in the user's
         # profile instead of requiring a system-wide registry installation.
         os.environ.setdefault("GSETTINGS_BACKEND", "keyfile")
         os.environ.setdefault("XDG_CONFIG_HOME", str(get_config_dir()))
+    elif IS_MACOS and standalone:
+        # Homebrew GLib does not guarantee a dconf service on end-user Macs.
+        # The keyfile remains inside Groovia's macOS Preferences directory.
+        os.environ.setdefault("GSETTINGS_BACKEND", "keyfile")
+        os.environ.setdefault("XDG_CONFIG_HOME", str(get_config_dir()))
 
     schema_dir = bundled_resource_path("schemas", resource_dir)
     if (schema_dir / "gschemas.compiled").is_file():
-        os.environ.setdefault("GSETTINGS_SCHEMA_DIR", str(schema_dir))
-    elif getattr(sys, "frozen", False):
+        if standalone:
+            os.environ["GSETTINGS_SCHEMA_DIR"] = str(schema_dir)
+        else:
+            os.environ.setdefault("GSETTINGS_SCHEMA_DIR", str(schema_dir))
+    elif standalone:
         LOGGER.error("GSettings schema bundle is missing: %s", schema_dir)
 
     typelib_dir = bundled_resource_path("typelibs", resource_dir)
-    _set_if_directory("GI_TYPELIB_PATH", typelib_dir)
-    if getattr(sys, "frozen", False) and not typelib_dir.is_dir():
+    if typelib_dir.is_dir() and standalone:
+        os.environ["GI_TYPELIB_PATH"] = str(typelib_dir)
+    else:
+        _set_if_directory("GI_TYPELIB_PATH", typelib_dir)
+    if standalone and not typelib_dir.is_dir():
         LOGGER.error("GObject typelibs are missing: %s", typelib_dir)
 
     plugin_dir = bundled_resource_path("gstreamer-1.0", resource_dir)
     if plugin_dir.is_dir():
-        os.environ.setdefault("GST_PLUGIN_PATH_1_0", str(plugin_dir))
-        os.environ.setdefault("GST_PLUGIN_PATH", str(plugin_dir))
-        os.environ.setdefault("GST_PLUGIN_SYSTEM_PATH_1_0", "")
-        scanner = bundled_resource_path("gstreamer-1.0/gst-plugin-scanner.exe", resource_dir)
-        if scanner.is_file():
-            os.environ.setdefault("GST_PLUGIN_SCANNER", str(scanner))
-        elif getattr(sys, "frozen", False):
-            LOGGER.error("GStreamer plugin scanner is missing: %s", scanner)
+        if standalone:
+            os.environ["GST_PLUGIN_PATH_1_0"] = str(plugin_dir)
+            os.environ["GST_PLUGIN_PATH"] = str(plugin_dir)
+            os.environ["GST_PLUGIN_SYSTEM_PATH_1_0"] = ""
+        else:
+            _prepend_path_environment("GST_PLUGIN_PATH_1_0", plugin_dir)
+            _prepend_path_environment("GST_PLUGIN_PATH", plugin_dir)
+        if scanner := find_gstreamer_scanner(resource_dir):
+            os.environ["GST_PLUGIN_SCANNER"] = str(scanner)
+        elif standalone:
+            LOGGER.error("GStreamer plugin scanner is missing below %s", plugin_dir)
         try:
             get_cache_dir().mkdir(parents=True, exist_ok=True)
-            os.environ.setdefault(
-                "GST_REGISTRY_1_0", str(get_cache_dir() / "gstreamer-registry.bin")
-            )
+            registry = str(get_cache_dir() / "gstreamer-registry.bin")
+            if standalone:
+                os.environ["GST_REGISTRY_1_0"] = registry
+            else:
+                os.environ.setdefault("GST_REGISTRY_1_0", registry)
         except OSError:
             LOGGER.info("Could not create a writable GStreamer registry cache")
-    elif getattr(sys, "frozen", False):
+    elif standalone:
         LOGGER.error("GStreamer plugin directory is missing: %s", plugin_dir)
 
     share_dir = bundled_resource_path("share", resource_dir)
     if share_dir.is_dir():
-        if IS_WINDOWS and is_frozen():
-            _prepend_path_environment("XDG_DATA_DIRS", share_dir)
+        if standalone:
+            os.environ["XDG_DATA_DIRS"] = str(share_dir)
         else:
-            os.environ.setdefault("XDG_DATA_DIRS", str(share_dir))
+            _prepend_path_environment("XDG_DATA_DIRS", share_dir)
 
 
 def configure_icon_theme(resource_dir=None) -> None:
-    """Register the bundled Adwaita theme for a frozen Windows process.
+    """Register the bundled Adwaita theme for a frozen Windows/macOS process.
 
     Linux and Flatpak retain their normal system-selected icon theme.  GTK's
     display-dependent API is intentionally called separately from the early
     environment setup, after an application has a display but before its
     first window is constructed.
     """
-    if not (IS_WINDOWS and is_frozen()):
+    if not ((IS_WINDOWS or IS_MACOS) and is_standalone_bundle()):
         return
 
     share_dir = bundled_resource_path("share", resource_dir)
@@ -229,3 +307,24 @@ def initialize_runtime(resource_dir=None, localedir=None) -> None:
     _configure_bundle_environment(resource_dir)
     _configure_translations(localedir)
     _register_gresource(resource_dir)
+
+
+def create_settings(schema_id: str = "io.github.Lluciocc.Groovia"):
+    """Create Gio.Settings with an actionable missing-schema diagnostic."""
+    import gi
+
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio
+
+    source = Gio.SettingsSchemaSource.get_default()
+    schema = source.lookup(schema_id, True) if source else None
+    if schema is None:
+        configured = os.environ.get("GSETTINGS_SCHEMA_DIR", "<system search path>")
+        message = (
+            f"GSettings schema '{schema_id}' is unavailable. Searched schema directory: "
+            f"{configured}. Compile data/{schema_id}.gschema.xml with glib-compile-schemas "
+            "or rebuild the Groovia bundle."
+        )
+        LOGGER.error(message)
+        raise RuntimeError(message)
+    return Gio.Settings.new_full(schema, None, None)

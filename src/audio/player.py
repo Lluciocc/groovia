@@ -28,6 +28,7 @@ from gi.repository import GLib, GObject, Gst
 
 from ..autodj.planner import TransitionPlan
 from ..logging_utils import configure_logger
+from .capabilities import TEMPO_FILTER_CANDIDATES, select_tempo_filter
 
 LOGGER = logging.getLogger("groovia.audio")
 configure_logger(LOGGER, "Groovia audio")
@@ -77,6 +78,24 @@ class AudioPlayer(GObject.Object):
         self._pending_incoming_seeks = {}
         self._verified_incoming_seeks = {}
         self._pending_primary_seek = None
+        self.gstreamer_elements = self.element_availability()
+        missing_playback = [
+            name
+            for name in ("playbin", "audioconvert", "audioresample")
+            if not self.gstreamer_elements[name]
+        ]
+        if missing_playback:
+            LOGGER.error("required GStreamer elements missing: %s", ", ".join(missing_playback))
+        missing_effects = [
+            name
+            for name in ("equalizer-3bands", "audioecho", "freeverb")
+            if not self.gstreamer_elements[name]
+        ]
+        if missing_effects:
+            LOGGER.warning(
+                "optional Auto DJ effects unavailable; clean crossfade remains active: %s",
+                ", ".join(missing_effects),
+            )
         self.tempo_filter_name, self.tempo_matching_available = self._detect_tempo_filter()
         LOGGER.info(
             "tempo matching filter=%s available=%s",
@@ -85,6 +104,26 @@ class AudioPlayer(GObject.Object):
         )
         self._tick_source = 0
 
+    @staticmethod
+    def element_availability(factory_find=None) -> dict[str, bool]:
+        """Report core and optional GStreamer factories without creating a pipeline."""
+        Gst.init(None)
+        factory_find = factory_find or Gst.ElementFactory.find
+        return {
+            name: factory_find(name) is not None
+            for name in (
+                "playbin",
+                "audioconvert",
+                "audioresample",
+                "equalizer-3bands",
+                "audioecho",
+                "freeverb",
+                "rubberband",
+                "pitch",
+                "scaletempo",
+            )
+        }
+
     def _ensure_tick(self):
         if not self._tick_source:
             self._tick_source = GLib.timeout_add(200, self._tick)
@@ -92,8 +131,9 @@ class AudioPlayer(GObject.Object):
     @staticmethod
     def _detect_tempo_filter(factory_find=None):
         Gst.init(None)
-        candidates = ("rubberband", "pitch", "scaletempo")
+        candidates = TEMPO_FILTER_CANDIDATES
         factory_find = factory_find or Gst.ElementFactory.find
+        selected = select_tempo_filter(factory_find)
         found = []
         for name in candidates:
             factory = factory_find(name)
@@ -124,7 +164,7 @@ class AudioPlayer(GObject.Object):
             os.environ.get("GST_PLUGIN_SCANNER"),
             registry_paths,
         )
-        return (found[0][0], True) if found else (None, False)
+        return (selected, True) if selected else (None, False)
 
     def _new_pipeline(self, track, volume, auto_dj=False):
         pipeline = Gst.ElementFactory.make("playbin", None)

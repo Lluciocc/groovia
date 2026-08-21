@@ -1,0 +1,142 @@
+name: macOS bundle (experimental)
+
+on:
+  push:
+    paths:
+      - ".github/workflows/macos.yml"
+      - "data/**"
+      - "docs/macos-development.md"
+      - "packaging/macos/**"
+      - "src/**"
+      - "tests/**"
+      - "meson.build"
+      - "pyproject.toml"
+      - "VERSION"
+  pull_request:
+    paths:
+      - ".github/workflows/macos.yml"
+      - "data/**"
+      - "packaging/macos/**"
+      - "src/**"
+      - "tests/**"
+      - "meson.build"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+jobs:
+  arm64-bundle:
+    # GitHub's standard macos-15 image is an arm64 Apple Silicon runner.
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Confirm native Apple Silicon
+        run: |
+          test "$(uname -m)" = arm64
+          sw_vers
+
+      - name: Install pinned Python environment and Homebrew runtime
+        run: packaging/macos/install-dependencies.sh
+
+      - name: Compile development resources
+        run: |
+          mkdir -p build/macos-ci/resources/schemas
+          glib-compile-resources --sourcedir src \
+            --target build/macos-ci/resources/groovia.gresource src/groovia.gresource.xml
+          glib-compile-schemas --strict \
+            --targetdir build/macos-ci/resources/schemas data
+
+      - name: Tests and compatibility diagnostic
+        env:
+          GROOVIA_RESOURCE_DIR: ${{ github.workspace }}/build/macos-ci/resources
+          GSETTINGS_SCHEMA_DIR: ${{ github.workspace }}/build/macos-ci/resources/schemas
+        run: |
+          source .venv-macos/bin/activate
+          python -m pytest
+          python -m ruff check .
+          python -m isort --check-only src packaging/macos tests
+          python packaging/macos/diagnose.py
+
+      - name: Meson validation
+        run: |
+          source .venv-macos/bin/activate
+          meson setup build/macos-meson
+          meson compile -C build/macos-meson
+          meson test -C build/macos-meson --print-errorlogs
+
+      - name: Build and validate unsigned artifact
+        env:
+          GROOVIA_MACOS_ARCH: arm64
+        run: packaging/macos/build-app.sh
+
+      - name: Import optional Developer ID certificate
+        id: signing
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [[ -z "$APPLE_CERTIFICATE_P12" || -z "$APPLE_CERTIFICATE_PASSWORD" || \
+                -z "$APPLE_SIGNING_IDENTITY" || -z "$APPLE_KEYCHAIN_PASSWORD" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/groovia-signing.keychain-db"
+          certificate="$RUNNER_TEMP/groovia-developer-id.p12"
+          printf '%s' "$APPLE_CERTIFICATE_P12" | openssl base64 -d -A > "$certificate"
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$APPLE_KEYCHAIN_PASSWORD" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          if [[ -n "$APPLE_ID" && -n "$APPLE_TEAM_ID" && -n "$APPLE_APP_PASSWORD" ]]; then
+            echo "notary=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notary=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sign with Developer ID
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          packaging/macos/sign-app.sh --identity dist/Groovia.app "$APPLE_SIGNING_IDENTITY"
+          .venv-macos/bin/python packaging/macos/validate-bundle.py dist/Groovia.app
+
+      - name: Notarize and staple authorized manual builds
+        if: steps.signing.outputs.notary == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: packaging/macos/notarize.sh dist/Groovia.app
+
+      - name: Create DMG and archive app
+        env:
+          GROOVIA_MACOS_ARCH: arm64
+        run: |
+          packaging/macos/create-dmg.sh dist/Groovia.app
+          ditto -c -k --sequesterRsrc --keepParent \
+            dist/Groovia.app "dist/Groovia-$(tr -d '[:space:]' < VERSION)-macOS-arm64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Groovia-macOS-arm64-experimental
+          path: |
+            dist/Groovia-*-macOS-arm64.zip
+            dist/Groovia-*-macOS-arm64.dmg
+          if-no-files-found: error
+          retention-days: 14

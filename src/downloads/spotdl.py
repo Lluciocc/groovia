@@ -124,18 +124,19 @@ class SpotDLCommandResolver:
             environment["USERPROFILE"] = str(self.managed_home)
             environment["APPDATA"] = str(self.managed_home / "AppData" / "Roaming")
             environment["LOCALAPPDATA"] = str(self.managed_home / "AppData" / "Local")
-            tools_dir = self.tool_dir()
-            if tools_dir:
-                environment["PATH"] = str(tools_dir) + os.pathsep + environment.get("PATH", "")
-                for name, variable in (
-                    ("ffmpeg", "FFMPEG_BINARY"),
-                    ("ffprobe", "FFPROBE_BINARY"),
-                    ("deno", "DENO_BINARY"),
-                ):
-                    tool = bundled_tool_path(name, tools_dir)
-                    if tool:
-                        environment[variable] = str(tool)
-                environment["DENO_DIR"] = str(self.managed_home / "deno")
+        tools_dir = self.tool_dir()
+        if tools_dir:
+            current = [entry for entry in environment.get("PATH", "").split(os.pathsep) if entry]
+            environment["PATH"] = os.pathsep.join(dict.fromkeys([str(tools_dir), *current]))
+            for name, variable in (
+                ("ffmpeg", "FFMPEG_BINARY"),
+                ("ffprobe", "FFPROBE_BINARY"),
+                ("deno", "DENO_BINARY"),
+            ):
+                tool = bundled_tool_path(name, tools_dir)
+                if tool:
+                    environment[variable] = str(tool)
+        environment["DENO_DIR"] = str(self.managed_home / "deno")
         return environment
 
     def tool_dir(self) -> Path | None:
@@ -153,12 +154,12 @@ class SpotDLCommandResolver:
         spotdl = shutil.which(get_managed_executable_name("spotdl"))
         if spotdl and not (IS_WINDOWS and is_frozen()):
             candidates.append((spotdl,))
+        venv_spotdl = self.venv_dir / "bin" / get_managed_executable_name("spotdl")
+        if not IS_WINDOWS and venv_spotdl.is_file():
+            candidates.append((str(venv_spotdl),))
         if not IS_WINDOWS:
             python = shutil.which("python3") or shutil.which("python") or sys.executable
             candidates.append((python, "-m", "spotdl"))
-        venv_spotdl = self.venv_dir / "bin" / get_managed_executable_name("spotdl")
-        if not IS_WINDOWS and venv_spotdl.exists():
-            candidates.append((str(venv_spotdl),))
         return candidates
 
     def resolve(self, refresh: bool = False) -> tuple[str, ...]:
@@ -198,7 +199,7 @@ class SpotDLCommandResolver:
             if IS_WINDOWS
             else (shutil.which("pip3") is not None or shutil.which("pip") is not None),
             command=command,
-            bundled=IS_WINDOWS and bundled_tool_path("spotdl") is not None,
+            bundled=bundled_tool_path("spotdl") is not None,
         )
 
     def _binary_available(self, name: str) -> bool:

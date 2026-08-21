@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Groovia</string>
+  <key>CFBundleDisplayName</key><string>Groovia</string>
+  <key>CFBundleIdentifier</key><string>io.github.Lluciocc.Groovia</string>
+  <key>CFBundleExecutable</key><string>Groovia</string>
+  <key>CFBundleShortVersionString</key><string>@VERSION@</string>
+  <key>CFBundleVersion</key><string>@BUILD_VERSION@</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleIconFile</key><string>Groovia.icns</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
+  <key>LSMinimumSystemVersion</key><string>@MINIMUM_MACOS@</string>
+  <key>LSArchitecturePriority</key><array><string>@ARCHITECTURE@</string></array>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>Audio file</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>CFBundleTypeExtensions</key>
+      <array>
+        <string>mp3</string><string>flac</string><string>ogg</string>
+        <string>oga</string><string>opus</string><string>wav</string>
+        <string>aac</string><string>m4a</string><string>m4b</string><string>mp4</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

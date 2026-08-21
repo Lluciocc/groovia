@@ -19,13 +19,14 @@
 
 from gi.repository import Adw, Gio, Gtk
 
-from .platform_compat import IS_WINDOWS
+from .platform_compat import IS_MACOS, IS_WINDOWS
+from .runtime import create_settings
 
 
 class PreferencesWindow(Adw.PreferencesWindow):
     def __init__(self, parent):
         super().__init__(transient_for=parent, modal=True, title="Preferences")
-        settings = Gio.Settings.new("io.github.Lluciocc.Groovia")
+        settings = create_settings()
 
         playback = Adw.PreferencesPage(title="Playback", icon_name="media-playback-start-symbolic")
         fade = Adw.ComboRow(title="Crossfade", subtitle="Mix the end of a track into the next one")
@@ -102,6 +103,14 @@ class PreferencesWindow(Adw.PreferencesWindow):
         tempo = Adw.SwitchRow(
             title="Tempo matching", subtitle="Never exceed the conservative tempo range"
         )
+        tempo_available = bool(
+            getattr(getattr(parent, "player", None), "tempo_matching_available", False)
+        )
+        if not tempo_available:
+            tempo.set_subtitle(
+                "Unavailable: install rubberband, pitch or scaletempo; Auto DJ still works"
+            )
+            tempo.set_sensitive(False)
         smart_eq = Adw.SwitchRow(title="Smart EQ", subtitle="Reduce bass buildup during overlap")
         silence = Adw.SwitchRow(
             title="Silence detection",
@@ -228,7 +237,11 @@ class PreferencesWindow(Adw.PreferencesWindow):
             subtitle=(
                 "spotDL, FFmpeg and Deno are installed with Groovia and managed by the installer."
                 if IS_WINDOWS
-                else "spotDL, FFmpeg and Deno are managed separately from playback."
+                else (
+                    "Use bundled tools first, then Homebrew or PATH; playback stays independent."
+                    if IS_MACOS
+                    else "spotDL, FFmpeg and Deno are managed separately from playback."
+                )
             ),
         )
         repair = Gtk.Button(

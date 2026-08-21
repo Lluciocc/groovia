@@ -30,10 +30,15 @@ meson compile -C build
 
 Linux is Groovia's primary supported platform.
 
+Groovia also has **experimental macOS support** for Apple Silicon. The macOS
+bundle is not considered stable until it has completed the documented manual
+test checklist on physical Macs. Windows packaging remains supported.
+
 For detailed setup and packaging instructions, see:
 
 - [Linux development](docs/linux-development.md)
 - [Windows development and packaging](docs/windows-development.md)
+- [Experimental macOS development and packaging](docs/macos-development.md)
 - [Spotify imports](docs/spotify-imports.md)
 - [Auto DJ](docs/auto-dj.md)
 

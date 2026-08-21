@@ -20,6 +20,12 @@
 import sys
 from pathlib import Path
 
+from .runtime import bundled_resource_path, configure_icon_theme, initialize_runtime
+
+# Bundle search paths must exist before importing PyGObject.  This is harmless
+# for Meson, Flatpak and source runs, where normal system paths remain enabled.
+initialize_runtime()
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -27,21 +33,15 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, Gtk
 
-from .platform_compat import supports_mpris
-from .runtime import configure_icon_theme, initialize_runtime
-
-initialize_runtime()
-
+from .media_controls import create_media_control_backend
+from .platform_compat import IS_MACOS
 from .window import GrooviaWindow
-
-if supports_mpris():
-    from .mpris import MprisService
-else:
-    MprisService = None
 
 
 def _default_version():
-    version_file = Path(__file__).resolve().parents[1] / "VERSION"
+    version_file = bundled_resource_path("VERSION")
+    if not version_file.is_file():
+        version_file = Path(__file__).resolve().parents[1] / "VERSION"
     try:
         version = version_file.read_text(encoding="utf-8").strip()
     except OSError:
@@ -61,7 +61,7 @@ class GrooviaApplication(Adw.Application):
         )
         self.create_action("quit", lambda *_: self.quit(), ["<primary>q"])
         self.create_action("about", self.on_about)
-        self.create_action("preferences", self.on_preferences)
+        self.create_action("preferences", self.on_preferences, ["<primary>comma"])
         self.create_action("shortcuts", self.on_shortcuts, ["<primary>question"])
         self.create_action(
             "import", lambda *_: self._window_action("_choose_folder"), ["<primary>o"]
@@ -117,12 +117,30 @@ class GrooviaApplication(Adw.Application):
             lambda *_: self._window_action("_open_lyrics_fullscreen"),
             ["<primary><shift>l"],
         )
+        if IS_MACOS:
+            self.set_menubar(self._macos_menubar())
+
+    @staticmethod
+    def _macos_menubar():
+        menu = Gio.Menu()
+        application = Gio.Menu()
+        application.append("Preferences…", "app.preferences")
+        application.append("About Groovia", "app.about")
+        application.append("Quit Groovia", "app.quit")
+        menu.append_section(None, application)
+        help_menu = Gio.Menu()
+        help_menu.append("Keyboard Shortcuts", "app.shortcuts")
+        menu.append_section(None, help_menu)
+        return menu
 
     def do_activate(self):
         configure_icon_theme()
         win = self.props.active_window or GrooviaWindow(application=self)
-        if MprisService is not None and not hasattr(self, "mpris"):
-            self.mpris = MprisService(win)
+        if not hasattr(self, "media_controls"):
+            self.media_controls = create_media_control_backend(win)
+            # Preserve the established Linux attribute consumed by the window
+            # while backend construction now has a platform-neutral boundary.
+            self.mpris = self.media_controls
         win.present()
 
     def do_open(self, files, _n_files, _hint):
@@ -175,8 +193,8 @@ class GrooviaApplication(Adw.Application):
             getattr(window, method)()
 
     def do_shutdown(self):
-        if getattr(self, "mpris", None) is not None:
-            self.mpris.close()
+        if getattr(self, "media_controls", None) is not None:
+            self.media_controls.close()
         # PyGObject does not bind Gio's virtual shutdown method correctly
         # through super() here; call the parent implementation explicitly.
         Gio.Application.do_shutdown(self)

@@ -287,7 +287,7 @@ class DownloadManager:
         if job.bitrate != "auto":
             args.extend(["--bitrate", job.bitrate])
         supported = self.resolver.supported_options()
-        if IS_WINDOWS and "--ffmpeg" in supported:
+        if "--ffmpeg" in supported:
             ffmpeg = bundled_tool_path("ffmpeg")
             if ffmpeg:
                 args.extend(["--ffmpeg", str(ffmpeg)])

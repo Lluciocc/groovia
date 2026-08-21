@@ -20,6 +20,7 @@ __pycache__/
 
 # Local environment / editors
 .venv/
+.venv-macos/
 venv/
 .env
 .vscode/
@@ -49,6 +50,7 @@ tests/*
 !tests/test_lyrics_better.py
 !tests/test_grouping.py
 !tests/test_artist_info.py
+!tests/test_macos_compat.py
 build-check
 .mypycache/
 .mypy_cache/
