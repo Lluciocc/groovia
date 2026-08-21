@@ -87,6 +87,40 @@ def fail(message: str) -> None:
     raise SystemExit(f"[FAIL] {message}")
 
 
+def validate_python_framework(frameworks: Path) -> None:
+    framework = frameworks / "Python.framework"
+    if not framework.is_dir():
+        fail(f"missing embedded Python.framework: {framework}")
+
+    versions = framework / "Versions"
+    current = versions / "Current"
+    if not versions.is_dir() or not current.is_symlink():
+        fail("Python.framework must contain a Versions/Current symlink")
+    version = current.resolve()
+    if version.parent != versions or not version.is_dir():
+        fail(f"Python.framework Versions/Current points outside Versions: {current}")
+
+    for name in ("Python", "Resources"):
+        alias = framework / name
+        expected = Path("Versions") / "Current" / name
+        if not alias.is_symlink() or Path(os.readlink(alias)) != expected:
+            fail(f"Python.framework/{name} must be the symlink {expected}")
+
+    binary = version / "Python"
+    resources = version / "Resources"
+    if not binary.is_file() or not is_macho(binary):
+        fail(f"missing Mach-O Python.framework binary: {binary}")
+    if not resources.is_dir():
+        fail(f"missing Python.framework resources directory: {resources}")
+    info = resources / "Info.plist"
+    if info.exists():
+        try:
+            with info.open("rb") as stream:
+                plistlib.load(stream)
+        except (OSError, plistlib.InvalidFileException) as error:
+            fail(f"invalid Python.framework Resources/Info.plist: {error}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate an autonomous Groovia.app bundle")
     parser.add_argument("app", type=Path)
@@ -105,6 +139,7 @@ def main() -> int:
     for required in (contents / "Info.plist", executable, frameworks, resources):
         if not required.exists():
             fail(f"missing bundle component: {required}")
+    validate_python_framework(frameworks)
 
     with (contents / "Info.plist").open("rb") as stream:
         plist = plistlib.load(stream)

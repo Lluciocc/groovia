@@ -27,6 +27,8 @@ GROOVIA_RESOURCE_DIR="$PWD/build/macos-dev/src" \
   packaging/macos/diagnose.py
 packaging/macos/build-app.sh
 packaging/macos/validate-bundle.py dist/Groovia.app
+packaging/macos/sign-app.sh --adhoc dist/Groovia.app
+codesign --verify --deep --strict --verbose=4 dist/Groovia.app
 packaging/macos/create-dmg.sh
 ```
 

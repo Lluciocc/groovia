@@ -68,7 +68,7 @@ jobs:
           meson compile -C build/macos-meson
           meson test -C build/macos-meson --print-errorlogs
 
-      - name: Build and validate unsigned artifact
+      - name: Build and validate bundle before signing
         env:
           GROOVIA_MACOS_ARCH: arm64
         run: packaging/macos/build-app.sh
@@ -109,13 +109,30 @@ jobs:
             echo "notary=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Sign with Developer ID
-        if: steps.signing.outputs.ready == 'true'
+      - name: Sign bundle
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        if: steps.signing.outputs.ready == 'true'
         run: |
           packaging/macos/sign-app.sh --identity dist/Groovia.app "$APPLE_SIGNING_IDENTITY"
-          .venv-macos/bin/python packaging/macos/validate-bundle.py dist/Groovia.app
+
+      - name: Sign bundle ad hoc when Developer ID is unavailable
+        if: steps.signing.outputs.ready != 'true'
+        run: packaging/macos/sign-app.sh --adhoc dist/Groovia.app
+
+      - name: Verify signed bundle
+        id: verify
+        run: codesign --verify --deep --strict --verbose=4 dist/Groovia.app
+
+      - name: Diagnose embedded Python.framework on verification failure
+        if: failure()
+        run: |
+          find dist/Groovia.app/Contents/Frameworks/Python.framework -maxdepth 4 -print
+          ls -la dist/Groovia.app/Contents/Frameworks/Python.framework
+          ls -la dist/Groovia.app/Contents/Frameworks/Python.framework/Versions
+
+      - name: Validate signed bundle runtime
+        run: .venv-macos/bin/python packaging/macos/validate-bundle.py dist/Groovia.app
 
       - name: Notarize and staple authorized manual builds
         if: steps.signing.outputs.notary == 'true'
