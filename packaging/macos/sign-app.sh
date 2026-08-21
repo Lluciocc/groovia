@@ -71,6 +71,8 @@ for name in ("Python", "Resources"):
 PY
 
 codesign --force --sign "$identity" "${sign_options[@]}" \
+  "$app/Contents/Frameworks/Python.framework/Versions/Current/Python"
+codesign --force --sign "$identity" "${sign_options[@]}" \
   "$app/Contents/Frameworks/Python.framework"
 
 codesign --force --sign "$identity" "${sign_options[@]}" \

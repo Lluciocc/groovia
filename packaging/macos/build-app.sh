@@ -128,6 +128,23 @@ PY
 app="$pyinstaller_dist/Groovia.app"
 [[ -d "$app" ]] || { echo "PyInstaller did not produce $app" >&2; exit 1; }
 
+echo "PyInstaller Python.framework layout before repair"
+find "$app/Contents/Frameworks/Python.framework" -maxdepth 4 -print
+ls -la "$app/Contents/Frameworks/Python.framework" || true
+ls -la "$app/Contents/Frameworks/Python.framework/Versions" || true
+readlink "$app/Contents/Frameworks/Python.framework/Python" || true
+readlink "$app/Contents/Frameworks/Python.framework/Resources" || true
+readlink "$app/Contents/Frameworks/Python.framework/Versions/Current" || true
+
+"$venv/bin/python" "$script_dir/repair-python-framework.py" "$app"
+find "$app/Contents/Frameworks/Python.framework" -maxdepth 4 -print
+ls -la "$app/Contents/Frameworks/Python.framework"
+ls -la "$app/Contents/Frameworks/Python.framework/Versions"
+ls -la "$app/Contents/Frameworks/Python.framework/Versions/Current"
+readlink "$app/Contents/Frameworks/Python.framework/Python" || true
+readlink "$app/Contents/Frameworks/Python.framework/Resources" || true
+readlink "$app/Contents/Frameworks/Python.framework/Versions/Current" || true
+
 "$venv/bin/python" "$script_dir/relocate-macho.py" "$app"
 "$venv/bin/python" "$script_dir/validate-bundle.py" "$app"
 
