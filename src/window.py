@@ -983,6 +983,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         biography = Gtk.Label(xalign=0, wrap=True, selectable=True)
         biography.set_max_width_chars(100)
         biography.set_visible(False)
+        biography.connect("notify::width", lambda *_: self._schedule_artist_biography_layout())
         biography_more = Gtk.Button(label="Read more", halign=Gtk.Align.START)
         biography_more.add_css_class("flat")
         biography_more.set_visible(False)
@@ -1011,6 +1012,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             "add": add,
             "website": website,
         }
+        self._artist_biography_layout_source = None
         root.set_child(box)
         return root
 
@@ -2520,7 +2522,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         widgets["biography"].set_label(biography or "")
         widgets["biography"].set_visible(bool(biography))
         widgets["about_title"].set_visible(bool(biography))
-        self._update_artist_biography_layout()
+        self._schedule_artist_biography_layout()
         website = self._artist_website_url(metadata.website if metadata else None)
         self._current_artist_website_url = website
         widgets["website"].set_visible(bool(website))
@@ -2530,20 +2532,47 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return
         widgets = self._artist_detail_widgets
         biography = getattr(self, "_current_artist_biography_text", None) or ""
-        is_long = len(biography) > 200 or biography.count("\n") >= 2
+        label = widgets["biography"]
         expanded = bool(getattr(self, "_artist_biography_expanded", False))
-        widgets["biography"].set_lines(-1 if expanded or not is_long else 2)
-        widgets["biography"].set_ellipsize(
-            Pango.EllipsizeMode.NONE if expanded or not is_long else Pango.EllipsizeMode.END
+        if not biography or label.get_width() <= 0:
+            widgets["biography_more"].set_visible(False)
+            return
+
+        # Measure the complete label at its actual width. Character-count
+        # heuristics are unreliable because the number of rendered lines
+        # changes with the window width and font metrics.
+        preview_text = biography.replace("\n", " ")
+        label.set_text(preview_text)
+        label.set_lines(-1)
+        label.set_ellipsize(Pango.EllipsizeMode.NONE)
+        has_more = label.get_layout().get_line_count() > 2
+
+        if expanded:
+            label.set_text(biography)
+        label.set_lines(-1 if expanded else 2)
+        label.set_ellipsize(
+            Pango.EllipsizeMode.NONE if expanded or not has_more else Pango.EllipsizeMode.END
         )
         widgets["biography_more"].set_label("Show less" if expanded else "Read more")
-        widgets["biography_more"].set_visible(bool(biography) and is_long)
+        widgets["biography_more"].set_visible(has_more)
+
+    def _schedule_artist_biography_layout(self):
+        if getattr(self, "_artist_biography_layout_source", None):
+            return
+        self._artist_biography_layout_source = GLib.idle_add(
+            self._run_scheduled_artist_biography_layout
+        )
+
+    def _run_scheduled_artist_biography_layout(self):
+        self._artist_biography_layout_source = None
+        self._update_artist_biography_layout()
+        return GLib.SOURCE_REMOVE
 
     def _toggle_artist_biography(self):
         self._artist_biography_expanded = not bool(
             getattr(self, "_artist_biography_expanded", False)
         )
-        self._update_artist_biography_layout()
+        self._schedule_artist_biography_layout()
 
     def _open_current_artist_website(self):
         website = getattr(self, "_current_artist_website_url", None)
