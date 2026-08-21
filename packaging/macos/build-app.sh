@@ -39,6 +39,19 @@ export PKG_CONFIG_PATH="$(brew --prefix libadwaita)/lib/pkgconfig:$(brew --prefi
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
 export GROOVIA_MACOS_ARCH="$arch"
 export GROOVIA_MACOS_BUILD_DIR="$build_root"
+unset PYTHONHOME PYTHONPATH
+
+echo "macOS Python packaging environment"
+"$venv/bin/python" --version
+"$venv/bin/python" -c 'import sys; print(sys.executable); print(sys.prefix); print(sys.base_prefix)'
+"$venv/bin/python" -c 'import sysconfig; print(sysconfig.get_config_var("PYTHONFRAMEWORK")); print(sysconfig.get_config_var("PYTHONFRAMEWORKPREFIX"))'
+echo "Homebrew Python formulae"
+brew --prefix python@3.13
+brew --prefix python@3.14 || true
+python_prefix="$(brew --prefix python@3.13)"
+find "$python_prefix/Frameworks/Python.framework" -maxdepth 4 -print
+ls -la "$python_prefix/Frameworks/Python.framework"
+ls -la "$python_prefix/Frameworks/Python.framework/Versions"
 
 glib-compile-resources --sourcedir "$repo_root/src" \
   --target "$stage/groovia.gresource" "$repo_root/src/groovia.gresource.xml"

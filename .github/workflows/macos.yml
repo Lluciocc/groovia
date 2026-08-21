@@ -127,9 +127,18 @@ jobs:
       - name: Diagnose embedded Python.framework on verification failure
         if: failure()
         run: |
-          find dist/Groovia.app/Contents/Frameworks/Python.framework -maxdepth 4 -print
-          ls -la dist/Groovia.app/Contents/Frameworks/Python.framework
-          ls -la dist/Groovia.app/Contents/Frameworks/Python.framework/Versions
+          set +e
+          app="dist/Groovia.app"
+          [[ -d "$app/Contents" ]] || app="build/macos/pyinstaller-dist/Groovia.app"
+          framework="$app/Contents/Frameworks/Python.framework"
+          echo "Diagnostic bundle: $app"
+          find "$framework" -maxdepth 4 -print
+          ls -la "$framework"
+          ls -la "$framework/Versions"
+          ls -la "$framework/Versions/Current"
+          readlink "$framework/Python" || true
+          readlink "$framework/Resources" || true
+          readlink "$framework/Versions/Current" || true
 
       - name: Validate signed bundle runtime
         run: .venv-macos/bin/python packaging/macos/validate-bundle.py dist/Groovia.app

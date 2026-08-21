@@ -96,8 +96,11 @@ def validate_python_framework(frameworks: Path) -> None:
     current = versions / "Current"
     if not versions.is_dir() or not current.is_symlink():
         fail("Python.framework must contain a Versions/Current symlink")
+    version_dirs = [path for path in versions.iterdir() if path.is_dir() and path.name != "Current"]
+    if len(version_dirs) != 1:
+        fail(f"Python.framework must contain exactly one version, found {version_dirs}")
     version = current.resolve()
-    if version.parent != versions or not version.is_dir():
+    if version.parent != versions or version != version_dirs[0].resolve() or not version.is_dir():
         fail(f"Python.framework Versions/Current points outside Versions: {current}")
 
     for name in ("Python", "Resources"):

@@ -37,6 +37,15 @@ def collect_tree(root: Path, destination: str) -> list[tuple[str, str]]:
     ]
 
 
+def reject_framework_sources(items: list[tuple[str, str]]) -> None:
+    frameworks = [source for source, _ in items if ".framework" in Path(source).parts]
+    if frameworks:
+        raise SystemExit(
+            "Python frameworks must come only from the active PyInstaller interpreter; "
+            f"unexpected explicitly collected framework sources: {frameworks}"
+        )
+
+
 datas = collect_tree(RESOURCE_ROOT, ".")
 binaries = []
 for path in (RESOURCE_ROOT / "gstreamer-1.0").iterdir():
@@ -70,6 +79,7 @@ datas += collect_data_files("scipy")
 binaries += collect_dynamic_libs("gi")
 binaries += collect_dynamic_libs("numpy")
 binaries += collect_dynamic_libs("scipy")
+reject_framework_sources(datas + binaries)
 
 with PLIST.open("rb") as stream:
     info_plist = plistlib.load(stream)
