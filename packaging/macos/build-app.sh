@@ -115,7 +115,6 @@ app="$pyinstaller_dist/Groovia.app"
 [[ -d "$app" ]] || { echo "PyInstaller did not produce $app" >&2; exit 1; }
 
 "$venv/bin/python" "$script_dir/relocate-macho.py" "$app"
-"$script_dir/sign-app.sh" --adhoc "$app"
 "$venv/bin/python" "$script_dir/validate-bundle.py" "$app"
 
 if [[ -e "$output" ]]; then

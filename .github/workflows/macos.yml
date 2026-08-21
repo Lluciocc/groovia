@@ -88,6 +88,7 @@ jobs:
           if [[ -z "$APPLE_CERTIFICATE_P12" || -z "$APPLE_CERTIFICATE_PASSWORD" || \
                 -z "$APPLE_SIGNING_IDENTITY" || -z "$APPLE_KEYCHAIN_PASSWORD" ]]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "notary=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           keychain="$RUNNER_TEMP/groovia-signing.keychain-db"
