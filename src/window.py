@@ -5001,10 +5001,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             tag = "step"
         else:
             tag = "detail"
-        # GTK 4 bindings require the explicit text length.  -1 means the
-        # supplied UTF-8 string is NUL-terminated and keeps this compatible
-        # with non-ASCII downloader output as well.
-        buffer.insert_with_tags_by_name(end, f"{text}\n", -1, tag)
+        buffer.insert_with_tags_by_name(end, f"{text}\n", tag)
 
     def _set_download_phase(self, message):
         phase = getattr(self, "_download_phase", None)
