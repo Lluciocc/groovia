@@ -36,14 +36,51 @@ REQUIRED_TYPELIBS = (
 )
 
 
-def run(*command: str, check: bool = True, env=None) -> subprocess.CompletedProcess:
-    return subprocess.run(command, check=check, capture_output=True, text=True, env=env)
+def run(
+    *command: str,
+    check: bool = True,
+    env=None,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        check=check,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+    )
+
+
+def run_bytes(
+    *command: str,
+    check: bool = True,
+    env=None,
+) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        command,
+        check=check,
+        capture_output=True,
+        env=env,
+    )
 
 
 def is_macho(path: Path) -> bool:
     if path.is_symlink() or not path.is_file():
         return False
-    return "Mach-O" in run("file", "-b", str(path), check=False).stdout
+
+    try:
+        return (
+            b"Mach-O"
+            in run_bytes(
+                "file",
+                "-b",
+                str(path),
+                check=False,
+            ).stdout
+        )
+    except OSError:
+        return False
 
 
 def fail(message: str) -> None:
