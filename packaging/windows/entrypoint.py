@@ -134,8 +134,8 @@ def main() -> int:
             import gi
             import numpy
             import scipy
-            from scipy import signal
             from groovia.autodj import AutoDJService
+            from scipy import signal
 
             gi.require_version("Gst", "1.0")
             from gi.repository import Gst
