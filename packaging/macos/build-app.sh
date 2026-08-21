@@ -42,16 +42,32 @@ export GROOVIA_MACOS_BUILD_DIR="$build_root"
 unset PYTHONHOME PYTHONPATH
 
 echo "macOS Python packaging environment"
+which python
 "$venv/bin/python" --version
 "$venv/bin/python" -c 'import sys; print(sys.executable); print(sys.prefix); print(sys.base_prefix)'
-"$venv/bin/python" -c 'import sysconfig; print(sysconfig.get_config_var("PYTHONFRAMEWORK")); print(sysconfig.get_config_var("PYTHONFRAMEWORKPREFIX"))'
+"$venv/bin/python" - <<'PY'
+import sys
+import sysconfig
+
+print("executable:", sys.executable)
+print("prefix:", sys.prefix)
+print("base_prefix:", sys.base_prefix)
+print("framework:", sysconfig.get_config_var("PYTHONFRAMEWORK"))
+print("framework_prefix:", sysconfig.get_config_var("PYTHONFRAMEWORKPREFIX"))
+print("LDLIBRARY:", sysconfig.get_config_var("LDLIBRARY"))
+PY
 echo "Homebrew Python formulae"
 brew --prefix python@3.13
 brew --prefix python@3.14 || true
+brew --prefix python || true
 python_prefix="$(brew --prefix python@3.13)"
+find /opt/homebrew/Frameworks -maxdepth 3 -type d -name 'Python.framework' -print 2>/dev/null || true
+find /opt/homebrew/Cellar/python@3.13 -path '*Python.framework*' -maxdepth 8 -print 2>/dev/null || true
+find /opt/homebrew/Cellar/python@3.14 -path '*Python.framework*' -maxdepth 8 -print 2>/dev/null || true
 find "$python_prefix/Frameworks/Python.framework" -maxdepth 4 -print
 ls -la "$python_prefix/Frameworks/Python.framework"
 ls -la "$python_prefix/Frameworks/Python.framework/Versions"
+otool -L "$($venv/bin/python -c 'import sys; print(sys.executable)')" || true
 
 glib-compile-resources --sourcedir "$repo_root/src" \
   --target "$stage/groovia.gresource" "$repo_root/src/groovia.gresource.xml"
@@ -141,7 +157,7 @@ PY
 app="$pyinstaller_dist/Groovia.app"
 [[ -d "$app" ]] || { echo "PyInstaller did not produce $app" >&2; exit 1; }
 
-echo "PyInstaller Python.framework layout before repair"
+echo "PyInstaller Python.framework layout"
 find "$app/Contents/Frameworks/Python.framework" -maxdepth 4 -print
 ls -la "$app/Contents/Frameworks/Python.framework" || true
 ls -la "$app/Contents/Frameworks/Python.framework/Versions" || true
@@ -149,7 +165,10 @@ readlink "$app/Contents/Frameworks/Python.framework/Python" || true
 readlink "$app/Contents/Frameworks/Python.framework/Resources" || true
 readlink "$app/Contents/Frameworks/Python.framework/Versions/Current" || true
 
-"$venv/bin/python" "$script_dir/repair-python-framework.py" "$app"
+echo "PyInstaller framework sources in analysis metadata"
+grep -R -n \
+  -e 'Python.framework' -e 'Versions/3.14' -e 'python@3.14' \
+  "$build_root/pyinstaller-work" || true
 find "$app/Contents/Frameworks/Python.framework" -maxdepth 4 -print
 ls -la "$app/Contents/Frameworks/Python.framework"
 ls -la "$app/Contents/Frameworks/Python.framework/Versions"
@@ -157,6 +176,13 @@ ls -la "$app/Contents/Frameworks/Python.framework/Versions/Current"
 readlink "$app/Contents/Frameworks/Python.framework/Python" || true
 readlink "$app/Contents/Frameworks/Python.framework/Resources" || true
 readlink "$app/Contents/Frameworks/Python.framework/Versions/Current" || true
+
+version_count="$(find "$app/Contents/Frameworks/Python.framework/Versions" \
+  -mindepth 1 -maxdepth 1 -type d ! -name Current -print | wc -l | tr -d '[:space:]')"
+if [[ "$version_count" -ne 1 ]]; then
+  echo "Expected exactly one Python.framework version after PyInstaller; found $version_count" >&2
+  exit 1
+fi
 
 "$venv/bin/python" "$script_dir/relocate-macho.py" "$app"
 "$venv/bin/python" "$script_dir/validate-bundle.py" "$app"

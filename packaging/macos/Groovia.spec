@@ -46,6 +46,32 @@ def reject_framework_sources(items: list[tuple[str, str]]) -> None:
         )
 
 
+def python_framework_version(path: str) -> str | None:
+    parts = Path(path).parts
+    try:
+        index = parts.index("Python.framework")
+        if parts[index + 1] != "Versions":
+            return None
+        return parts[index + 2]
+    except (ValueError, IndexError):
+        return None
+
+
+def remove_foreign_python_framework_entries(toc, expected_version: str):
+    filtered = []
+    for entry in toc:
+        destination, source, typecode = entry
+        version = python_framework_version(source)
+        if version is not None and version != expected_version:
+            print(
+                "Excluding foreign Python.framework source from PyInstaller TOC: "
+                f"destination={destination!r} source={source!r} type={typecode!r}"
+            )
+            continue
+        filtered.append(entry)
+    return filtered
+
+
 datas = collect_tree(RESOURCE_ROOT, ".")
 binaries = []
 for path in (RESOURCE_ROOT / "gstreamer-1.0").iterdir():
@@ -94,6 +120,9 @@ a = Analysis(
     excludes=["tkinter", "pytest"],
     noarchive=False,
 )
+build_python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+a.binaries = remove_foreign_python_framework_entries(a.binaries, build_python_version)
+a.datas = remove_foreign_python_framework_entries(a.datas, build_python_version)
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,

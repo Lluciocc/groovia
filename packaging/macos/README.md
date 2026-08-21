@@ -8,9 +8,9 @@ path, but those outputs are not currently claimed or published.
 The bundle uses PyInstaller in `onedir`/windowed mode. PyInstaller provides the
 Python bootloader and Apple bundle layout; `Groovia.spec` explicitly collects
 PyGObject, NumPy, SciPy, typelibs, schemas, icon themes, GStreamer plugins and
-the plugin scanner. `repair-python-framework.py` restores the interpreter's
-versioned framework tree with symlinks preserved after PyInstaller.
-`relocate-macho.py` copies and rewrites remaining Homebrew Mach-O dependencies.
+the plugin scanner. The spec rejects foreign Python.framework entries from
+PyInstaller's analysis before bundle creation. `relocate-macho.py` copies and
+rewrites remaining Homebrew Mach-O dependencies.
 `validate-bundle.py` then rejects all absolute Homebrew
 references. This layered approach is more inspectable than relying on
 automatic PyInstaller hooks alone.
