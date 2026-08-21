@@ -4623,6 +4623,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._download_status = download_status
         self._download_current = current
         self._download_log = log_view.get_buffer()
+        self._download_log_view = log_view
         for tag_name, color in (
             ("step", "#8ab4f8"),
             ("success", "#81c995"),
@@ -4630,7 +4631,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
             ("error", "#f28b82"),
             ("detail", "#b6b6c2"),
         ):
-            self._download_log.create_tag(tag_name, foreground=color)
+            tag = Gtk.TextTag(name=tag_name, foreground=color)
+            self._download_log.get_tag_table().add(tag)
         self._download_sync = sync
         self._download_source_entry = entry
         self._download_destination = destination
@@ -5002,6 +5004,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
         else:
             tag = "detail"
         buffer.insert_with_tags_by_name(end, f"{text}\n", tag)
+        # Auto-scroll to the end
+        log_view = getattr(self, "_download_log_view", None)
+        if log_view:
+            end_iter = buffer.get_end_iter()
+            mark = buffer.create_mark(None, end_iter, False)
+            log_view.scroll_to_mark(mark, 0.0, False, 0.0, 1.0)
+            buffer.delete_mark(mark)
 
     def _set_download_phase(self, message):
         phase = getattr(self, "_download_phase", None)
