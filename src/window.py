@@ -103,6 +103,7 @@ button.favorite-active { color: #f6d32d; }
 .song-info-value { color: @window_fg_color; }
 .song-info-duration { background: alpha(#c2c2c2, .16); color: #c2c2c2; border-radius: 99px; padding: 4px 10px; font-weight: 700; }
 .song-info-path { background: alpha(@window_fg_color, .045); border-radius: 10px; padding: 10px 12px; font-family: monospace; color: alpha(@window_fg_color, .72); }
+.playlist-name { font-family: "Segoe UI Emoji", "Segoe UI Symbol", "Segoe UI", sans-serif; }
 .queue-badge { background: #ff725e; color: white; border-radius: 99px; padding: 2px 7px; }
 .auto-dj-badge { background: alpha(#c2c2c2, .18); color: #c2c2c2; border-radius: 99px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
 .empty-state { padding: 80px 24px; }
@@ -1528,7 +1529,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             valign=Gtk.Align.CENTER,
             hexpand=True,
         )
-        heading = Gtk.Label(xalign=0, css_classes=["hero-title"])
+        heading = Gtk.Label(xalign=0, css_classes=["hero-title", "playlist-name"])
         subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
         details.append(heading)
         details.append(subtitle)
@@ -1600,7 +1601,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
             content.add_css_class("nav-row")
             icon = "starred-symbolic" if playlist.is_favorites else "view-list-symbolic"
             content.append(Gtk.Image.new_from_icon_name(icon))
-            content.append(Gtk.Label(label=playlist.name, xalign=0, ellipsize=3, hexpand=True))
+            content.append(
+                Gtk.Label(
+                    label=playlist.name,
+                    xalign=0,
+                    ellipsize=3,
+                    hexpand=True,
+                    css_classes=["playlist-name"],
+                )
+            )
             row.set_child(content)
             context = Gtk.GestureClick()
             context.set_button(Gdk.BUTTON_SECONDARY)
