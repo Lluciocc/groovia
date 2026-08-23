@@ -15,8 +15,9 @@ The app includes an album and artist library, queue, lyrics, an animated vinyl p
 
 <img width="2556" height="1554" alt="infinite" src="https://github.com/user-attachments/assets/c9f25a22-6e0b-4cca-a710-ad12fc7c2e2e" />
 
+## About Groovia
 
-## Why Groovia?
+### Why Groovia?
 
 Groovia is built for people who still keep and enjoy their own music collection.
 
@@ -24,7 +25,7 @@ It combines a clean, album-focused library with a playful vinyl-inspired interfa
 
 Groovia is still growing, but the goal is simple: make listening to a local music library feel personal, modern and enjoyable again.
 
-## What is Auto DJ?
+### What is Auto DJ?
 
 One of Groovia's key features is **Auto DJ**, an experimental mixing mode.
 
