@@ -57,7 +57,7 @@ VERSION_INFO.write_text(
   kids=[StringFileInfo([
     StringTable('040904B0', [
       StringStruct('CompanyName', 'Lluciocc'),
-      StringStruct('FileDescription', 'Groovia music player'),
+      StringStruct('FileDescription', 'Groovia'),
       StringStruct('FileVersion', '{APP_VERSION}'),
       StringStruct('InternalName', 'Groovia'),
       StringStruct('OriginalFilename', 'Groovia.exe'),
