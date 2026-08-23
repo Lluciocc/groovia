@@ -5,7 +5,7 @@
   <project_license>GPL-3.0-or-later</project_license>
 
   <name>Groovia</name>
-  <summary>A calm, album-first music player for GNOME</summary>
+  <summary>Your local music, beautifully organized.</summary>
 
   <description>
     <p>Groovia is a local music player for GNOME that makes a personal collection feel like a record shelf. It scans folders in the background, groups tracks into albums, reads embedded metadata and artwork, and keeps the library in a local database.</p>
@@ -56,15 +56,15 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://github.com/user-attachments/assets/7dc95176-be31-4583-9f61-b5b0b057bb5b</image>
-      <caption>Browse a local music collection in an album-first library.</caption>
-    </screenshot>
-    <screenshot>
-      <image>https://github.com/user-attachments/assets/454a0073-e6e0-445c-80c4-7196bfd4315b</image>
+      <image>https://github.com/user-attachments/assets/d818af97-1e20-4f64-83f2-f4f46099a507</image>
       <caption>Control playback from the queue and animated vinyl deck.</caption>
     </screenshot>
     <screenshot>
-      <image>https://github.com/user-attachments/assets/cfeeb506-40fe-4acc-ac2d-6efe5deed8dc</image>
+      <image>https://github.com/user-attachments/assets/786e458a-9d5d-4446-96b4-8db511d3e705</image>
+      <caption>Browse a local music collection in an album-first library.</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://github.com/user-attachments/assets/c9f25a22-6e0b-4cca-a710-ad12fc7c2e2e</image>
       <caption>Read synchronized lyrics while listening.</caption>
     </screenshot>
   </screenshots>
