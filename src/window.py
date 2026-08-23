@@ -5003,7 +5003,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
             tag = "step"
         else:
             tag = "detail"
-        buffer.insert_with_tags_by_name(end, f"{text}\n", tag)
+
+        start_offset = buffer.get_char_count()
+        end = buffer.get_end_iter()
+        buffer.insert(end, f"{text}\n", -1)
+        text_tag = buffer.get_tag_table().lookup(tag)
+        if text_tag is not None:
+            start = buffer.get_iter_at_offset(start_offset)
+            end = buffer.get_end_iter()
+            buffer.apply_tag(text_tag, start, end)
         # Auto-scroll to the end
         log_view = getattr(self, "_download_log_view", None)
         if log_view:
