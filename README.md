@@ -2,13 +2,11 @@
 
 # Groovia
 
-Modern Music Player
+Your local music, beautifully organized.
 
-Groovia is a modern GNOME music player for local files, built with Python,
-GTK 4, Libadwaita, GStreamer and SQLite.
+Groovia is a music player for GNOME focused on local music libraries.
 
-It presents a local collection as an album-first library with an animated
-vinyl deck, queue and playback bar.
+The app includes an album and artist library, queue, lyrics, an animated vinyl player and an optional **Auto DJ** mode.
 
 ## Screenshots
 <img width="2557" height="1554" alt="image" src="https://github.com/user-attachments/assets/d818af97-1e20-4f64-83f2-f4f46099a507" />
@@ -21,6 +19,14 @@ vinyl deck, queue and playback bar.
 
 
 ## Development
+
+### Built with
+
+- Python
+- GTK 4
+- Libadwaita
+- GStreamer
+- SQLite
 
 The project is intended to be built with GNOME Builder or Meson.
 
