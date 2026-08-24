@@ -136,10 +136,9 @@ class GrooviaApplication(Adw.Application):
             application_name="Groovia",
             application_icon="io.github.Lluciocc.Groovia",
             comments=(
-                "Modern, album-first music player for GNOME.\n\n"
-                "Build a local music collection, browse albums, shape the queue, "
-                "follow synchronized lyrics, and let the optional Auto DJ create "
-                "thoughtful transitions between tracks."
+                "Groovia is built for people who still keep and enjoy their own music collection.\n\n"
+                "It combines a clean, album-focused library with a playful vinyl-inspired interface, while keeping your music local and under your control. There are no accounts or subscriptions: Groovia helps you rediscover the music you already own.\n\n"
+                "Groovia is still growing, but the goal is simple: make listening to a local music library feel personal, modern and enjoyable again.\n\n"
             ),
             developer_name="Lluciocc",
             version=self.version,
