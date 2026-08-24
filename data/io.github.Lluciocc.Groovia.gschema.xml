@@ -18,6 +18,7 @@
 		<key name="vinyl-rotation" type="b"><default>true</default><summary>Vinyl rotation</summary></key>
 		<key name="animations" type="b"><default>true</default><summary>Interface animations</summary></key>
 		<key name="now-playing-notifications" type="b"><default>true</default><summary>Now playing notifications</summary></key>
+		<key name="background-playback" type="b"><default>false</default><summary>Keep Groovia running after its window is closed</summary></key>
 		<key name="spotdl-legal-acknowledged" type="b"><default>false</default><summary>spotDL legal notice acknowledged</summary></key>
 		<key name="download-format" type="s"><default>'mp3'</default><summary>Download format</summary></key>
 		<key name="download-bitrate" type="s"><default>'auto'</default><summary>Download bitrate</summary></key>

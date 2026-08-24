@@ -118,7 +118,7 @@ class MprisService:
                 if method == "Raise":
                     self.window.present()
                 elif method == "Quit":
-                    self.window.get_application().quit()
+                    self.window.get_application().activate_action("quit")
                 else:
                     return self._not_supported(invocation, method)
             elif interface == PLAYER_INTERFACE:

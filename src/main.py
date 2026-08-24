@@ -52,6 +52,16 @@ def _default_version():
 DEFAULT_VERSION = _default_version()
 
 
+def _about_version(version, platform=sys.platform):
+    if platform.startswith("win"):
+        suffix = ".windows"
+    elif platform == "darwin":
+        suffix = ".macos"
+    else:
+        return version
+    return version if version.endswith(suffix) else f"{version}{suffix}"
+
+
 class GrooviaApplication(Adw.Application):
     def __init__(self, version=DEFAULT_VERSION):
         self.version = version or DEFAULT_VERSION
@@ -59,7 +69,8 @@ class GrooviaApplication(Adw.Application):
             application_id="io.github.Lluciocc.Groovia",
             flags=Gio.ApplicationFlags.HANDLES_OPEN,
         )
-        self.create_action("quit", lambda *_: self.quit(), ["<primary>q"])
+        self._quitting = False
+        self.create_action("quit", self.on_quit, ["<primary>q"])
         self.create_action("about", self.on_about)
         self.create_action("preferences", self.on_preferences)
         self.create_action("shortcuts", self.on_shortcuts, ["<primary>question"])
@@ -120,14 +131,14 @@ class GrooviaApplication(Adw.Application):
 
     def do_activate(self):
         configure_icon_theme()
-        win = self.props.active_window or GrooviaWindow(application=self)
+        win = self._main_window() or GrooviaWindow(application=self)
         if MprisService is not None and not hasattr(self, "mpris"):
             self.mpris = MprisService(win)
         win.present()
 
     def do_open(self, files, _n_files, _hint):
         self.activate()
-        win = self.props.active_window
+        win = self._main_window()
         if win:
             win.open_paths([file.get_path() for file in files if file.get_path()])
 
@@ -136,27 +147,50 @@ class GrooviaApplication(Adw.Application):
             application_name="Groovia",
             application_icon="io.github.Lluciocc.Groovia",
             comments=(
-                "Modern, album-first music player for GNOME.\n\n"
-                "Build a local music collection, browse albums, shape the queue, "
-                "follow synchronized lyrics, and let the optional Auto DJ create "
-                "thoughtful transitions between tracks."
+                "Groovia is built for people who still keep and enjoy their own music collection.\n\n"
+                "It combines a clean, album-focused library with a playful vinyl-inspired interface, while keeping your music local and under your control. There are no accounts or subscriptions: Groovia helps you rediscover the music you already own.\n\n"
+                "Groovia is still growing, but the goal is simple: make listening to a local music library feel personal, modern and enjoyable again.\n\n"
             ),
             developer_name="Lluciocc",
-            version=self.version,
+            version=_about_version(self.version),
             developers=["Lluciocc"],
             copyright="© 2026 Lluciocc",
             license_type=Gtk.License.GPL_3_0_ONLY,
             website="https://github.com/Lluciocc/Groovia",
             issue_url="https://github.com/Lluciocc/Groovia/issues",
         )
+        about.add_credit_section(
+            "Data Providers",
+            [
+                "TheAudioDB https://www.theaudiodb.com/free_music_api",
+                "Better Lyrics https://lyrics-api-docs.boidu.dev/",
+                "LRCLIB https://lrclib.net/docs",
+                (
+                    "Spotify oEmbed "
+                    "https://developer.spotify.com/documentation/embeds/tutorials/"
+                    "using-the-oembed-api"
+                ),
+            ],
+        )
+        about.add_credit_section(
+            "Tools and Audio Sources",
+            [
+                "spotDL https://spotdl.github.io/spotify-downloader/",
+                "YouTube Music https://music.youtube.com/",
+                "FFmpeg https://ffmpeg.org/documentation.html",
+                "Deno https://docs.deno.com/",
+            ],
+        )
         about.add_link("License", "https://www.gnu.org/licenses/gpl-3.0.html")
         about.add_link("Donate", "https://buymeacoffee.com/lluciocc")
-        about.present(self.props.active_window)
+        about.present(self._main_window())
 
     def on_preferences(self, *_args):
         from .preferences import PreferencesWindow
 
-        PreferencesWindow(self.props.active_window).present()
+        window = self._main_window()
+        if window is not None:
+            PreferencesWindow(window).present()
 
     def on_shortcuts(self, *_args):
         # PyGObject registers these newer Adwaita widget types lazily.  Touch
@@ -167,12 +201,28 @@ class GrooviaApplication(Adw.Application):
         Adw.ShortcutsItem
         builder = Gtk.Builder.new_from_resource("/io/github/Lluciocc/Groovia/shortcuts-dialog.ui")
         dialog = builder.get_object("shortcuts_dialog")
-        dialog.present(self.props.active_window)
+        dialog.present(self._main_window())
 
     def _window_action(self, method):
-        window = self.props.active_window
+        window = self._main_window()
         if window and hasattr(window, method):
             getattr(window, method)()
+
+    def _main_window(self):
+        active = self.props.active_window
+        if isinstance(active, GrooviaWindow):
+            return active
+        return next(
+            (window for window in self.get_windows() if isinstance(window, GrooviaWindow)),
+            None,
+        )
+
+    def on_quit(self, *_args):
+        self._quitting = True
+        window = self._main_window()
+        if window is not None:
+            window.close()
+        self.quit()
 
     def do_shutdown(self):
         if getattr(self, "mpris", None) is not None:

@@ -207,6 +207,19 @@ class PreferencesWindow(Adw.PreferencesWindow):
         )
         notifications.add(now_playing_notifications)
         interface.add(notifications)
+        behavior = Adw.PreferencesGroup(title="Behavior")
+        background_playback = Adw.SwitchRow(
+            title="Keep Groovia running in the background",
+            subtitle="Closing the window hides Groovia and keeps the music playing",
+        )
+        settings.bind(
+            "background-playback",
+            background_playback,
+            "active",
+            Gio.SettingsBindFlags.DEFAULT,
+        )
+        behavior.add(background_playback)
+        interface.add(behavior)
 
         library = Adw.PreferencesPage(title="Library", icon_name="folder-music-symbolic")
         group = Adw.PreferencesGroup(title="Music folders")
