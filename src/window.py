@@ -268,6 +268,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.playlist_assets_dir = self.database.path.parent / "playlists"
         self.playlist_assets_dir.mkdir(parents=True, exist_ok=True)
         self._settings = self._load_settings()
+        self._shutdown_started = False
+        self.connect("close-request", self._on_close_request)
         self._apply_crossfade_setting()
         if self._settings:
             self._settings.connect("changed::crossfade-index", self._on_crossfade_setting_changed)
@@ -534,6 +536,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         menu.append("Preferences", "app.preferences")
         menu.append("Keyboard Shortcuts", "app.shortcuts")
         menu.append("About Groovia", "app.about")
+        # menu.append("Quit Groovia", "app.quit")
         return menu
 
     def _sidebar(self):
@@ -4417,7 +4420,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 action()
                 return True
             if keyval == Gdk.KEY_q:
-                self.get_application().quit()
+                self.get_application().activate_action("quit")
                 return True
         if primary and shift:
             if keyval == Gdk.KEY_v:
@@ -5329,12 +5332,42 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _toast(self, message):
         self.toast_overlay.add_toast(Adw.Toast(title=message, timeout=3))
 
-    def close(self):
+    def _on_close_request(self, _window):
         if getattr(self, "_data_reset", False):
-            super().close()
-            return
+            return False
+        application = self.get_application()
+        keep_running = bool(
+            self._settings
+            and self._settings.get_boolean("background-playback")
+            and not getattr(application, "_quitting", False)
+        )
+        if keep_running:
+            self._hide_to_background()
+            return True
+
+        self._shutdown_window()
+        if IS_WINDOWS and application and not getattr(application, "_quitting", False):
+            application.quit()
+        return False
+
+    def _hide_to_background(self):
         if getattr(self, "_lyrics_fullscreen_window", None):
             self._lyrics_fullscreen_window.close()
+        if getattr(self, "_vinyl_fullscreen_window", None):
+            self._vinyl_fullscreen_window.close()
+        popover = getattr(self, "_track_popover", None)
+        if popover is not None:
+            popover.popdown()
+        self.set_visible(False)
+
+    def _shutdown_window(self):
+        if self._shutdown_started:
+            return
+        self._shutdown_started = True
+        if getattr(self, "_lyrics_fullscreen_window", None):
+            self._lyrics_fullscreen_window.close()
+        if getattr(self, "_vinyl_fullscreen_window", None):
+            self._vinyl_fullscreen_window.close()
         popover = getattr(self, "_track_popover", None)
         if popover is not None:
             popover.popdown()
@@ -5345,8 +5378,3 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.artist_info.close()
         self.player.close()
         self.database.close()
-        super().close()
-        if IS_WINDOWS:
-            application = self.get_application()
-            if application:
-                application.quit()

@@ -59,7 +59,8 @@ class GrooviaApplication(Adw.Application):
             application_id="io.github.Lluciocc.Groovia",
             flags=Gio.ApplicationFlags.HANDLES_OPEN,
         )
-        self.create_action("quit", lambda *_: self.quit(), ["<primary>q"])
+        self._quitting = False
+        self.create_action("quit", self.on_quit, ["<primary>q"])
         self.create_action("about", self.on_about)
         self.create_action("preferences", self.on_preferences)
         self.create_action("shortcuts", self.on_shortcuts, ["<primary>question"])
@@ -120,14 +121,14 @@ class GrooviaApplication(Adw.Application):
 
     def do_activate(self):
         configure_icon_theme()
-        win = self.props.active_window or GrooviaWindow(application=self)
+        win = self._main_window() or GrooviaWindow(application=self)
         if MprisService is not None and not hasattr(self, "mpris"):
             self.mpris = MprisService(win)
         win.present()
 
     def do_open(self, files, _n_files, _hint):
         self.activate()
-        win = self.props.active_window
+        win = self._main_window()
         if win:
             win.open_paths([file.get_path() for file in files if file.get_path()])
 
@@ -172,12 +173,14 @@ class GrooviaApplication(Adw.Application):
         )
         about.add_link("License", "https://www.gnu.org/licenses/gpl-3.0.html")
         about.add_link("Donate", "https://buymeacoffee.com/lluciocc")
-        about.present(self.props.active_window)
+        about.present(self._main_window())
 
     def on_preferences(self, *_args):
         from .preferences import PreferencesWindow
 
-        PreferencesWindow(self.props.active_window).present()
+        window = self._main_window()
+        if window is not None:
+            PreferencesWindow(window).present()
 
     def on_shortcuts(self, *_args):
         # PyGObject registers these newer Adwaita widget types lazily.  Touch
@@ -188,12 +191,28 @@ class GrooviaApplication(Adw.Application):
         Adw.ShortcutsItem
         builder = Gtk.Builder.new_from_resource("/io/github/Lluciocc/Groovia/shortcuts-dialog.ui")
         dialog = builder.get_object("shortcuts_dialog")
-        dialog.present(self.props.active_window)
+        dialog.present(self._main_window())
 
     def _window_action(self, method):
-        window = self.props.active_window
+        window = self._main_window()
         if window and hasattr(window, method):
             getattr(window, method)()
+
+    def _main_window(self):
+        active = self.props.active_window
+        if isinstance(active, GrooviaWindow):
+            return active
+        return next(
+            (window for window in self.get_windows() if isinstance(window, GrooviaWindow)),
+            None,
+        )
+
+    def on_quit(self, *_args):
+        self._quitting = True
+        window = self._main_window()
+        if window is not None:
+            window.close()
+        self.quit()
 
     def do_shutdown(self):
         if getattr(self, "mpris", None) is not None:
