@@ -52,6 +52,16 @@ def _default_version():
 DEFAULT_VERSION = _default_version()
 
 
+def _about_version(version, platform=sys.platform):
+    if platform.startswith("win"):
+        suffix = ".windows"
+    elif platform == "darwin":
+        suffix = ".macos"
+    else:
+        return version
+    return version if version.endswith(suffix) else f"{version}{suffix}"
+
+
 class GrooviaApplication(Adw.Application):
     def __init__(self, version=DEFAULT_VERSION):
         self.version = version or DEFAULT_VERSION
@@ -142,7 +152,7 @@ class GrooviaApplication(Adw.Application):
                 "Groovia is still growing, but the goal is simple: make listening to a local music library feel personal, modern and enjoyable again.\n\n"
             ),
             developer_name="Lluciocc",
-            version=self.version,
+            version=_about_version(self.version),
             developers=["Lluciocc"],
             copyright="© 2026 Lluciocc",
             license_type=Gtk.License.GPL_3_0_ONLY,
