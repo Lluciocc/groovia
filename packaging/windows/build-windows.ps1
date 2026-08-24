@@ -101,6 +101,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Require-Command "glib-compile-resources" "Install mingw-w64-ucrt-x86_64-glib2."
 Require-Command "glib-compile-schemas" "Install mingw-w64-ucrt-x86_64-glib2."
+Require-Command "gtk4-update-icon-cache" "Install mingw-w64-ucrt-x86_64-gtk4."
 if (-not $SkipInstaller) {
     Require-Command "iscc" "Install Inno Setup and make iscc.exe available on PATH."
 }
@@ -233,6 +234,17 @@ foreach ($IconName in @("io.github.Lluciocc.Groovia", "io.github.Lluciocc.Groovi
     $Match = Get-ChildItem -LiteralPath $AdwaitaIconRoot -Recurse -File | Where-Object { $_.BaseName -eq $IconName } | Select-Object -First 1
     if (-not $Match) {
         throw "Groovia application icon is absent from the packaged Adwaita theme: $IconName"
+    }
+}
+
+# The upstream theme caches were generated before the Groovia icons were
+# merged into the bundle. Rebuild them in place so GTK can resolve the app
+# icon by name (as required by Adw.AboutDialog), rather than merely finding
+# the file on disk.
+foreach ($ThemeRoot in @($AdwaitaIconRoot, $HicolorIconRoot)) {
+    Invoke-NativeLogged { & gtk4-update-icon-cache --force $ThemeRoot }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not rebuild packaged icon cache: $ThemeRoot"
     }
 }
 Write-Instruction "VALIDATE" "Adwaita and hicolor icon themes ($($RequiredIconNames.Count) standard icons plus Groovia icons)"

@@ -25,6 +25,8 @@ import sys
 from pathlib import Path
 
 REQUIRED_ICONS = (
+    "io.github.Lluciocc.Groovia",
+    "io.github.Lluciocc.Groovia-symbolic",
     "audio-x-generic-symbolic",
     "open-menu-symbolic",
     "list-add-symbolic",
