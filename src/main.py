@@ -148,6 +148,28 @@ class GrooviaApplication(Adw.Application):
             website="https://github.com/Lluciocc/Groovia",
             issue_url="https://github.com/Lluciocc/Groovia/issues",
         )
+        about.add_credit_section(
+            "Data Providers",
+            [
+                "TheAudioDB https://www.theaudiodb.com/free_music_api",
+                "Better Lyrics https://lyrics-api-docs.boidu.dev/",
+                "LRCLIB https://lrclib.net/docs",
+                (
+                    "Spotify oEmbed "
+                    "https://developer.spotify.com/documentation/embeds/tutorials/"
+                    "using-the-oembed-api"
+                ),
+            ],
+        )
+        about.add_credit_section(
+            "Tools and Audio Sources",
+            [
+                "spotDL https://spotdl.github.io/spotify-downloader/",
+                "YouTube Music https://music.youtube.com/",
+                "FFmpeg https://ffmpeg.org/documentation.html",
+                "Deno https://docs.deno.com/",
+            ],
+        )
         about.add_link("License", "https://www.gnu.org/licenses/gpl-3.0.html")
         about.add_link("Donate", "https://buymeacoffee.com/lluciocc")
         about.present(self.props.active_window)
