@@ -156,6 +156,15 @@ Invoke-NativeLogged { & magick -background none `
     (Join-Path $BuildRoot "Groovia.ico") }
 if ($LASTEXITCODE -ne 0) { throw "ImageMagick icon conversion failed" }
 
+# Adw.AboutDialog resolves the application icon through GTK's icon theme.
+# Keep a raster fallback because some Windows GTK builds do not resolve the
+# bundled SVG application icon reliably in the About dialog.
+Invoke-NativeLogged { & magick -background none `
+    (Join-Path $RepoRoot "data\icons\hicolor\scalable\apps\io.github.Lluciocc.Groovia.svg") `
+    -resize 128x128 `
+    (Join-Path $BuildRoot "io.github.Lluciocc.Groovia.png") }
+if ($LASTEXITCODE -ne 0) { throw "About dialog icon conversion failed" }
+
 Invoke-NativeLogged { & pyinstaller --noconfirm --clean `
     --distpath $DistRoot `
     --workpath (Join-Path $RepoRoot "build\pyinstaller") `

@@ -111,6 +111,8 @@ datas = [
     (str(ROOT / "data" / "icons" / "hicolor" / "symbolic" / "apps" / "io.github.Lluciocc.Groovia-symbolic.svg"), "share/icons/hicolor/symbolic/apps"),
     (str(ROOT / "data" / "icons" / "hicolor" / "scalable" / "apps" / "io.github.Lluciocc.Groovia.svg"), "share/icons/Adwaita/scalable/apps"),
     (str(ROOT / "data" / "icons" / "hicolor" / "symbolic" / "apps" / "io.github.Lluciocc.Groovia-symbolic.svg"), "share/icons/Adwaita/symbolic/apps"),
+    (str(BUILD_ROOT / "io.github.Lluciocc.Groovia.png"), "share/icons/hicolor/128x128/apps"),
+    (str(BUILD_ROOT / "io.github.Lluciocc.Groovia.png"), "share/icons/Adwaita/128x128/apps"),
 ]
 # Keep the complete upstream themes, including index.theme, cursors and every
 # symbolic/scalable/raster directory.  The project-owned icons above remain
