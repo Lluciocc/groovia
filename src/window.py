@@ -194,11 +194,26 @@ class MarqueeLabel(Gtk.DrawingArea):
 
     def _draw_label(self, _area, cr, width, height):
         separator = "   •   "
-        layout = self.create_pango_layout(self._text + separator + self._text)
-        text_width, text_height = layout.get_pixel_size()
+
+        text_layout = self.create_pango_layout(self._text)
+        text_width, text_height = text_layout.get_pixel_size()
+
         cr.rectangle(0, 0, width, height)
         cr.clip()
-        cr.move_to(-self._offset, max(0, (height - text_height) / 2))
+        if text_width <= width:
+            layout = text_layout
+            offset = 0.0
+        else:
+            layout = self.create_pango_layout(self._text + separator + self._text)
+            offset = self._offset
+
+        _, layout_height = layout.get_pixel_size()
+
+        cr.move_to(
+            -offset,
+            max(0, (height - layout_height) / 2),
+        )
+
         color = self.get_color()
         cr.set_source_rgba(
             color.red,
@@ -206,6 +221,7 @@ class MarqueeLabel(Gtk.DrawingArea):
             color.blue,
             color.alpha * (0.58 if self._muted else 1.0),
         )
+
         PangoCairo.show_layout(cr, layout)
 
     def _tick(self, _widget, _clock):
