@@ -2411,25 +2411,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _update_player_layout(self, *_args):
         if not hasattr(self, "player_identity"):
             return GLib.SOURCE_REMOVE
-        content_width = self._available_content_width()
-        on_home = self.stack.get_visible_child_name() == "home"
-        sidebar_over_content = self.split.get_collapsed() and self.split.get_show_sidebar()
-        details_visible = False
-        if on_home and self.now_playing_details.get_mapped():
-            success, bounds = self.now_playing_details.compute_bounds(self.stack)
-            details_visible = (
-                success
-                and bounds.get_y() < self.stack.get_height()
-                and bounds.get_y() + bounds.get_height() > 0
-            )
-        now_playing_is_clear = (
-            on_home and content_width >= 760 and not sidebar_over_content and details_visible
-        )
 
-        # The Home hero is the primary metadata display at comfortable sizes.
-        # Elsewhere (and on narrow layouts), the player bar remains the fallback.
-        self.player_identity.set_visible(not now_playing_is_clear)
+        content_width = self._available_content_width()
+
+        self.player_identity.set_visible(True)
         self.player_extra_controls.set_visible(content_width >= 820)
+
         return GLib.SOURCE_REMOVE
 
     def _connect_player(self):
