@@ -59,9 +59,14 @@ CSS = """
 .groovia-window { color: @window_fg_color; background: @window_bg_color; }
 .groovia-content, .groovia-content .navigation-page, .groovia-content .navigation-view,
 .groovia-content .toolbar-view, .groovia-content .content-view { background: @window_bg_color; }
-.sidebar { background: @headerbar_bg_color; }
-.brand { padding: 18px 18px 14px; }
-.brand-mark { color: #ff725e; font-size: 28px; }
+.sidebar-pane, .sidebar-pane .toolbar-view, .sidebar-pane .headerbar {
+  background-color: @sidebar_bg_color;
+}
+.sidebar-pane { border-right: 1px solid @sidebar_border_color; }
+.sidebar-pane .headerbar { border-bottom: 1px solid @sidebar_border_color; }
+.sidebar { background-color: transparent; }
+.brand { margin: 0 6px; }
+.brand-mark { color: #ff725e; }
 .nav-row { min-height: 42px; padding: 0 10px; border-radius: 10px; margin: 2px 8px; }
 .nav-row:selected { background: #ff725e; color: white; }
 .nav-section { margin: 18px 16px 6px; color: alpha(@window_fg_color, .52); font-size: 11px; font-weight: 700; }
@@ -74,7 +79,7 @@ CSS = """
 .album-card:hover { background: @card_bg_color; }
 .album-art { border-radius: 10px; }
 .album-title { font-weight: 700; margin-top: 8px; }
-.album-meta { color: alpha(white, .55); font-size: 12px; }
+.album-meta { color: alpha(@window_fg_color, .55); font-size: 12px; }
 .collection-card { min-width: 164px; }
 .artist-avatar { min-width: 144px; min-height: 144px; border-radius: 999px; background: alpha(@window_fg_color, .09); color: alpha(@window_fg_color, .84); font-size: 42px; font-weight: 800; }
 .collection-hero { background: @card_bg_color; border-radius: 18px; padding: 22px; }
@@ -82,7 +87,7 @@ CSS = """
 .vinyl-panel { background: radial-gradient(circle at 50% 40%, #ff725e, #171721 53%, #111117 100%); border-radius: 22px; padding: 16px; }
 .vinyl-fullscreen-root { background: radial-gradient(circle at 50% 45%, alpha(#c2c2c2, .34), #111117 58%, #08080c 100%); }
 .vinyl-fullscreen-toolbar { background: alpha(#09090d, .72); border-radius: 14px; padding: 10px 14px; }
-.now-card { background: @headerbar_bg_color; border-radius: 18px; padding: 22px; }
+.now-card { border-radius: 18px; padding: 22px; }
 .now-title { font-size: 25px; font-weight: 800; }
 .track-row { padding: 9px 12px; border-radius: 10px; }
 .track-row:hover { background: @card_bg_color; }
@@ -90,9 +95,11 @@ button.favorite-active { color: #f6d32d; }
 .playlist-create-content { padding: 24px; }
 .playlist-create-cover { border-radius: 14px; background: @card_bg_color; }
 .playlist-create-hint { margin-top: 2px; }
-.player-bar { background: @headerbar_bg_color; border-top: 1px solid @window_fg_color; padding: 8px 18px; }
+.main-header { border-bottom: 1px solid alpha(@window_fg_color, .08); }
+.player-bar { border-top: 1px solid alpha(@window_fg_color, .12); }
 .player-title { font-weight: 700; }
-.progress { min-width: 220px; }
+.progress { min-width: 140px; }
+.player-time { font-size: 11px; font-variant-numeric: tabular-nums; }
 .download-workflow { padding: 9px 12px; border-radius: 10px; background: alpha(@window_fg_color, .06); }
 .download-phase { font-weight: 700; }
 .download-current { color: alpha(@window_fg_color, .72); }
@@ -162,9 +169,9 @@ class MarqueeLabel(Gtk.DrawingArea):
     _pause_duration = 5.0
     _scroll_duration = 14.0
 
-    def __init__(self, label: str = "", css_classes=None):
-        super().__init__(content_width=190, content_height=22)
-        self.set_size_request(190, 22)
+    def __init__(self, label: str = "", css_classes=None, width: int = 150):
+        super().__init__(content_width=width, content_height=22)
+        self.set_size_request(width, 22)
         self.set_hexpand(False)
         self._text = label
         self._muted = bool(css_classes and "muted" in css_classes)
@@ -193,7 +200,13 @@ class MarqueeLabel(Gtk.DrawingArea):
         cr.rectangle(0, 0, width, height)
         cr.clip()
         cr.move_to(-self._offset, max(0, (height - text_height) / 2))
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.58 if self._muted else 1.0)
+        color = self.get_color()
+        cr.set_source_rgba(
+            color.red,
+            color.green,
+            color.blue,
+            color.alpha * (0.58 if self._muted else 1.0),
+        )
         PangoCairo.show_layout(cr, layout)
 
     def _tick(self, _widget, _clock):
@@ -425,11 +438,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
         accent_foreground = "#202124" if sum(accent) > 1.75 else "white"
         css = f"""
         .groovia-content, .groovia-content .toolbar-view {{ background: linear-gradient(135deg, {background_css}, @window_bg_color 78%); }}
+        .groovia-content .main-header, .groovia-content .player-bar,
+        .groovia-content .now-card {{ background-color: alpha({background_css}, .30); }}
         .brand-mark, .eyebrow {{ color: {accent_css}; }}
         .nav-row:selected {{ background: {accent_css}; color: {accent_foreground}; }}
         button.suggested-action, .suggested-action {{ background-color: {accent_css}; color: {accent_foreground}; }}
-        .headerbar, .player-bar {{ border-color: {accent_css}; }}
-        .now-card {{ border: 1px solid {accent_css}; }}
+        .main-header, .player-bar {{ border-color: alpha({accent_css}, .38); }}
+        .now-card {{ border: 1px solid alpha({accent_css}, .55); }}
         .vinyl-panel {{ background: radial-gradient(circle at 50% 40%, {accent_css}, {background_css} 54%, #111117 100%); }}
         .vinyl-fullscreen-root {{ background: radial-gradient(circle at 50% 45%, {accent_css}, {background_css} 58%, #08080c 100%); }}
         .song-info-duration {{ background: alpha({accent_css}, .16); color: {accent_css}; }}
@@ -480,23 +495,46 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.stack.add_named(self._artist_detail_page(), "artist-detail")
         self.stack.add_named(self._lyrics_page(), "lyrics")
 
-        sidebar = self._sidebar()
+        sidebar_toolbar = Adw.ToolbarView()
+        sidebar_toolbar.add_css_class("sidebar-pane")
+        # self.sidebar_header = self._sidebar_header()
+        # sidebar_toolbar.add_top_bar(self.sidebar_header)
+        sidebar_toolbar.set_content(self._sidebar())
+
         split = Adw.OverlaySplitView()
-        split.set_sidebar(sidebar)
-        split.set_content(self.stack)
+        split.set_sidebar(sidebar_toolbar)
         split.set_min_sidebar_width(190)
         split.set_max_sidebar_width(240)
+        split.set_pin_sidebar(True)
         self.split = split
 
-        toolbar = Adw.ToolbarView()
-        toolbar.add_css_class("groovia-content")
-        toolbar.add_top_bar(self._header())
+        content_toolbar = Adw.ToolbarView()
+        content_toolbar.add_css_class("groovia-content")
+        content_toolbar.add_top_bar(self._header())
         self.toast_overlay = Adw.ToastOverlay()
-        self.toast_overlay.set_child(split)
-        toolbar.set_content(self.toast_overlay)
-        toolbar.add_bottom_bar(self._player_bar())
-        self.set_content(toolbar)
-        self._install_drop_target(toolbar)
+        self.toast_overlay.set_child(self.stack)
+        content_toolbar.set_content(self.toast_overlay)
+        content_toolbar.add_bottom_bar(self._player_bar())
+        split.set_content(content_toolbar)
+        self.set_content(split)
+
+        narrow = Adw.Breakpoint.new(
+            Adw.BreakpointCondition.new_length(
+                Adw.BreakpointConditionLengthType.MAX_WIDTH,
+                900,
+                Adw.LengthUnit.SP,
+            )
+        )
+        narrow.add_setter(split, "collapsed", True)
+        self.add_breakpoint(narrow)
+        self._narrow_breakpoint = narrow
+
+        self.stack.connect("notify::visible-child-name", self._update_player_layout)
+        self.split.connect("notify::collapsed", self._on_split_layout_changed)
+        self.split.connect("notify::show-sidebar", self._on_split_layout_changed)
+        self.connect("notify::width", self._update_player_layout)
+        GLib.idle_add(self._on_split_layout_changed)
+        self._install_drop_target(content_toolbar)
 
     def _install_drop_target(self, widget):
         try:
@@ -516,21 +554,40 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _header(self):
         header = Adw.HeaderBar()
+        self.main_header = header
+        header.add_css_class("main-header")
         header.set_show_title(False)
-        toggle = icon_button(
+        self.sidebar_toggle = icon_button(
             "sidebar-show-symbolic",
             "Toggle navigation",
-            lambda *_: self.split.set_show_sidebar(not self.split.get_show_sidebar()),
+            lambda *_: self._toggle_sidebar(),
         )
-        header.pack_start(toggle)
-        brand = Gtk.Label(label="Groovia")
-        brand.add_css_class("title-2")
-        header.set_title_widget(brand)
+        header.pack_start(self.sidebar_toggle)
         menu = Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text="Main Menu")
         menu.set_menu_model(self._menu_model())
         self.main_menu_button = menu
         header.pack_end(menu)
         return header
+
+    def _sidebar_header(self):
+        header = Adw.HeaderBar()
+        header.set_show_end_title_buttons(False)
+        brand = Gtk.Box(spacing=9, valign=Gtk.Align.CENTER)
+        brand.add_css_class("brand")
+        # mark = Gtk.Image.new_from_icon_name("io.github.Lluciocc.Groovia")
+        # mark.set_pixel_size(28)
+        # mark.set_valign(Gtk.Align.CENTER)
+        # mark.add_css_class("brand-mark")
+        name = Gtk.Label(label="Groovia", valign=Gtk.Align.CENTER)
+        name.set_yalign(0.5)
+        name.add_css_class("title-2")
+        # brand.append(mark)
+        brand.append(name)
+        header.set_title_widget(brand)
+        return header
+
+    def _toggle_sidebar(self):
+        self.split.set_show_sidebar(not self.split.get_show_sidebar())
 
     def _menu_model(self):
         menu = Gio.Menu()
@@ -543,15 +600,6 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _sidebar(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.add_css_class("sidebar")
-        brand = Gtk.Box(spacing=10)
-        brand.add_css_class("brand")
-        mark = Gtk.Label(label="◉")
-        mark.add_css_class("brand-mark")
-        brand.append(mark)
-        name = Gtk.Label(label="Groovia", halign=Gtk.Align.START)
-        name.add_css_class("title-2")
-        brand.append(name)
-        box.append(brand)
         self.nav_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.nav_list.add_css_class("navigation-sidebar")
         self.nav_list.connect("row-selected", self._on_nav_selected)
@@ -601,6 +649,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _home_page(self):
         root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
+        self.home_scroll = root
+        root.get_vadjustment().connect("value-changed", self._update_player_layout)
+        root.get_vadjustment().connect("changed", self._update_player_layout)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         content.add_css_class("hero")
         intro = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
@@ -640,21 +691,51 @@ class GrooviaWindow(Adw.ApplicationWindow):
         fullscreen.connect("clicked", lambda *_: self._open_vinyl_fullscreen())
         vinyl_slot.add_overlay(fullscreen)
         now.append(vinyl_slot)
-        details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)
-        details.append(Gtk.Label(label="NOW PLAYING", xalign=0, css_classes=["eyebrow"]))
-        self.now_title = Gtk.Label(label="Choose an album to start listening", xalign=0, wrap=True)
+        details = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=8,
+            halign=Gtk.Align.FILL,
+            hexpand=True,
+            margin_start=18,
+            margin_end=18,
+        )
+        self.now_playing_details = details
+        details.append(
+            Gtk.Label(
+                label="NOW PLAYING",
+                xalign=0.5,
+                halign=Gtk.Align.FILL,
+                css_classes=["eyebrow"],
+            )
+        )
+        self.now_title = Gtk.Label(
+            label="Choose an album to start listening",
+            xalign=0.5,
+            wrap=True,
+            wrap_mode=Pango.WrapMode.WORD_CHAR,
+            max_width_chars=48,
+            halign=Gtk.Align.FILL,
+        )
         self.now_title.add_css_class("now-title")
-        self.now_title.set_xalign(0.5)
         details.append(self.now_title)
         self.now_artist = Gtk.Label(
             label="Your local library is ready when you are.",
-            xalign=0,
+            xalign=0.5,
+            wrap=True,
+            wrap_mode=Pango.WrapMode.WORD_CHAR,
+            max_width_chars=56,
+            halign=Gtk.Align.FILL,
             css_classes=["muted"],
         )
-        self.now_artist.set_xalign(0.5)
         details.append(self.now_artist)
-        self.now_album = Gtk.Label(label="", xalign=0, css_classes=["muted"])
-        self.now_album.set_xalign(0.5)
+        self.now_album = Gtk.Label(
+            label="",
+            xalign=0.5,
+            ellipsize=Pango.EllipsizeMode.END,
+            halign=Gtk.Align.FILL,
+            visible=False,
+            css_classes=["muted"],
+        )
         details.append(self.now_album)
         self.now_play = Gtk.Button(
             label="Play something",
@@ -2168,67 +2249,150 @@ class GrooviaWindow(Adw.ApplicationWindow):
         dialog.close()
 
     def _player_bar(self):
-        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        bar.add_css_class("player-bar")
+        surface = Gtk.Box()
+        surface.add_css_class("player-bar")
+        bar = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=10,
+            margin_top=8,
+            margin_bottom=8,
+            margin_start=14,
+            margin_end=14,
+        )
         self.player_bar = bar
+        surface.append(bar)
+
+        self.player_identity = Gtk.Box(spacing=10, valign=Gtk.Align.CENTER)
         self.mini_cover = cover_widget(None, 50)
-        self.player_cover_slot = Gtk.Overlay()
+        self.player_cover_slot = Gtk.Overlay(valign=Gtk.Align.CENTER)
         self.player_cover_slot.set_child(self.mini_cover)
-        bar.append(self.player_cover_slot)
-        meta = Gtk.Fixed(width_request=190, height_request=44)
-        meta.set_size_request(190, 44)
-        meta.set_hexpand(False)
-        self.bar_title = MarqueeLabel("Nothing playing", ["player-title"])
-        self.bar_artist = MarqueeLabel("Groovia", ["muted"])
-        self.bar_title.set_size_request(190, 22)
-        self.bar_artist.set_size_request(190, 22)
-        meta.put(self.bar_title, 0, 0)
-        meta.put(self.bar_artist, 0, 22)
-        bar.append(meta)
-        bar.append(
+        self.player_identity.append(self.player_cover_slot)
+        self.player_metadata = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=0,
+            valign=Gtk.Align.CENTER,
+            width_request=150,
+        )
+        self.bar_title = MarqueeLabel("Nothing playing", ["player-title"], width=150)
+        self.bar_artist = MarqueeLabel("Groovia", ["muted"], width=150)
+        self.player_metadata.append(self.bar_title)
+        self.player_metadata.append(self.bar_artist)
+        self.player_identity.append(self.player_metadata)
+        bar.append(self.player_identity)
+
+        controls = Gtk.Box(spacing=4, valign=Gtk.Align.CENTER)
+        controls.append(
             icon_button("media-skip-backward-symbolic", "Previous", lambda *_: self._previous())
         )
         self.play_button = icon_button(
             "media-playback-start-symbolic", "Play", lambda *_: self.player.toggle()
         )
         self.play_button.add_css_class("circular")
-        bar.append(self.play_button)
-        bar.append(icon_button("media-skip-forward-symbolic", "Next", lambda *_: self._next()))
+        controls.append(self.play_button)
+        controls.append(icon_button("media-skip-forward-symbolic", "Next", lambda *_: self._next()))
+        bar.append(controls)
+
+        self.player_extra_controls = Gtk.Box(spacing=4, valign=Gtk.Align.CENTER)
         self.repeat_button = icon_button(
             "media-playlist-repeat-symbolic",
             "Repeat all music",
             lambda *_: self._toggle_repeat(),
         )
         self.repeat_button.add_css_class("accent-button")
-        bar.append(self.repeat_button)
+        self.player_extra_controls.append(self.repeat_button)
         self.lyrics_button = icon_button(
             "text-x-generic-symbolic", "Show Lyrics", lambda *_: self._show_lyrics()
         )
         self.lyrics_button.set_sensitive(False)
-        bar.append(self.lyrics_button)
+        self.player_extra_controls.append(self.lyrics_button)
         self.auto_dj_badge = Gtk.Label(label="Auto DJ", css_classes=["auto-dj-badge"])
         self.auto_dj_badge.set_visible(False)
-        bar.append(self.auto_dj_badge)
-        progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
-        self.position_label = Gtk.Label(label="0:00", xalign=0, css_classes=["muted"])
+        self.player_extra_controls.append(self.auto_dj_badge)
+        bar.append(self.player_extra_controls)
+
+        progress_box = Gtk.Box(spacing=8, hexpand=True, valign=Gtk.Align.CENTER)
+        self.position_label = Gtk.Label(
+            label="0:00",
+            width_chars=4,
+            xalign=1,
+            css_classes=["muted", "player-time"],
+        )
         self.progress = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, 0.1)
         self.progress.set_draw_value(False)
+        self.progress.set_hexpand(True)
+        self.progress.set_valign(Gtk.Align.CENTER)
         self.progress.add_css_class("progress")
         self.progress.connect("change-value", self._on_seek)
+        progress_box.append(self.position_label)
         progress_box.append(self.progress)
+        self.duration_label = Gtk.Label(
+            label="0:00",
+            width_chars=4,
+            xalign=0,
+            css_classes=["muted", "player-time"],
+        )
+        progress_box.append(self.duration_label)
         bar.append(progress_box)
-        self.duration_label = Gtk.Label(label="0:00", css_classes=["muted"])
-        bar.append(self.duration_label)
+
+        volume_box = Gtk.Box(spacing=6, valign=Gtk.Align.CENTER)
+        volume_icon = Gtk.Image.new_from_icon_name("audio-volume-high-symbolic")
+        volume_icon.set_valign(Gtk.Align.CENTER)
+        volume_box.append(volume_icon)
         self.volume = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, 0.01)
         self.volume.set_value(0.72)
-        self.volume.set_size_request(90, -1)
+        self.volume.set_size_request(80, -1)
+        self.volume.set_valign(Gtk.Align.CENTER)
         self.volume.set_tooltip_text("Volume")
         self.volume.connect(
             "value-changed", lambda scale: self.player.set_volume(scale.get_value())
         )
-        bar.append(Gtk.Image.new_from_icon_name("audio-volume-high-symbolic"))
-        bar.append(self.volume)
-        return bar
+        volume_box.append(self.volume)
+        bar.append(volume_box)
+        return surface
+
+    def _on_split_layout_changed(self, *_args):
+        collapsed = self.split.get_collapsed()
+        self.sidebar_toggle.set_icon_name("sidebar-show-symbolic")
+        self.sidebar_toggle.set_tooltip_text(
+            "Hide navigation" if self.split.get_show_sidebar() else "Show navigation"
+        )
+        # When the sidebar is absent, the main header must regain start-side
+        # window controls (notably the traffic lights on macOS).
+        self.main_header.set_show_start_title_buttons(
+            collapsed or not self.split.get_show_sidebar()
+        )
+        self._update_player_layout()
+
+    def _available_content_width(self):
+        width = self.get_width() or self.get_default_size()[0]
+        if self.split.get_show_sidebar() and not self.split.get_collapsed():
+            sidebar_width = self.split.get_sidebar().get_width()
+            width -= sidebar_width if sidebar_width > 0 else 240
+        return width
+
+    def _update_player_layout(self, *_args):
+        if not hasattr(self, "player_identity"):
+            return GLib.SOURCE_REMOVE
+        content_width = self._available_content_width()
+        on_home = self.stack.get_visible_child_name() == "home"
+        sidebar_over_content = self.split.get_collapsed() and self.split.get_show_sidebar()
+        details_visible = False
+        if on_home and self.now_playing_details.get_mapped():
+            success, bounds = self.now_playing_details.compute_bounds(self.stack)
+            details_visible = (
+                success
+                and bounds.get_y() < self.stack.get_height()
+                and bounds.get_y() + bounds.get_height() > 0
+            )
+        now_playing_is_clear = (
+            on_home and content_width >= 760 and not sidebar_over_content and details_visible
+        )
+
+        # The Home hero is the primary metadata display at comfortable sizes.
+        # Elsewhere (and on narrow layouts), the player bar remains the fallback.
+        self.player_identity.set_visible(not now_playing_is_clear)
+        self.player_extra_controls.set_visible(content_width >= 820)
+        return GLib.SOURCE_REMOVE
 
     def _connect_player(self):
         self.player.connect("track-changed", self._on_track_changed)
@@ -4081,11 +4245,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
             track.cover_path if track.cover_path and Path(track.cover_path).exists() else None
         )
         self._set_album_palette(cover_path)
-        self.now_title.set_label(track.title)
-        self.now_artist.set_label(track.artist)
-        self.now_album.set_label(track.album)
-        self.bar_title.set_label(track.title)
-        self.bar_artist.set_label(track.artist)
+        title = track.title or "Unknown title"
+        artist = track.artist or ""
+        album = track.album or ""
+        self.now_title.set_label(title)
+        self.now_artist.set_label(artist)
+        self.now_artist.set_visible(bool(artist.strip()))
+        self.now_album.set_label(album)
+        self.now_album.set_visible(bool(album.strip()))
+        self.bar_title.set_label(title)
+        self.bar_artist.set_label(artist)
+        self.bar_artist.set_visible(bool(artist.strip()))
         # Replace only the artwork widget; the rest of the player bar remains stable.
         self._replace_player_cover(cover_path)
         self.vinyl.set_cover(cover_path)
@@ -4253,6 +4423,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             elif page == "artists" and (changed or self._artists_view_dirty):
                 self._refresh_artists_page(self.artists_search.get_text())
         self.stack.set_visible_child_name(page)
+        self._update_player_layout()
         if page == "library" and self.library_items_box.get_first_child() is None:
             self._append_library_batch()
         elif page == "queue":
