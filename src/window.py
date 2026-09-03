@@ -110,7 +110,6 @@ button.favorite-active { color: #f6d32d; }
 .song-info-value { color: @window_fg_color; }
 .song-info-duration { background: alpha(#c2c2c2, .16); color: #c2c2c2; border-radius: 99px; padding: 4px 10px; font-weight: 700; }
 .song-info-path { background: alpha(@window_fg_color, .045); border-radius: 10px; padding: 10px 12px; font-family: monospace; color: alpha(@window_fg_color, .72); }
-.playlist-name { font-family: "Segoe UI Emoji", "Segoe UI Symbol", "Segoe UI", sans-serif; }
 .queue-badge { background: #ff725e; color: white; border-radius: 99px; padding: 2px 7px; }
 .auto-dj-badge { background: alpha(#c2c2c2, .18); color: #c2c2c2; border-radius: 99px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
 .empty-state { padding: 80px 24px; }
@@ -289,6 +288,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._settings.connect("changed::crossfade-index", self._on_crossfade_setting_changed)
             self._settings.connect("changed::auto-dj-enabled", self._on_auto_dj_setting_changed)
             self._settings.connect(
+                "changed::sidebar-dynamic-color",
+                self._on_sidebar_color_setting_changed,
+            )
+            self._settings.connect(
                 "changed::lyrics-artwork-preference",
                 self._on_lyrics_artwork_preference_changed,
             )
@@ -440,6 +443,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
         .groovia-content, .groovia-content .toolbar-view {{ background: linear-gradient(135deg, {background_css}, @window_bg_color 78%); }}
         .groovia-content .main-header, .groovia-content .player-bar,
         .groovia-content .now-card {{ background-color: alpha({background_css}, .30); }}
+        .sidebar-pane.accent-sidebar,
+        .sidebar-pane.accent-sidebar .toolbar-view,
+        .sidebar-pane.accent-sidebar .headerbar {{
+          background-color: mix(@sidebar_bg_color, {accent_css}, .18);
+        }}
+        .sidebar-pane.accent-sidebar {{ border-color: alpha({accent_css}, .48); }}
         .brand-mark, .eyebrow {{ color: {accent_css}; }}
         .nav-row:selected {{ background: {accent_css}; color: {accent_foreground}; }}
         button.suggested-action, .suggested-action {{ background-color: {accent_css}; color: {accent_foreground}; }}
@@ -497,6 +506,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
         sidebar_toolbar = Adw.ToolbarView()
         sidebar_toolbar.add_css_class("sidebar-pane")
+        self.sidebar_toolbar = sidebar_toolbar
         # self.sidebar_header = self._sidebar_header()
         # sidebar_toolbar.add_top_bar(self.sidebar_header)
         sidebar_toolbar.set_content(self._sidebar())
@@ -517,6 +527,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content_toolbar.add_bottom_bar(self._player_bar())
         split.set_content(content_toolbar)
         self.set_content(split)
+        self._apply_sidebar_color_setting()
 
         narrow = Adw.Breakpoint.new(
             Adw.BreakpointCondition.new_length(
@@ -588,6 +599,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _toggle_sidebar(self):
         self.split.set_show_sidebar(not self.split.get_show_sidebar())
+
+    def _on_sidebar_color_setting_changed(self, *_args):
+        if hasattr(self, "sidebar_toolbar"):
+            self._apply_sidebar_color_setting()
+
+    def _apply_sidebar_color_setting(self):
+        enabled = bool(self._settings and self._settings.get_boolean("sidebar-dynamic-color"))
+        if enabled:
+            self.sidebar_toolbar.add_css_class("accent-sidebar")
+        else:
+            self.sidebar_toolbar.remove_css_class("accent-sidebar")
 
     def _menu_model(self):
         menu = Gio.Menu()

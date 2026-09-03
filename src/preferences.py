@@ -149,6 +149,16 @@ class PreferencesWindow(Adw.PreferencesWindow):
             subtitle="Tint the player with the current artwork",
         )
         settings.bind("dynamic-background", dynamic, "active", Gio.SettingsBindFlags.DEFAULT)
+        sidebar_color = Adw.SwitchRow(
+            title="Follow the app accent color",
+            subtitle="Tint the sidebar with the accent generated from the current artwork",
+        )
+        settings.bind(
+            "sidebar-dynamic-color",
+            sidebar_color,
+            "active",
+            Gio.SettingsBindFlags.DEFAULT,
+        )
         rotation = Adw.SwitchRow(
             title="Spinning vinyl", subtitle="Animate the record while music is playing"
         )
@@ -188,6 +198,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
             ),
         )
         visuals.add(dynamic)
+        visuals.add(sidebar_color)
         visuals.add(rotation)
         visuals.add(animations)
         visuals.add(lyrics_wave)
