@@ -9,6 +9,12 @@ project('groovia',
   default_options: [ 'warning_level=2', 'werror=false', ],
 )
 
+configure_file(
+  input: 'VERSION',
+  output: 'VERSION',
+  copy: true,
+)
+
 i18n = import('i18n')
 gnome = import('gnome')
 

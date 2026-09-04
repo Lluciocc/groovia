@@ -246,4 +246,5 @@ class GrooviaApplication(Adw.Application):
 
 def main(version=DEFAULT_VERSION):
     initialize_runtime()
+    print(f"[Starting Groovia {version} on {sys.platform}]")
     return GrooviaApplication(version).run(sys.argv)
