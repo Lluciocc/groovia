@@ -9,11 +9,12 @@ Groovia is a music player for GNOME focused on local music libraries.
 The app includes an album and artist library, queue, lyrics, an animated vinyl player and an optional **Auto DJ** mode.
 
 ## Screenshots
-<img width="2557" height="1554" alt="image" src="https://github.com/user-attachments/assets/d818af97-1e20-4f64-83f2-f4f46099a507" />
+<img width="3840" height="2336" alt="image" src="https://github.com/user-attachments/assets/72b2bac8-b7e0-4218-b580-d8779e11a95f" />
 
-<img width="2557" height="1554" alt="image" src="https://github.com/user-attachments/assets/786e458a-9d5d-4446-96b4-8db511d3e705" />
+<img width="3840" height="2336" alt="image" src="https://github.com/user-attachments/assets/779aa39d-d160-4efd-8dbb-2c7ecd4a8cea" />
 
-<img width="2556" height="1554" alt="infinite" src="https://github.com/user-attachments/assets/c9f25a22-6e0b-4cca-a710-ad12fc7c2e2e" />
+<img width="3840" height="2336" alt="image" src="https://github.com/user-attachments/assets/f431b3f3-17c9-4236-8b94-72e9cc071b1d" />
+
 
 ## About Groovia
 
