@@ -91,6 +91,20 @@ CSS = """
 .now-title { font-size: 25px; font-weight: 800; }
 .track-row { padding: 9px 12px; border-radius: 10px; }
 .track-row:hover { background: @card_bg_color; }
+.drag-cover-preview { padding: 5px; }
+.drag-cover-art {
+  border: 2px solid alpha(@window_fg_color, .22);
+  border-radius: 12px;
+  box-shadow: 0 6px 18px alpha(black, .42);
+}
+.drag-cover-badge {
+  min-width: 22px;
+  min-height: 22px;
+  border: 2px solid @window_bg_color;
+  border-radius: 99px;
+  background-color: @accent_bg_color;
+  color: @accent_fg_color;
+}
 button.favorite-active { color: #f6d32d; }
 .playlist-create-content { padding: 24px; }
 .playlist-create-cover { border-radius: 14px; background: @card_bg_color; }
@@ -465,6 +479,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
           background-color: mix(@sidebar_bg_color, {accent_css}, .18);
         }}
         .sidebar-pane.accent-sidebar {{ border-color: alpha({accent_css}, .48); }}
+        .playlist-drop-target {{
+          background-color: alpha({accent_css}, .18);
+          box-shadow: inset 0 0 0 1px alpha({accent_css}, .72);
+        }}
+        .drag-cover-art {{ border-color: alpha({accent_css}, .72); }}
+        .drag-cover-badge {{ background-color: {accent_css}; color: {accent_foreground}; }}
         .brand-mark, .eyebrow {{ color: {accent_css}; }}
         .nav-row:selected {{ background: {accent_css}; color: {accent_foreground}; }}
         button.suggested-action, .suggested-action {{ background-color: {accent_css}; color: {accent_foreground}; }}
@@ -1742,7 +1762,44 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 ),
             )
             content.add_controller(context)
+            drop_target = Gtk.DropTarget.new(GObject.TYPE_INT, Gdk.DragAction.COPY)
+            drop_target.set_preload(True)
+            drop_target.connect(
+                "enter",
+                self._on_playlist_drop_enter,
+                content,
+            )
+            drop_target.connect("leave", self._on_playlist_drop_leave, content)
+            drop_target.connect(
+                "drop",
+                self._on_track_dropped_on_playlist,
+                playlist.id,
+                content,
+            )
+            content.add_controller(drop_target)
+            content.set_tooltip_text(f"Drop a track to add it to {playlist.name}")
             self.playlist_list.append(row)
+
+    def _on_playlist_drop_enter(self, _target, _x, _y, content):
+        content.add_css_class("playlist-drop-target")
+        return Gdk.DragAction.COPY
+
+    def _on_playlist_drop_leave(self, _target, content):
+        content.remove_css_class("playlist-drop-target")
+
+    def _on_track_dropped_on_playlist(self, _target, track_id, _x, _y, playlist_id, content):
+        content.remove_css_class("playlist-drop-target")
+        if not isinstance(track_id, int):
+            return False
+        track = self.database.track_by_id(track_id)
+        if track is None:
+            return False
+        GLib.idle_add(self._add_dropped_track_to_playlist, track, playlist_id)
+        return True
+
+    def _add_dropped_track_to_playlist(self, track, playlist_id):
+        self._add_track_to_playlist(track, playlist_id)
+        return GLib.SOURCE_REMOVE
 
     def _on_playlist_selected(self, _list, row):
         if row:
@@ -2908,6 +2965,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         click.connect(
             "pressed", self._on_track_row_pressed, box, box, track, playlist, source_tracks
         )
+        click.connect("released", self._on_track_row_released, box, track, playlist, source_tracks)
         box.add_controller(click)
         keys = Gtk.EventControllerKey()
         keys.connect(
@@ -2920,15 +2978,23 @@ class GrooviaWindow(Adw.ApplicationWindow):
             source_tracks,
         )
         box.add_controller(keys)
-        if playlist and track.id is not None:
-            drag_source = Gtk.DragSource(actions=Gdk.DragAction.MOVE)
+        if track.id is not None:
+            actions = Gdk.DragAction.COPY
+            if playlist:
+                actions |= Gdk.DragAction.MOVE
+            drag_source = Gtk.DragSource(actions=actions)
             drag_source.connect(
                 "prepare",
                 lambda _source, _x, _y, track_id=track.id: Gdk.ContentProvider.new_for_value(
                     track_id
                 ),
             )
+            drag_source.connect("drag-begin", self._on_track_drag_begin, click, track)
             box.add_controller(drag_source)
+            box.set_tooltip_text(
+                f"Play {track.title} by {track.artist}. Drag to add it to a playlist."
+            )
+        if playlist and track.id is not None:
             drop_target = Gtk.DropTarget.new(GObject.TYPE_INT, Gdk.DragAction.MOVE)
             drop_target.set_preload(True)
             drop_target.connect(
@@ -2971,11 +3037,58 @@ class GrooviaWindow(Adw.ApplicationWindow):
             x,
             y,
         )
-        if button == Gdk.BUTTON_PRIMARY and n_press == 1:
-            self._play_selected_track(track, playlist, source_tracks)
-        elif button == Gdk.BUTTON_SECONDARY:
+        if button == Gdk.BUTTON_SECONDARY:
             gesture.set_state(Gtk.EventSequenceState.CLAIMED)
             self._show_track_menu(row, box, track, x, y, playlist, source_tracks)
+
+    def _on_track_row_released(self, gesture, n_press, x, y, box, track, playlist, source_tracks):
+        if gesture.get_current_button() != Gdk.BUTTON_PRIMARY or n_press != 1:
+            return
+        if self._track_row_control_at_point(box, x, y):
+            return
+        self._play_selected_track(track, playlist, source_tracks)
+
+    @staticmethod
+    def _track_row_control_at_point(box, x, y):
+        widget = box.pick(x, y, Gtk.PickFlags.DEFAULT)
+        while widget is not None and widget is not box:
+            if isinstance(widget, Gtk.Button):
+                return True
+            widget = widget.get_parent()
+        return False
+
+    def _on_track_drag_begin(self, _source, drag, click_gesture, track):
+        click_gesture.set_state(Gtk.EventSequenceState.DENIED)
+        cover_path = track.cover_path
+        if not cover_path or not Path(cover_path).is_file():
+            return
+        try:
+            size = 61
+            texture = Gdk.Texture.new_for_pixbuf(load_thumbnail(cover_path, size))
+            picture = Gtk.Picture.new_for_paintable(texture)
+            picture.set_size_request(size, size)
+            picture.set_content_fit(Gtk.ContentFit.COVER)
+            picture.set_can_shrink(False)
+            picture.set_overflow(Gtk.Overflow.HIDDEN)
+            picture.add_css_class("drag-cover-art")
+
+            preview = Gtk.Overlay()
+            preview.set_size_request(size + 10, size + 10)
+            preview.add_css_class("drag-cover-preview")
+            preview.set_child(picture)
+
+            badge = Gtk.Image.new_from_icon_name("list-add-symbolic")
+            badge.set_pixel_size(12)
+            badge.set_halign(Gtk.Align.END)
+            badge.set_valign(Gtk.Align.END)
+            badge.add_css_class("drag-cover-badge")
+            preview.add_overlay(badge)
+
+            drag_icon = Gtk.DragIcon.get_for_drag(drag)
+            drag_icon.set_child(preview)
+            drag.set_hotspot(10, 10)
+        except Exception:
+            LOGGER.debug("could not create drag icon from %r", cover_path, exc_info=True)
 
     def _track_context_key_pressed(
         self, _controller, keyval, _keycode, state, row, box, track, playlist, source_tracks
@@ -3280,8 +3393,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._toast(
             f"Added to {playlist.name}" if added and playlist else "Track already in playlist"
         )
-        self._refresh_playlist_sidebar()
-        self._refresh_playlist_pages()
+        if playlist and playlist.is_favorites:
+            self._refresh_library(self.search_entry.get_text())
+        else:
+            self._refresh_playlist_sidebar()
+            self._refresh_playlist_pages()
 
     def _remove_track_from_playlist(self, track, playlist):
         if not playlist or track.id is None:

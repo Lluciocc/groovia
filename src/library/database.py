@@ -279,6 +279,10 @@ class LibraryDatabase:
         row = self.connection.execute("SELECT * FROM tracks WHERE path = ?", (path,)).fetchone()
         return self._track(row) if row else None
 
+    def track_by_id(self, track_id: int) -> Track | None:
+        row = self.connection.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
+        return self._track(row) if row else None
+
     def remove_track(self, path: str) -> None:
         """Remove a track record without touching the audio file."""
         self.connection.execute("DELETE FROM tracks WHERE path = ?", (path,))
