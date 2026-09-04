@@ -15,7 +15,7 @@
 		<key name="gapless" type="b"><default>true</default><summary>Gapless playback</summary></key>
 		<key name="replaygain" type="b"><default>false</default><summary>ReplayGain normalization</summary></key>
 		<key name="dynamic-background" type="b"><default>true</default><summary>Dynamic background</summary></key>
-		<key name="sidebar-dynamic-color" type="b"><default>false</default><summary>Follow the app accent color in the sidebar</summary><description>Tint the sidebar with the current artwork accent color.</description></key>
+		<key name="sidebar-dynamic-color" type="b"><default>true</default><summary>Follow the app accent color</summary><description>Tint the sidebar and interface controls with the current artwork accent color.</description></key>
 		<key name="vinyl-rotation" type="b"><default>true</default><summary>Vinyl rotation</summary></key>
 		<key name="animations" type="b"><default>true</default><summary>Interface animations</summary></key>
 		<key name="now-playing-notifications" type="b"><default>true</default><summary>Now playing notifications</summary></key>

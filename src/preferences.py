@@ -151,7 +151,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         settings.bind("dynamic-background", dynamic, "active", Gio.SettingsBindFlags.DEFAULT)
         sidebar_color = Adw.SwitchRow(
             title="Follow the app accent color",
-            subtitle="Tint the sidebar with the accent generated from the current artwork",
+            subtitle="Tint the sidebar and controls with the current artwork accent",
         )
         settings.bind(
             "sidebar-dynamic-color",

@@ -483,6 +483,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
           background-color: alpha({accent_css}, .18);
           box-shadow: inset 0 0 0 1px alpha({accent_css}, .72);
         }}
+        .groovia-window.accent-interface scale trough highlight,
+        .groovia-window.accent-interface progressbar trough progress {{
+          background-color: {accent_css};
+        }}
         .drag-cover-art {{ border-color: alpha({accent_css}, .72); }}
         .drag-cover-badge {{ background-color: {accent_css}; color: {accent_foreground}; }}
         .brand-mark, .eyebrow {{ color: {accent_css}; }}
@@ -644,8 +648,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         enabled = bool(self._settings and self._settings.get_boolean("sidebar-dynamic-color"))
         if enabled:
             self.sidebar_toolbar.add_css_class("accent-sidebar")
+            self.add_css_class("accent-interface")
         else:
             self.sidebar_toolbar.remove_css_class("accent-sidebar")
+            self.remove_css_class("accent-interface")
 
     def _menu_model(self):
         menu = Gio.Menu()
