@@ -4613,6 +4613,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 Gdk.KEY_4: self._show_artists,
                 Gdk.KEY_5: self._show_queue,
                 Gdk.KEY_d: self._download_url,
+                Gdk.KEY_b: self._toggle_sidebar,
                 Gdk.KEY_m: self._toggle_main_menu,
                 Gdk.KEY_j: self._toggle_lyrics_mode,
                 Gdk.KEY_f: self._focus_search,

@@ -109,6 +109,11 @@ class GrooviaApplication(Adw.Application):
             ["<primary>m"],
         )
         self.create_action(
+            "toggle-sidebar",
+            lambda *_: self._window_action("_toggle_sidebar"),
+            ["<primary>b"],
+        )
+        self.create_action(
             "toggle-lyrics-mode",
             lambda *_: self._window_action("_toggle_lyrics_mode"),
             ["<primary>j"],

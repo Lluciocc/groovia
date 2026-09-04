@@ -53,6 +53,7 @@
         <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Queue</property><property name="action-name">app.queue</property></object></child>
         <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Download from URL</property><property name="action-name">app.download</property></object></child>
         <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Open / Close menu</property><property name="action-name">app.toggle-menu</property></object></child>
+        <child><object class="AdwShortcutsItem"><property name="title" translatable="yes">Open / Close sidebar</property><property name="action-name">app.toggle-sidebar</property></object></child>
       </object>
     </child>
     <child>
