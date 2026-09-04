@@ -322,6 +322,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 self._on_sidebar_color_setting_changed,
             )
             self._settings.connect(
+                "changed::greeting-show-nickname",
+                self._update_home_greeting,
+            )
+            self._settings.connect(
                 "changed::lyrics-artwork-preference",
                 self._on_lyrics_artwork_preference_changed,
             )
@@ -720,7 +724,18 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content.add_css_class("hero")
         intro = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         intro.append(Gtk.Label(label="YOUR MUSIC, YOUR SPACE", xalign=0, css_classes=["eyebrow"]))
-        intro.append(Gtk.Label(label="Good evening", xalign=0, css_classes=["hero-title"]))
+        self.home_greeting = Gtk.Label(
+            xalign=0,
+            halign=Gtk.Align.FILL,
+            hexpand=True,
+            wrap=True,
+            wrap_mode=Pango.WrapMode.WORD_CHAR,
+            max_width_chars=42,
+            css_classes=["hero-title"],
+        )
+        intro.append(self.home_greeting)
+        self._update_home_greeting()
+        self._greeting_source = GLib.timeout_add_seconds(60, self._update_home_greeting)
         # intro.append(Gtk.Label(label="Put on a record and let the room change.", xalign=0, css_classes=["muted"]))
         actions = Gtk.Box(spacing=8, margin_top=18)
         imp = Gtk.Button(label="Import music", icon_name="folder-music-symbolic")
@@ -858,6 +873,30 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content.append(empty)
         root.set_child(content)
         return root
+
+    @staticmethod
+    def _home_greeting_text(moment=None, nickname=None, show_nickname=True):
+        hour = (moment or datetime.now()).hour
+        if 5 <= hour < 12:
+            greeting = "Good morning"
+        elif 12 <= hour < 18:
+            greeting = "Good afternoon"
+        else:
+            greeting = "Good evening"
+        if not show_nickname:
+            return greeting
+        if nickname is None:
+            nickname = GLib.get_user_name()
+        nickname = str(nickname or "").strip()
+        return f"{greeting}, {nickname}" if nickname else greeting
+
+    def _update_home_greeting(self, *_args):
+        if hasattr(self, "home_greeting"):
+            show_nickname = not self._settings or self._settings.get_boolean(
+                "greeting-show-nickname"
+            )
+            self.home_greeting.set_label(self._home_greeting_text(show_nickname=show_nickname))
+        return GLib.SOURCE_CONTINUE
 
     def _collection_section_header(self, title, target_page):
         header = Gtk.Box(spacing=8, margin_top=28)
@@ -5692,6 +5731,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if self._shutdown_started:
             return
         self._shutdown_started = True
+        greeting_source = getattr(self, "_greeting_source", 0)
+        if greeting_source:
+            GLib.source_remove(greeting_source)
+            self._greeting_source = 0
         if getattr(self, "_lyrics_fullscreen_window", None):
             self._lyrics_fullscreen_window.close()
         if getattr(self, "_vinyl_fullscreen_window", None):

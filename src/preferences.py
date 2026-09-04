@@ -159,6 +159,16 @@ class PreferencesWindow(Adw.PreferencesWindow):
             "active",
             Gio.SettingsBindFlags.DEFAULT,
         )
+        greeting_nickname = Adw.SwitchRow(
+            title="Show nickname in greeting",
+            subtitle="Display your system username on the Home page",
+        )
+        settings.bind(
+            "greeting-show-nickname",
+            greeting_nickname,
+            "active",
+            Gio.SettingsBindFlags.DEFAULT,
+        )
         rotation = Adw.SwitchRow(
             title="Spinning vinyl", subtitle="Animate the record while music is playing"
         )
@@ -199,6 +209,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         )
         visuals.add(dynamic)
         visuals.add(sidebar_color)
+        visuals.add(greeting_nickname)
         visuals.add(rotation)
         visuals.add(animations)
         visuals.add(lyrics_wave)
