@@ -69,7 +69,11 @@ install_data(
   install_dir: moduledir / 'artists',
 )
 install_data(['audio/__init__.py', 'audio/player.py'], install_dir: moduledir / 'audio')
-install_data(['autodj/__init__.py', 'autodj/analysis.py', 'autodj/planner.py', 'autodj/service.py'], install_dir: moduledir / 'autodj')
+install_data(
+  ['autodj/__init__.py', 'autodj/analysis.py', 'autodj/planner.py',
+   'autodj/recommender.py', 'autodj/service.py', 'autodj/session.py'],
+  install_dir: moduledir / 'autodj',
+)
 install_data(
   ['library/__init__.py', 'library/database.py', 'library/grouping.py', 'library/scanner.py'],
   install_dir: moduledir / 'library',

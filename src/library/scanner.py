@@ -66,7 +66,7 @@ class LibraryScanner:
     def _read_track(self, path: Path) -> Track:
         title = path.stem.replace("_", " ").replace("-", " – ")
         artist, album = "Unknown Artist", "Unknown Album"
-        album_artist, year = "", ""
+        album_artist, year, genre = "", "", ""
         track_number, disc_number = 0, 1
         parts = path.stem.split(" - ", 1)
         if len(parts) == 2:
@@ -104,6 +104,7 @@ class LibraryScanner:
                     tag("album", album),
                 )
                 album_artist = tag("album-artist", artist)
+                genre = tag("genre", "")
                 track_number = number_tag("track-number", 0)
                 disc_number = number_tag("album-disc-number", 1)
                 for date_tag in ("datetime", "date-time", "date"):
@@ -125,7 +126,7 @@ class LibraryScanner:
             album,
             album_artist or artist,
             year,
-            "",
+            genre,
             track_number,
             disc_number,
             duration,

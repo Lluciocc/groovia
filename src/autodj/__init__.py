@@ -26,6 +26,12 @@ __all__ = [
     "TransitionPlan",
     "TransitionPlanner",
     "AutoDJService",
+    "AutoDJRecommender",
+    "ScoredCandidate",
+    "PlaybackContext",
+    "QueueProvenance",
+    "RecommendationGuard",
+    "PlaybackEventDeduplicator",
 ]
 
 _EXPORTS = {
@@ -35,6 +41,12 @@ _EXPORTS = {
     "TransitionPlan": ("planner", "TransitionPlan"),
     "TransitionPlanner": ("planner", "TransitionPlanner"),
     "AutoDJService": ("service", "AutoDJService"),
+    "AutoDJRecommender": ("recommender", "AutoDJRecommender"),
+    "ScoredCandidate": ("recommender", "ScoredCandidate"),
+    "PlaybackContext": ("session", "PlaybackContext"),
+    "QueueProvenance": ("session", "QueueProvenance"),
+    "RecommendationGuard": ("session", "RecommendationGuard"),
+    "PlaybackEventDeduplicator": ("session", "PlaybackEventDeduplicator"),
 }
 
 

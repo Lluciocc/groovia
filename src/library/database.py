@@ -68,6 +68,7 @@ class LibraryDatabase:
             CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             """)
         self._migrate_download_schema()
+        self._migrate_play_events_schema()
         self.connection.execute(
             "INSERT OR IGNORE INTO playlists(name, is_favorites) VALUES('Favorites', 1)"
         )
@@ -79,7 +80,12 @@ class LibraryDatabase:
     def _migrate_download_schema(self) -> None:
         """Add download/synchronization data without recreating user data."""
         columns = {
-            "tracks": {"spotify_id": "TEXT", "isrc": "TEXT"},
+            "tracks": {
+                "play_count": "INTEGER NOT NULL DEFAULT 0",
+                "last_played": "TEXT",
+                "spotify_id": "TEXT",
+                "isrc": "TEXT",
+            },
             "playlists": {
                 "source_url": "TEXT",
                 "source_id": "TEXT",
@@ -132,6 +138,21 @@ class LibraryDatabase:
             );
             CREATE INDEX IF NOT EXISTS lyrics_track ON lyrics(track_id);
             CREATE INDEX IF NOT EXISTS lyrics_kind ON lyrics(track_id, kind);
+            """)
+
+    def _migrate_play_events_schema(self) -> None:
+        """Add append-only playback history to databases of every age."""
+        self.connection.executescript("""
+            CREATE TABLE IF NOT EXISTS play_events (
+              id INTEGER PRIMARY KEY,
+              track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+              played_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              context TEXT
+            );
+            CREATE INDEX IF NOT EXISTS play_events_played_at
+              ON play_events(played_at DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS play_events_track
+              ON play_events(track_id, played_at DESC);
             """)
 
     @staticmethod
@@ -226,12 +247,28 @@ class LibraryDatabase:
         self.connection.commit()
         return count
 
-    def mark_played(self, track: Track) -> None:
+    def mark_played(self, track: Track, context: str | None = None) -> None:
+        """Update aggregates and append exactly one playback event."""
         self.connection.execute(
             "UPDATE tracks SET play_count = play_count + 1, last_played = CURRENT_TIMESTAMP WHERE path = ?",
             (track.path,),
         )
+        self.connection.execute(
+            """INSERT INTO play_events(track_id, context)
+               SELECT id, ? FROM tracks WHERE path = ?""",
+            (context, track.path),
+        )
         self.connection.commit()
+
+    def recent_play_events(self, limit: int = 40) -> list[Track]:
+        """Return event-ordered tracks, retaining repeated listening events."""
+        rows = self.connection.execute(
+            """SELECT tracks.* FROM play_events
+               JOIN tracks ON tracks.id = play_events.track_id
+               ORDER BY play_events.played_at DESC, play_events.id DESC LIMIT ?""",
+            (max(1, int(limit)),),
+        ).fetchall()
+        return [self._track(row) for row in rows]
 
     def remove_missing(self) -> None:
         self.connection.execute(

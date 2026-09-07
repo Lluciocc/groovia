@@ -49,6 +49,9 @@ tests/*
 !tests/test_lyrics_better.py
 !tests/test_grouping.py
 !tests/test_artist_info.py
+!tests/test_autodj_session.py
+!tests/test_database.py
+!tests/test_recommender.py
 build-check
 .mypycache/
 .mypy_cache/

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -28,6 +29,68 @@ if TYPE_CHECKING:
     from .analysis import TrackAnalysis
 
 LOGGER = logging.getLogger("groovia.autodj")
+
+
+def harmonic_compatibility(left_key, right_key):
+    """Return Camelot-style compatibility for analysed major/minor keys."""
+    if not left_key or not right_key:
+        return 0.5
+    camelot = {
+        ("G#", "MINOR"): (1, "A"),
+        ("D#", "MINOR"): (2, "A"),
+        ("A#", "MINOR"): (3, "A"),
+        ("F", "MINOR"): (4, "A"),
+        ("C", "MINOR"): (5, "A"),
+        ("G", "MINOR"): (6, "A"),
+        ("D", "MINOR"): (7, "A"),
+        ("A", "MINOR"): (8, "A"),
+        ("E", "MINOR"): (9, "A"),
+        ("B", "MINOR"): (10, "A"),
+        ("F#", "MINOR"): (11, "A"),
+        ("C#", "MINOR"): (12, "A"),
+        ("B", "MAJOR"): (1, "B"),
+        ("F#", "MAJOR"): (2, "B"),
+        ("C#", "MAJOR"): (3, "B"),
+        ("G#", "MAJOR"): (4, "B"),
+        ("D#", "MAJOR"): (5, "B"),
+        ("A#", "MAJOR"): (6, "B"),
+        ("F", "MAJOR"): (7, "B"),
+        ("C", "MAJOR"): (8, "B"),
+        ("G", "MAJOR"): (9, "B"),
+        ("D", "MAJOR"): (10, "B"),
+        ("A", "MAJOR"): (11, "B"),
+        ("E", "MAJOR"): (12, "B"),
+    }
+
+    def parse(value):
+        normalized = str(value).strip().upper().replace("♯", "#").replace("♭", "B")
+        wheel = re.match(r"^(1[0-2]|[1-9])([AB])$", normalized)
+        if wheel:
+            return int(wheel.group(1)), wheel.group(2)
+        match = re.match(r"^([A-G](?:#|B)?)[\s_-]*(MAJOR|MINOR|MAJ|MIN|M)?$", normalized)
+        if not match:
+            return None
+        note, mode = match.groups()
+        enharmonic = {"DB": "C#", "EB": "D#", "GB": "F#", "AB": "G#", "BB": "A#"}
+        note = enharmonic.get(note, note)
+        if mode in (None, "MAJ"):
+            mode = "MAJOR"
+        elif mode in ("MIN", "M"):
+            mode = "MINOR"
+        return camelot.get((note, mode))
+
+    left = parse(left_key)
+    right = parse(right_key)
+    if left is None or right is None:
+        return 0.5
+    if left == right:
+        return 1.0
+    if left[0] == right[0]:
+        return 0.90
+    wheel_distance = min((left[0] - right[0]) % 12, (right[0] - left[0]) % 12)
+    if left[1] == right[1] and wheel_distance == 1:
+        return 0.82
+    return 0.25
 
 
 @dataclass(frozen=True, slots=True)
@@ -930,49 +993,7 @@ class TransitionPlanner:
 
     @staticmethod
     def _harmonic_score(left_key, right_key):
-        if not left_key or not right_key:
-            return 0.5
-        left = str(left_key).strip().upper().replace("♯", "#").replace("♭", "B")
-        right = str(right_key).strip().upper().replace("♯", "#").replace("♭", "B")
-        if left == right:
-            return 1.0
-        if left.rstrip(" M") == right.rstrip(" M"):
-            return 0.85
-        notes = {
-            "C": 0,
-            "C#": 1,
-            "DB": 1,
-            "D": 2,
-            "D#": 3,
-            "EB": 3,
-            "E": 4,
-            "F": 5,
-            "F#": 6,
-            "GB": 6,
-            "G": 7,
-            "G#": 8,
-            "AB": 8,
-            "A": 9,
-            "A#": 10,
-            "BB": 10,
-            "B": 11,
-        }
-
-        def root(value):
-            return next(
-                (
-                    notes[key]
-                    for key in sorted(notes, key=len, reverse=True)
-                    if value.startswith(key)
-                ),
-                None,
-            )
-
-        a, b = root(left), root(right)
-        if a is None or b is None:
-            return 0.5
-        distance = min((a - b) % 12, (b - a) % 12)
-        return {1: 0.75, 2: 0.58, 5: 0.72, 7: 0.72}.get(distance, 0.28)
+        return harmonic_compatibility(left_key, right_key)
 
     @staticmethod
     def _unique_points(points):

@@ -37,6 +37,7 @@ class Track:
     play_count: int = 0
     spotify_id: str | None = None
     isrc: str | None = None
+    last_played: str | None = None
 
     @property
     def subtitle(self) -> str:

@@ -33,6 +33,12 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango, PangoCairo
 
 from .artists import ArtistInfoService, TheAudioDBArtistProvider
 from .audio import AudioPlayer
+from .autodj.session import (
+    PlaybackContext,
+    PlaybackEventDeduplicator,
+    QueueProvenance,
+    RecommendationGuard,
+)
 from .downloads import SpotDLService, classify_input
 from .library import (
     AlbumGroup,
@@ -289,6 +295,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.style_manager.connect("notify::accent-color", self._on_system_style_changed)
         self.style_manager.connect("notify::dark", self._on_system_style_changed)
         self.queue: list[Track] = self.database.load_queue()
+        self._queue_provenance = QueueProvenance()
+        self._recommendation_guard = RecommendationGuard()
+        self._recommendation_state = None
+        self._recommendation_pending = False
+        self._playback_context = PlaybackContext.RESTORED
+        self._play_event_deduplicator = PlaybackEventDeduplicator()
         self.repeat_mode = "all"
         self.repeat_all = True
         self.shuffle = False
@@ -379,6 +391,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         enabled = bool(self._settings and self._settings.get_boolean("auto-dj-enabled"))
         enabled = enabled and self.repeat_mode != "one"
         self._auto_dj_enabled = enabled
+        self._invalidate_recommendations()
         self.player.set_auto_dj_enabled(enabled)
         if enabled:
             self._ensure_auto_dj()
@@ -393,8 +406,111 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self.auto_dj = AutoDJService(
                 self._on_auto_dj_plan,
                 lyrics_provider=lambda track: self.download_service.lyrics.find(track),
+                recommendation_callback=self._on_auto_dj_recommendations,
             )
         return self.auto_dj
+
+    def _set_playback_context(self, context: PlaybackContext) -> None:
+        """Start a session with one unambiguous source of playback truth."""
+        self._playback_context = context
+        self._library_random_mode = context.allows_recommendations
+        self._queue_provenance.clear()
+        self._invalidate_recommendations()
+
+    def _invalidate_recommendations(self) -> None:
+        self._recommendation_guard.invalidate()
+        self._recommendation_state = None
+        self._recommendation_pending = False
+        if self.auto_dj is not None:
+            self.auto_dj.cancel_recommendations()
+
+    def _recommendation_queue_signature(self):
+        return self._queue_provenance.signature(self.queue)
+
+    def _sync_recommendation_state(self) -> None:
+        state = (
+            self.current.path if self.current else None,
+            self._playback_context,
+            self._auto_dj_enabled,
+            self._recommendation_queue_signature(),
+        )
+        if state != self._recommendation_state:
+            self._recommendation_guard.invalidate()
+            self._recommendation_pending = False
+            if self.auto_dj is not None:
+                self.auto_dj.cancel_recommendations()
+            self._recommendation_state = state
+
+    def _request_auto_dj_recommendations(self) -> None:
+        if (
+            not self._auto_dj_enabled
+            or not self.current
+            or not self._playback_context.allows_recommendations
+        ):
+            return
+        library = self.database.all_tracks()
+        target_size = min(4, max(0, len(library) - 1))
+        needed = target_size - len(self.queue)
+        if needed <= 0 or self._recommendation_pending:
+            return
+        queue_signature = self._recommendation_queue_signature()
+        token = self._recommendation_guard.issue(
+            self.current.path,
+            queue_signature,
+            self._playback_context,
+        )
+        self._recommendation_pending = True
+        recent = self.database.recent_play_events(limit=40)
+        self._ensure_auto_dj().recommend(
+            self.current,
+            recent,
+            self.queue,
+            library,
+            self._auto_dj_options(),
+            limit=needed,
+            request_token=token,
+        )
+
+    def _on_auto_dj_recommendations(self, token, ranked) -> None:
+        self._recommendation_pending = False
+        if not self.current:
+            return
+        signature = self._recommendation_queue_signature()
+        if not self._recommendation_guard.accepts(
+            token,
+            self.current.path,
+            signature,
+            self._playback_context,
+        ):
+            LOGGER.debug("Ignoring obsolete Auto DJ recommendation result")
+            return
+        queued_paths = {track.path for track in self.queue}
+        plans = {}
+        appended = False
+        target_size = 4
+        for candidate in ranked:
+            track = candidate.track
+            if (
+                len(self.queue) >= target_size
+                or track.path == self.current.path
+                or track.path in queued_paths
+            ):
+                continue
+            self.queue.append(track)
+            appended = True
+            self._queue_provenance.mark_automatic(track)
+            queued_paths.add(track.path)
+            if candidate.plan is not None:
+                plans[track.path] = candidate.plan
+        if not appended:
+            return
+        # Applying a result changes the queue signature, so no other worker
+        # result from the old snapshot may be accepted afterward.
+        self._invalidate_recommendations()
+        self._refresh_queue()
+        self._prepare_next_track()
+        if self.queue and self.queue[0].path in plans:
+            self._on_auto_dj_plan(plans[self.queue[0].path])
 
     def _on_auto_dj_setting_changed(self, *_args):
         self._apply_auto_dj_setting()
@@ -2141,8 +2257,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return
         if shuffle:
             random.shuffle(tracks)
+        self._set_playback_context(PlaybackContext.PLAYLIST)
         self._current_playlist_id = playlist_id
-        self._library_random_mode = False
         self._history.clear()
         self._playback_source = tracks
         self.queue = tracks[1:]
@@ -2155,14 +2271,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if not tracks:
             self._toast("This playlist is empty")
             return
-        self.queue[0:0] = tracks
+        for track in reversed(tracks):
+            self.queue.insert(0, track)
         self._prepare_next_track()
         self._refresh_queue()
         self._toast(f"Added {len(tracks)} tracks to play next")
 
     def _add_playlist_to_queue(self, playlist_id):
         tracks = self.database.playlist_tracks(playlist_id)
-        self.queue.extend(tracks)
+        for track in tracks:
+            self._queue_provenance.append_manual(self.queue, track)
         self._prepare_next_track()
         self._refresh_queue()
         self._toast(f"Added {len(tracks)} tracks to the queue")
@@ -2972,6 +3090,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         playlist: Playlist | None = None,
         position: int | None = None,
         source_tracks: list[Track] | None = None,
+        playback_context: PlaybackContext | None = None,
     ):
         row = Gtk.Box(spacing=12)
         box = row
@@ -3002,15 +3121,32 @@ class GrooviaWindow(Adw.ApplicationWindow):
             icon_button(
                 "media-playback-start-symbolic",
                 "Play",
-                lambda *_: self._play_selected_track(track, playlist, source_tracks),
+                lambda *_: self._play_selected_track(
+                    track, playlist, source_tracks, playback_context
+                ),
             )
         )
         click = Gtk.GestureClick()
         click.set_button(0)
         click.connect(
-            "pressed", self._on_track_row_pressed, box, box, track, playlist, source_tracks
+            "pressed",
+            self._on_track_row_pressed,
+            box,
+            box,
+            track,
+            playlist,
+            source_tracks,
+            playback_context,
         )
-        click.connect("released", self._on_track_row_released, box, track, playlist, source_tracks)
+        click.connect(
+            "released",
+            self._on_track_row_released,
+            box,
+            track,
+            playlist,
+            source_tracks,
+            playback_context,
+        )
         box.add_controller(click)
         keys = Gtk.EventControllerKey()
         keys.connect(
@@ -3021,6 +3157,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             track,
             playlist,
             source_tracks,
+            playback_context,
         )
         box.add_controller(keys)
         if track.id is not None:
@@ -3070,7 +3207,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._refresh_library(self.search_entry.get_text())
 
     def _on_track_row_pressed(
-        self, gesture, n_press, x, y, row, box, track, playlist, source_tracks
+        self,
+        gesture,
+        n_press,
+        x,
+        y,
+        row,
+        box,
+        track,
+        playlist,
+        source_tracks,
+        playback_context,
     ):
         button = gesture.get_current_button()
         LOGGER.info(
@@ -3084,14 +3231,25 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         if button == Gdk.BUTTON_SECONDARY:
             gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-            self._show_track_menu(row, box, track, x, y, playlist, source_tracks)
+            self._show_track_menu(
+                row,
+                box,
+                track,
+                x,
+                y,
+                playlist,
+                source_tracks,
+                playback_context,
+            )
 
-    def _on_track_row_released(self, gesture, n_press, x, y, box, track, playlist, source_tracks):
+    def _on_track_row_released(
+        self, gesture, n_press, x, y, box, track, playlist, source_tracks, playback_context
+    ):
         if gesture.get_current_button() != Gdk.BUTTON_PRIMARY or n_press != 1:
             return
         if self._track_row_control_at_point(box, x, y):
             return
-        self._play_selected_track(track, playlist, source_tracks)
+        self._play_selected_track(track, playlist, source_tracks, playback_context)
 
     @staticmethod
     def _track_row_control_at_point(box, x, y):
@@ -3136,7 +3294,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
             LOGGER.debug("could not create drag icon from %r", cover_path, exc_info=True)
 
     def _track_context_key_pressed(
-        self, _controller, keyval, _keycode, state, row, box, track, playlist, source_tracks
+        self,
+        _controller,
+        keyval,
+        _keycode,
+        state,
+        row,
+        box,
+        track,
+        playlist,
+        source_tracks,
+        playback_context,
     ):
         menu_key = keyval in (Gdk.KEY_Menu, getattr(Gdk, "KEY_KP_Menu", Gdk.KEY_Menu))
         shift_f10 = keyval == Gdk.KEY_F10 and state & Gdk.ModifierType.SHIFT_MASK
@@ -3149,7 +3317,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 return True
         if menu_key or shift_f10:
             box.grab_focus()
-            self._show_track_menu(row, box, track, 0, 0, playlist, source_tracks)
+            self._show_track_menu(
+                row,
+                box,
+                track,
+                0,
+                0,
+                playlist,
+                source_tracks,
+                playback_context,
+            )
             return True
         return False
 
@@ -3162,6 +3339,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         y,
         playlist: Playlist | None = None,
         source_tracks: list[Track] | None = None,
+        playback_context: PlaybackContext | None = None,
     ):
         if getattr(self, "_track_popover", None):
             self._track_popover.popdown()
@@ -3208,7 +3386,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
             "Remove from Favorites" if self.database.is_favorite(track) else "Add to Favorites"
         )
         direct_items = [
-            ("play", "Play", lambda: self._play_selected_track(track, playlist, source_tracks)),
+            (
+                "play",
+                "Play",
+                lambda: self._play_selected_track(track, playlist, source_tracks, playback_context),
+            ),
             ("play-next", "Play Next", lambda: self._play_next(track)),
             ("add-to-queue", "Add to Queue", lambda: self._add_to_queue(track)),
             ("go-to-album", "Go to Album", lambda: self._go_to_album(track)),
@@ -3283,7 +3465,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
             button.connect(
                 "clicked",
                 lambda _button, anchor=button, items=items: self._show_track_submenu(
-                    track, anchor, items, lyrics_available, playlist, source_tracks
+                    track,
+                    anchor,
+                    items,
+                    lyrics_available,
+                    playlist,
+                    source_tracks,
+                    playback_context,
                 ),
             )
             menu_box.append(button)
@@ -3294,13 +3482,22 @@ class GrooviaWindow(Adw.ApplicationWindow):
         popover.popup()
 
     def _show_track_submenu(
-        self, track, anchor, items, lyrics_available, playlist, source_tracks=None
+        self,
+        track,
+        anchor,
+        items,
+        lyrics_available,
+        playlist,
+        source_tracks=None,
+        playback_context=None,
     ):
         if getattr(self, "_track_subpopover", None):
             self._track_subpopover.popdown()
 
         callbacks = {
-            "play": lambda: self._play_selected_track(track, playlist, source_tracks),
+            "play": lambda: self._play_selected_track(
+                track, playlist, source_tracks, playback_context
+            ),
             "play-next": lambda: self._play_next(track),
             "add-to-queue": lambda: self._add_to_queue(track),
             "favorite": lambda: self._toggle_favorite(track),
@@ -3536,8 +3733,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
         for child in iter_gtk_children(self.queue_box):
             self.queue_box.remove(child)
         self.queue_empty.set_visible(not self.queue)
+        source_tracks = list(self.queue)
         for track in self.queue:
-            self.queue_box.append(self._track_row(track, True))
+            self.queue_box.append(
+                self._track_row(
+                    track,
+                    True,
+                    source_tracks=source_tracks,
+                    playback_context=PlaybackContext.MANUAL_QUEUE,
+                )
+            )
 
     def _restore_playback(self):
         saved = self.database.load_playback()
@@ -3548,6 +3753,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if not track:
             return
 
+        self._set_playback_context(PlaybackContext.RESTORED)
         # Recreate the playback source from the saved current track and the
         # pending queue so Next keeps the same order after a restart.
         self._playback_source = [track] + [item for item in self.queue if item.path != track.path]
@@ -3560,23 +3766,29 @@ class GrooviaWindow(Adw.ApplicationWindow):
         key = (normalize_group_name(album), normalize_group_name(artist))
         group = self._album_groups_by_key.get(key)
         if group:
-            self._play_collection_tracks(group.tracks)
+            self._play_collection_tracks(group.tracks, context=PlaybackContext.ALBUM)
 
-    def _play_collection_tracks(self, tracks, start_track=None):
+    def _play_collection_tracks(
+        self,
+        tracks,
+        start_track=None,
+        context=PlaybackContext.DIRECT_TRACK,
+    ):
         source = list(tracks)
         if not source:
             self._toast("This collection is empty")
             return
         start = start_track or source[0]
         self.shuffle = False
-        self._play_selected_track(start, source_tracks=source)
+        self._play_selected_track(start, source_tracks=source, playback_context=context)
 
     def _add_collection_to_queue(self, tracks, label="collection"):
         source = list(tracks)
         if not source:
             self._toast("This collection is empty")
             return
-        self.queue.extend(source)
+        for track in source:
+            self._queue_provenance.append_manual(self.queue, track)
         self._prepare_next_track()
         self._refresh_queue()
         self._toast(f"Added {len(source)} {label} tracks to the queue")
@@ -3584,8 +3796,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _play_first(self):
         tracks = self.database.all_tracks()
         if tracks:
+            self._set_playback_context(PlaybackContext.LIBRARY_AUTOMATIC)
             self._current_playlist_id = None
-            self._library_random_mode = True
             self._history.clear()
             self._playback_source = tracks
             self.queue = []
@@ -3598,13 +3810,21 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.current = track
         self.player.set_track(track, autoplay=autoplay)
         if autoplay:
-            self.database.mark_played(track)
-            track.play_count = max(0, int(track.play_count or 0)) + 1
-            self._library_groups_dirty = True
-            if not getattr(self, "_play_stats_refresh_pending", False):
-                self._play_stats_refresh_pending = True
-                GLib.idle_add(self._refresh_play_statistics)
+            self._record_track_played(track, ("direct", id(self.player.pipeline), track.path))
             self.database.save_playback(track, 0.0)
+
+    def _record_track_played(self, track, marker) -> None:
+        """Record one real playback start, independent of GStreamer signals."""
+        if not self._play_event_deduplicator.accepts(marker):
+            LOGGER.debug("Ignoring duplicate playback event for %r", track.path)
+            return
+        self.database.mark_played(track, self._playback_context.value)
+        track.play_count = max(0, int(track.play_count or 0)) + 1
+        track.last_played = datetime.now(timezone.utc).isoformat()
+        self._library_groups_dirty = True
+        if not getattr(self, "_play_stats_refresh_pending", False):
+            self._play_stats_refresh_pending = True
+            GLib.idle_add(self._refresh_play_statistics)
 
     def _refresh_play_statistics(self):
         self._play_stats_refresh_pending = False
@@ -3627,8 +3847,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         return GLib.SOURCE_REMOVE
 
     def _fill_random_library_queue(self):
-        """Keep direct library playback supplied with random future tracks."""
+        """Keep legacy random playback working while Auto DJ is disabled."""
         if not self._library_random_mode:
+            return
+        if self._auto_dj_enabled:
+            self._request_auto_dj_recommendations()
             return
         library = self.database.all_tracks()
         if not library:
@@ -3649,6 +3872,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _prepare_next_track(self):
         """Keep the transition engine one track ahead of the visible queue."""
+        self._sync_recommendation_state()
         self._fill_random_library_queue()
         candidate = None
         if self.queue:
@@ -3688,36 +3912,36 @@ class GrooviaWindow(Adw.ApplicationWindow):
         track,
         playlist: Playlist | None = None,
         source_tracks: list[Track] | None = None,
+        playback_context: PlaybackContext | None = None,
     ):
         """Start a selected track with playlist order or random library mode."""
         LOGGER.info("play selected track=%r path=%r", track.title, track.path)
         if playlist:
+            context = PlaybackContext.PLAYLIST
             source = self.database.playlist_tracks(playlist.id)
         elif source_tracks:
+            context = playback_context or PlaybackContext.DIRECT_TRACK
             source = list(source_tracks)
         else:
+            context = playback_context or PlaybackContext.LIBRARY_AUTOMATIC
             source = self.database.all_tracks()
         if not any(item.path == track.path for item in source):
             source = self.database.all_tracks()
+        self._set_playback_context(context)
         if playlist:
             self._current_playlist_id = playlist.id
-            self._library_random_mode = False
-        elif source_tracks:
-            self._current_playlist_id = None
-            self._library_random_mode = False
         else:
             self._current_playlist_id = None
-            self._library_random_mode = True
         self._playback_source = source
         selected_index = next((i for i, item in enumerate(source) if item.path == track.path), -1)
         self._history = (
             []
-            if self._library_random_mode
+            if context.allows_recommendations
             else (source[:selected_index] if selected_index > 0 else [])
         )
         self.queue = (
             []
-            if self._library_random_mode
+            if context.allows_recommendations
             else source[selected_index + 1 :]
             if selected_index >= 0
             else []
@@ -3732,6 +3956,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             track.path,
             [item.path for item in self.queue],
         )
+        self._queue_provenance.discard(track)
         self.queue.insert(0, track)
         self._prepare_next_track()
         self._refresh_queue()
@@ -3748,7 +3973,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             track.path,
             [item.path for item in self.queue],
         )
-        self.queue.append(track)
+        self._queue_provenance.append_manual(self.queue, track)
         self._prepare_next_track()
         self._refresh_queue()
         LOGGER.info(
@@ -3815,6 +4040,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                     True,
                     position=position,
                     source_tracks=album.tracks,
+                    playback_context=PlaybackContext.ALBUM,
                 )
             )
         self._show_page("album-detail")
@@ -3844,6 +4070,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                     True,
                     position=position,
                     source_tracks=artist.tracks,
+                    playback_context=PlaybackContext.ARTIST,
                 )
             )
         self._show_page("artist-detail")
@@ -3851,7 +4078,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _play_current_album(self):
         album = getattr(self, "_current_album_group", None)
         if album:
-            self._play_collection_tracks(album.tracks)
+            self._play_collection_tracks(album.tracks, context=PlaybackContext.ALBUM)
 
     def _queue_current_album(self):
         album = getattr(self, "_current_album_group", None)
@@ -3861,7 +4088,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _play_current_artist(self):
         artist = getattr(self, "_current_artist_group", None)
         if artist:
-            self._play_collection_tracks(artist.tracks)
+            self._play_collection_tracks(artist.tracks, context=PlaybackContext.ARTIST)
 
     def _queue_current_artist(self):
         artist = getattr(self, "_current_artist_group", None)
@@ -4320,7 +4547,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
             index = random.randrange(len(self.queue)) if self.shuffle else 0
             if self.current:
                 self._history.append(self.current)
-            self._play_track(self.queue.pop(index))
+            selected = self.queue.pop(index)
+            self._queue_provenance.discard(selected)
+            self._play_track(selected)
         elif self._playback_source:
             current_index = next(
                 (
@@ -4355,8 +4584,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._history.append(previous_track)
         for index, track in enumerate(self.queue):
             if track.path == next_track.path:
-                self.queue.pop(index)
+                removed = self.queue.pop(index)
+                self._queue_provenance.discard(removed)
                 break
+        self._record_track_played(
+            next_track,
+            ("transition", id(self.player.pipeline), next_track.path),
+        )
+        self.database.save_playback(next_track, 0.0)
         self._prepare_next_track()
         self._refresh_queue()
 
@@ -4394,6 +4629,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if self._history:
             previous = self._history.pop()
             if self.current:
+                self._queue_provenance.discard(self.current)
                 self.queue.insert(0, self.current)
             self._play_track(previous)
             self._refresh_queue()
@@ -4411,6 +4647,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 -1,
             )
             if current_index > 0:
+                self._queue_provenance.discard(self.current)
                 self.queue.insert(0, self.current)
                 self._play_track(self._playback_source[current_index - 1])
                 self._refresh_queue()
@@ -4419,6 +4656,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _clear_queue(self):
         self.queue.clear()
+        self._queue_provenance.clear()
         self._history.clear()
         self._prepare_next_track()
         self._refresh_queue()
@@ -4860,7 +5098,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self.database.upsert_tracks(tracks)
             tracks = [self.database.track_by_path(track.path) or track for track in tracks]
             self.download_service.enrich_tracks_async(tracks)
-            self._library_random_mode = False
+            self._set_playback_context(PlaybackContext.DIRECT_TRACK)
+            self._current_playlist_id = None
             self._history.clear()
             self._playback_source = tracks
             self.queue = tracks[1:]
@@ -4890,7 +5129,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 None,
             )
             self.database.upsert_tracks([track])
-            self._library_random_mode = False
+            self._set_playback_context(PlaybackContext.DIRECT_TRACK)
+            self._current_playlist_id = None
             self._history.clear()
             self._playback_source = [track]
             self.queue = []

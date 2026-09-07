@@ -1,15 +1,37 @@
 # Auto DJ
 
-Auto DJ is Groovia's optional transition engine. It prepares the next track
-already selected by the queue, studies both sides of the handoff, and chooses
-an overlap that should feel musical rather than merely applying the same fixed
-crossfade every time.
+Auto DJ is Groovia's optional local DJ engine. It has two separate internal
+steps:
 
-It is designed for albums, playlists, and ordinary music libraries. It is not
-a recommender and it is not a replacement for the queue: Auto DJ never chooses
-new tracks, reorders the queue, or creates duplicate queue entries.
+1. In the existing automatic-library session, select a musically compatible
+   next track and keep a small reserve in the queue.
+2. For every current/next pair, prepare the musical transition into the track
+   that the queue has selected.
+
+Selection is intentionally limited to automatic library playback. Auto DJ
+never modifies a playlist, extends one after its last track, changes an album's
+order, or inserts a recommendation before a manual queue choice. Playlist,
+album, artist, direct-file, restored, and manual-queue sessions keep their
+exact source order; they still benefit from the existing transition planner.
+This feature is not a Smart Playlist and does not create persistent playlists.
 
 ## What Auto DJ does
+
+When automatic-library playback permits selection, candidates first receive a
+fast score from local SQLite metadata: genre, artist, album, listening history,
+play count, and whether they are already current, queued, or recently played.
+Only a small shortlist is then analysed in detail. BPM (including half-time and
+double-time relationships), reliable key estimates, entry/exit energy, and the
+confidence of a real transition plan refine the order. Analyses use the same
+bounded cache as transition planning, so the whole library is not decoded at
+every track change.
+
+The reserve is filled progressively and remains visible in the normal queue.
+Manually added tracks always stay ahead of automatic suggestions. Immediate
+repeats and queued duplicates are excluded while alternatives exist; on a
+small or exhausted library, exclusions are relaxed gradually. Missing genre,
+BPM, key, FFmpeg, or failed analysis leads to metadata-only and finally safe
+random fallbacks rather than stopping playback.
 
 For every current/next pair, Auto DJ can decide:
 
@@ -32,8 +54,8 @@ so an old background result cannot be applied to a different queue state.
 
 1. Open **Preferences → Playback**.
 2. Enable **Auto DJ**.
-3. Keep a next track available in the queue, a playlist, or the current
-   playback source.
+3. Start automatic playback from the library, or keep a next track available
+   in a playlist, album, artist, manual queue, or direct playback source.
 4. Start playback and let Groovia prepare the next track in the background.
 
 Analysis is asynchronous. The first transition for a track pair may use a
@@ -79,16 +101,29 @@ The style is a preference, not a forced effect:
 The planner may still select a shorter or longer candidate when the available
 intro, outro, vocal timing, or track duration makes the preferred range unsafe.
 
-## How a transition is prepared
+## How selection and transition are prepared
 
-### 1. The queue supplies the pair
+### 1. Auto DJ may select local candidates
 
-Groovia first resolves the current track and the next queue item. In shuffle
-mode, the queue's selected next item is still the only source used by Auto DJ.
-When repeat-all reaches the end of a source, the next item is resolved from
-that source according to the normal playback rules.
+Only an automatic-library session asks the recommender to add tracks. The
+metadata shortlist and detailed candidate analysis run outside GTK's main
+thread. A generation token covers the current track, queue, Auto DJ state, and
+session origin; results from an older track, queue, playlist, or session are
+discarded before they can change the queue.
 
-### 2. The next stream is preloaded
+Listening events are recorded locally in Groovia's SQLite database. No track
+metadata, analysis, recommendation, or listening history is sent to an
+external service.
+
+### 2. The queue supplies the pair
+
+Groovia resolves the current track and the next queue item. A manual item is
+always resolved before automatic suggestions. In playlists and ordered
+collections, the source remains authoritative. When repeat-all reaches the end
+of a source, the next item is resolved from that source according to the normal
+playback rules; recommendations are never used to continue a playlist.
+
+### 3. The next stream is preloaded
 
 The player creates a second GStreamer `playbin` for the incoming track and
 prerolls it in the paused state. The planned incoming timestamp is only sought
@@ -99,7 +134,7 @@ While the analysis worker is running, the player can install a temporary
 fallback plan. That fallback is deliberately short, uses no smart EQ, and is
 replaced by the analysed plan when the pair is ready.
 
-### 3. Both tracks are analysed in a worker
+### 4. Both tracks are analysed in a worker
 
 The analysis runs outside GTK's main loop, one pair at a time. It does not
 block the interface or playback. If a newer pair is requested, an older result
@@ -124,7 +159,7 @@ The PCM analysis is intentionally bounded. It is decoded as mono audio at
 11,025 Hz and is limited to the first 25 minutes of a very long recording.
 Normal songs and mixes are analysed in full.
 
-### 4. Candidates are scored
+### 5. Transition candidates are scored
 
 The planner generates several possible outgoing/incoming pairs, then scores
 them instead of committing to the first beat it finds. The score considers:
@@ -143,7 +178,7 @@ When synchronized lyrics are present, their line or word timings provide
 particularly useful vocal entry and exit points. Without lyrics, Auto DJ can
 still estimate broad vocal sections from the audio spectrum.
 
-### 5. The best plan is applied conservatively
+### 6. The best plan is applied conservatively
 
 Plans below the confidence threshold are rejected in favour of the fallback
 path. A successful plan can use one of several strategies internally:
