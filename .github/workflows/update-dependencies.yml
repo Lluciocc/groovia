@@ -123,23 +123,18 @@ jobs:
             mingw-w64-ucrt-x86_64-imagemagick
             mingw-w64-ucrt-x86_64-adwaita-icon-theme
 
-      - name: Install Inno Setup
-        shell: powershell
-        run: |
-          choco install innosetup --yes --no-progress
-          "C:\Program Files (x86)\Inno Setup 6" |
-            Out-File -FilePath $env:GITHUB_PATH -Append
-
       - name: Build and smoke-test Windows package
         shell: msys2 {0}
         run: |
-          ./packaging/windows/build-windows.sh --dont-open-dist
+          ./packaging/windows/build-windows.sh \
+            --skip-installer \
+            --dont-open-dist
 
-      - name: Upload Windows installer
+      - name: Upload tested Windows package
         uses: actions/upload-artifact@v4
         with:
           name: groovia-windows-dependency-test
-          path: dist/installer/*.exe
+          path: dist/Groovia/
           if-no-files-found: error
 
   create-pull-request:
