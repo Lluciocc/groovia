@@ -2,7 +2,7 @@ name: Update dependencies
 
 on:
   schedule:
-    - cron: "0 4 * * 0"
+    - cron: "0 1 * * 0"
   workflow_dispatch:
 
 permissions:
@@ -47,6 +47,49 @@ jobs:
             packaging/windows/dependencies.json
           if-no-files-found: error
 
+  validate-flatpak:
+    needs: update
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: updated-dependency-manifests
+          path: .
+
+      - name: Install Flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes flatpak flatpak-builder
+
+      - name: Install GNOME 50 SDK and runtime
+        run: |
+          flatpak remote-add \
+            --user \
+            --if-not-exists \
+            flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+
+          flatpak install \
+            --user \
+            --noninteractive \
+            --or-update \
+            flathub \
+            org.gnome.Sdk//50 \
+            org.gnome.Platform//50
+
+      - name: Build Flatpak
+        run: |
+          flatpak-builder \
+            --user \
+            --force-clean \
+            --disable-rofiles-fuse \
+            build-flatpak-ci \
+            io.github.Lluciocc.Groovia.json
+
   validate-windows:
     needs: update
     runs-on: windows-latest
@@ -84,22 +127,26 @@ jobs:
         shell: powershell
         run: |
           choco install innosetup --yes --no-progress
-          "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "C:\Program Files (x86)\Inno Setup 6" |
+            Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Build and smoke-test Windows package
         shell: msys2 {0}
-        run: ./packaging/windows/build-windows.sh --dont-open-dist
+        run: |
+          ./packaging/windows/build-windows.sh --dont-open-dist
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: groovia-windows-dependency-test
-          path: |
-            dist/installer/*.exe
+          path: dist/installer/*.exe
           if-no-files-found: error
 
   create-pull-request:
-    needs: validate-windows
+    needs:
+      - validate-flatpak
+      - validate-windows
+
     runs-on: ubuntu-latest
 
     steps:
@@ -121,8 +168,9 @@ jobs:
           body: |
             Automated weekly update of:
 
-            - Flatpak NumPy and SciPy CPython 3.13 wheels for x86_64 and aarch64
+            - Flatpak NumPy and SciPy wheels for x86_64 and aarch64
             - Windows spotDL, Deno and pinned BtbN FFmpeg downloads
             - SHA-256 checksums and upstream license checksums
 
-            The Windows installer build and bundled-tool smoke tests passed before this PR was opened.
+            The GNOME 50 Flatpak build, Windows installer build and
+            bundled-tool smoke tests passed before this PR was opened.
