@@ -1,0 +1,128 @@
+name: Update dependencies
+
+on:
+  schedule:
+    - cron: "0 4 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-dependencies
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install updater dependencies
+        run: python -m pip install packaging
+
+      - name: Refresh pinned downloads
+        run: python scripts/update_dependencies.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate JSON manifests
+        run: |
+          python -m json.tool io.github.Lluciocc.Groovia.json >/dev/null
+          python -m json.tool packaging/windows/dependencies.json >/dev/null
+
+      - name: Save updated manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: updated-dependency-manifests
+          path: |
+            io.github.Lluciocc.Groovia.json
+            packaging/windows/dependencies.json
+          if-no-files-found: error
+
+  validate-windows:
+    needs: update
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: updated-dependency-manifests
+          path: .
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-gobject
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-gstreamer
+            mingw-w64-ucrt-x86_64-gst-plugins-base
+            mingw-w64-ucrt-x86_64-gst-plugins-good
+            mingw-w64-ucrt-x86_64-gst-plugins-bad
+            mingw-w64-ucrt-x86_64-glib2
+            mingw-w64-ucrt-x86_64-python-numpy
+            mingw-w64-ucrt-x86_64-python-scipy
+            mingw-w64-ucrt-x86_64-pyinstaller
+            mingw-w64-ucrt-x86_64-imagemagick
+            mingw-w64-ucrt-x86_64-adwaita-icon-theme
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: |
+          choco install innosetup --yes --no-progress
+          "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build and smoke-test Windows package
+        shell: msys2 {0}
+        run: ./packaging/windows/build-windows.sh --dont-open-dist
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: groovia-windows-dependency-test
+          path: |
+            dist/installer/*.exe
+          if-no-files-found: error
+
+  create-pull-request:
+    needs: validate-windows
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: updated-dependency-manifests
+          path: .
+
+      - name: Create dependency update pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: automation/update-dependencies
+          delete-branch: true
+          commit-message: "chore: update pinned dependencies"
+          title: "chore: update pinned dependencies"
+          body: |
+            Automated weekly update of:
+
+            - Flatpak NumPy and SciPy CPython 3.13 wheels for x86_64 and aarch64
+            - Windows spotDL, Deno and pinned BtbN FFmpeg downloads
+            - SHA-256 checksums and upstream license checksums
+
+            The Windows installer build and bundled-tool smoke tests passed before this PR was opened.
