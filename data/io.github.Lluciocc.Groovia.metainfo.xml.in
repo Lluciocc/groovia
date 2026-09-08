@@ -5,7 +5,7 @@
   <project_license>GPL-3.0-or-later</project_license>
 
   <name>Groovia</name>
-  <summary>Your local music, beautifully organized.</summary>
+  <summary>Your local music, beautifully organized</summary>
 
   <description>
     <p>Groovia is a local music player for GNOME that makes a personal collection feel like a record shelf. It scans folders in the background, groups tracks into albums, reads embedded metadata and artwork, and keeps the library in a local database.</p>

@@ -162,7 +162,7 @@ dist/Groovia/tools/
 Pinned versions:
 
 - spotDL 4.5.2
-- FFmpeg `autobuild-2026-08-20-13-45`
+- FFmpeg `autobuild-2026-09-07-15-39`
 - Deno 2.9.4
 
 FFmpeg includes:

@@ -48,10 +48,11 @@ PyPI during the module build.
 
 Both `x86_64` and `aarch64` wheels are declared.
 
-The Flatpak build also builds the GStreamer `pitch` element from the GNOME
-Platform's matching GStreamer Bad Plug-ins source and SoundTouch library.
+The GNOME 50 runtime supplies FFmpeg, FFprobe and GStreamer's `scaletempo`
+element. This gives the sandbox both the bounded audio analysis tools and a
+tempo-matching fallback without downloading unpinned build sources.
 
-The runtime does not provide this element by default, so Groovia logs:
+Groovia logs:
 
 - the exact GStreamer version;
 - searched element names;
@@ -59,7 +60,8 @@ The runtime does not provide this element by default, so Groovia logs:
 - registry paths;
 - plugin environment.
 
-`rubberband` is optional. `pitch` or `scaletempo` is accepted when available.
+`rubberband` and `pitch` are optional. Groovia accepts either one when present
+and otherwise uses the runtime's `scaletempo` element.
 
 The Flatpak requests network access and scoped read/write access to the user's
 Music directory. No home-directory permission is used.
