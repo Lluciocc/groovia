@@ -17,6 +17,8 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      manifest-artifact-id: ${{ steps.upload-manifests.outputs.artifact-id }}
 
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +41,7 @@ jobs:
           python -m json.tool packaging/windows/dependencies.json >/dev/null
 
       - name: Save updated manifests
+        id: upload-manifests
         uses: actions/upload-artifact@v4
         with:
           name: updated-dependency-manifests
@@ -94,6 +97,8 @@ jobs:
     needs: update
     runs-on: windows-latest
     timeout-minutes: 45
+    outputs:
+      windows-artifact-id: ${{ steps.upload-windows.outputs.artifact-id }}
 
     steps:
       - uses: actions/checkout@v4
@@ -131,6 +136,7 @@ jobs:
             --dont-open-dist
 
       - name: Upload tested Windows package
+        id: upload-windows
         uses: actions/upload-artifact@v4
         with:
           name: groovia-windows-dependency-test
@@ -139,6 +145,7 @@ jobs:
 
   create-pull-request:
     needs:
+      - update
       - validate-flatpak
       - validate-windows
 
@@ -167,5 +174,10 @@ jobs:
             - Windows spotDL, Deno and pinned BtbN FFmpeg downloads
             - SHA-256 checksums and upstream license checksums
 
-            The GNOME 50 Flatpak build, Windows installer build and
-            bundled-tool smoke tests passed before this PR was opened.
+            Download the generated artifacts:
+
+            - [Updated dependency manifests](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ needs.update.outputs.manifest-artifact-id }})
+            - [Windows executable and bundled internals](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ needs.validate-windows.outputs.windows-artifact-id }})
+
+            The GNOME 50 Flatpak build, Windows executable and bundled-tool
+            smoke tests passed before this PR was opened. No installer was built.
