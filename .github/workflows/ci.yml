@@ -88,7 +88,10 @@ jobs:
           meson compile -C build groovia-pot
           meson compile -C build groovia-gmo
 
-          msgfmt --check --check-format po/fr.po
+          while IFS= read -r -d '' catalog; do
+            echo "Checking ${catalog}"
+            msgfmt --check --check-format "${catalog}"
+          done < <(find po -type f -name '*.po' -print0)
 
           meson test -C build --print-errorlogs
 
