@@ -28,6 +28,7 @@ BUILD_ROOT = Path(os.environ.get("GROOVIA_WINDOWS_BUILD_DIR", ROOT / "build" / "
 PACKAGE_ROOT = BUILD_ROOT / "package"
 RESOURCE = BUILD_ROOT / "groovia.gresource"
 COMPILED_SCHEMAS = BUILD_ROOT / "schemas" / "gschemas.compiled"
+FRENCH_CATALOG = BUILD_ROOT / "locale" / "fr" / "LC_MESSAGES" / "groovia.mo"
 TOOLS_ROOT = BUILD_ROOT / "tools"
 LICENSE_ROOT = BUILD_ROOT / "licenses"
 ADWAITA_ROOT = Path(sys.prefix) / "share" / "icons" / "Adwaita"
@@ -74,6 +75,8 @@ if not RESOURCE.is_file():
     raise SystemExit(f"Missing {RESOURCE}; run build-windows.ps1 first")
 if not COMPILED_SCHEMAS.is_file():
     raise SystemExit(f"Missing {COMPILED_SCHEMAS}; run build-windows.ps1 first")
+if not FRENCH_CATALOG.is_file():
+    raise SystemExit(f"Missing {FRENCH_CATALOG}; run build-windows.ps1 first")
 for required_tool in ("spotdl.exe", "ffmpeg.exe", "ffprobe.exe", "deno.exe"):
     if not (TOOLS_ROOT / required_tool).is_file():
         raise SystemExit(f"Missing staged tool {TOOLS_ROOT / required_tool}; run stage-dependencies.ps1 first")
@@ -107,6 +110,7 @@ datas = [
     (str(VERSION_FILE), "."),
     (str(RESOURCE), "."),
     (str(COMPILED_SCHEMAS), "schemas"),
+    (str(FRENCH_CATALOG), "locale/fr/LC_MESSAGES"),
     (str(ROOT / "data" / "icons" / "hicolor" / "scalable" / "apps" / "io.github.Lluciocc.Groovia.svg"), "share/icons/hicolor/scalable/apps"),
     (str(ROOT / "data" / "icons" / "hicolor" / "symbolic" / "apps" / "io.github.Lluciocc.Groovia-symbolic.svg"), "share/icons/hicolor/symbolic/apps"),
     (str(ROOT / "data" / "icons" / "hicolor" / "scalable" / "apps" / "io.github.Lluciocc.Groovia.svg"), "share/icons/Adwaita/scalable/apps"),

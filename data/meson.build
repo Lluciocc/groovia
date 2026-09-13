@@ -43,9 +43,13 @@ appstreamcli = find_program('appstreamcli', required: false, disabler: true)
 test('Validate appstream file', appstreamcli,
      args: ['validate', '--no-net', '--explain', appstream_file])
 
-install_data('io.github.Lluciocc.Groovia.gschema.xml',
+schema_file = files('io.github.Lluciocc.Groovia.gschema.xml')
+
+install_data(schema_file,
   install_dir: get_option('datadir') / 'glib-2.0' / 'schemas'
 )
+
+gnome.compile_schemas(depend_files: schema_file)
 
 compile_schemas = find_program('glib-compile-schemas', required: false, disabler: true)
 test('Validate schema file',

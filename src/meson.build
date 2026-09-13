@@ -38,8 +38,13 @@ endif
 conf = configuration_data()
 conf.set('PYTHON', python_exe.full_path())
 conf.set('VERSION', meson.project_version())
+conf.set('datadir', get_option('prefix') / get_option('datadir'))
 conf.set('localedir', get_option('prefix') / get_option('localedir'))
 conf.set('pkgdatadir', pkgdatadir)
+conf.set('sourceroot', meson.project_source_root())
+conf.set('buildsrcdir', meson.current_build_dir())
+conf.set('builddatadir', meson.project_build_root() / 'data')
+conf.set('buildlocaledir', meson.project_build_root() / 'po')
 
 configure_file(
   input: 'groovia.in',
@@ -52,6 +57,7 @@ configure_file(
 
 groovia_sources = [
   '__init__.py',
+  'i18n.py',
   'main.py',
   'window.py',
   'models.py',

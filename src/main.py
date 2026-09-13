@@ -27,6 +27,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, Gtk
 
+from .i18n import _
 from .platform_compat import supports_mpris
 from .runtime import configure_icon_theme, initialize_runtime
 
@@ -151,7 +152,7 @@ class GrooviaApplication(Adw.Application):
         about = Adw.AboutDialog(
             application_name="Groovia",
             application_icon="io.github.Lluciocc.Groovia",
-            comments=(
+            comments=_(
                 "Groovia is built for people who still keep and enjoy their own music collection.\n\n"
                 "It combines a clean, album-focused library with a playful vinyl-inspired interface, while keeping your music local and under your control. There are no accounts or subscriptions: Groovia helps you rediscover the music you already own.\n\n"
                 "Groovia is still growing, but the goal is simple: make listening to a local music library feel personal, modern and enjoyable again.\n\n"
@@ -165,7 +166,7 @@ class GrooviaApplication(Adw.Application):
             issue_url="https://github.com/Lluciocc/Groovia/issues",
         )
         about.add_credit_section(
-            "Data Providers",
+            _("Data Providers"),
             [
                 "TheAudioDB https://www.theaudiodb.com/free_music_api",
                 "Better Lyrics https://lyrics-api-docs.boidu.dev/",
@@ -178,7 +179,7 @@ class GrooviaApplication(Adw.Application):
             ],
         )
         about.add_credit_section(
-            "Tools and Audio Sources",
+            _("Tools and Audio Sources"),
             [
                 "spotDL https://spotdl.github.io/spotify-downloader/",
                 "YouTube Music https://music.youtube.com/",
@@ -186,8 +187,8 @@ class GrooviaApplication(Adw.Application):
                 "Deno https://docs.deno.com/",
             ],
         )
-        about.add_link("License", "https://www.gnu.org/licenses/gpl-3.0.html")
-        about.add_link("Donate", "https://buymeacoffee.com/lluciocc")
+        about.add_link(_("License"), "https://www.gnu.org/licenses/gpl-3.0.html")
+        about.add_link(_("Donate"), "https://buymeacoffee.com/lluciocc")
         about.present(self._main_window())
 
     def on_preferences(self, *_args):
@@ -204,7 +205,9 @@ class GrooviaApplication(Adw.Application):
         Adw.ShortcutsDialog
         Adw.ShortcutsSection
         Adw.ShortcutsItem
-        builder = Gtk.Builder.new_from_resource("/io/github/Lluciocc/Groovia/shortcuts-dialog.ui")
+        builder = Gtk.Builder()
+        builder.set_translation_domain("groovia")
+        builder.add_from_resource("/io/github/Lluciocc/Groovia/shortcuts-dialog.ui")
         dialog = builder.get_object("shortcuts_dialog")
         dialog.present(self._main_window())
 

@@ -28,6 +28,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..i18n import _
 from ..platform_compat import (
     IS_WINDOWS,
     get_data_dir,
@@ -181,7 +182,7 @@ class SpotDLCommandResolver:
                     return candidate
             except (OSError, subprocess.SubprocessError):
                 continue
-        raise SpotDLUnavailable("spotDL is not installed or is not executable")
+        raise SpotDLUnavailable(_("spotDL is not installed or is not executable"))
 
     def dependency_status(self) -> DependencyStatus:
         command = None
@@ -245,8 +246,10 @@ class SpotDLCommandResolver:
     def installation_command(self) -> list[str]:
         if IS_WINDOWS:
             raise SpotDLUnavailable(
-                "Windows downloader tools are staged at build time; "
-                "runtime venv and pip installation are disabled."
+                _(
+                    "Windows downloader tools are staged at build time; "
+                    "runtime venv and pip installation are disabled."
+                )
             )
         self.venv_dir.parent.mkdir(parents=True, exist_ok=True)
         return [sys.executable, "-m", "venv", str(self.venv_dir)]

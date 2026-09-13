@@ -1,5 +1,7 @@
 [Desktop Entry]
 Name=Groovia
+GenericName=Music Player
+Comment=Play and organize your local music collection
 Exec=groovia %U
 Icon=io.github.Lluciocc.Groovia
 Terminal=false

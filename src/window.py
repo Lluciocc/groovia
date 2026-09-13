@@ -40,6 +40,7 @@ from .autodj.session import (
     RecommendationGuard,
 )
 from .downloads import SpotDLService, classify_input
+from .i18n import _, ngettext, pgettext
 from .library import (
     AlbumGroup,
     ArtistGroup,
@@ -178,6 +179,52 @@ def cover_widget(path: str | None, size: int = 72) -> Gtk.Widget:
     picture.set_size_request(size, size)
     picture.add_css_class("album-art")
     return picture
+
+
+def _sync_status_label(value: str) -> str:
+    return {
+        "cancelled": _("Cancelled"),
+        "disconnected": _("Disconnected"),
+        "failed": _("Failed"),
+        "synchronized": _("Synchronized"),
+        "synchronizing": _("Synchronizing"),
+    }.get(value, value.replace("_", " "))
+
+
+def _sync_result_label(value: str | None) -> str:
+    if not value:
+        return _("Never synchronized")
+    if value.endswith(" tracks imported"):
+        count_text = value.removesuffix(" tracks imported")
+        if count_text.isdigit():
+            count = int(count_text)
+            return ngettext("%(count)d track imported", "%(count)d tracks imported", count) % {
+                "count": count
+            }
+    return {
+        "library import failed": _("Library import failed"),
+        "partial failure": _("Partial failure"),
+        "cancelled": _("Cancelled"),
+        "failed": _("Failed"),
+    }.get(value, value)
+
+
+def _download_phase_label(value: str) -> str:
+    return {
+        "Converting audio": _("Converting audio"),
+        "Downloading": _("Downloading"),
+        "Downloading audio": _("Downloading audio"),
+        "Failed": _("Failed"),
+        "Imported": _("Imported"),
+        "Importing": _("Importing"),
+        "Matching audio": _("Matching audio"),
+        "Preparing": _("Preparing"),
+        "Processing audio": _("Processing audio"),
+        "Reusing existing file": _("Reusing existing file"),
+        "Searching for a match": _("Searching for a match"),
+        "Skipped": _("Skipped"),
+        "Writing metadata": _("Writing metadata"),
+    }.get(value, value)
 
 
 class MarqueeLabel(Gtk.DrawingArea):
@@ -730,11 +777,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         header.set_show_title(False)
         self.sidebar_toggle = icon_button(
             "sidebar-show-symbolic",
-            "Toggle navigation",
+            _("Toggle navigation"),
             lambda *_: self._toggle_sidebar(),
         )
         header.pack_start(self.sidebar_toggle)
-        menu = Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text="Main Menu")
+        menu = Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text=_("Main Menu"))
         menu.set_menu_model(self._menu_model())
         self.main_menu_button = menu
         header.pack_end(menu)
@@ -775,9 +822,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _menu_model(self):
         menu = Gio.Menu()
-        menu.append("Preferences", "app.preferences")
-        menu.append("Keyboard Shortcuts", "app.shortcuts")
-        menu.append("About Groovia", "app.about")
+        menu.append(_("Preferences"), "app.preferences")
+        menu.append(_("Keyboard Shortcuts"), "app.shortcuts")
+        menu.append(_("About Groovia"), "app.about")
         # menu.append("Quit Groovia", "app.quit")
         return menu
 
@@ -788,11 +835,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.nav_list.add_css_class("navigation-sidebar")
         self.nav_list.connect("row-selected", self._on_nav_selected)
         for title, icon, page in (
-            ("Home", "go-home-symbolic", "home"),
-            ("All Music", "audio-x-generic-symbolic", "library"),
-            ("Albums", "media-optical-symbolic", "albums"),
-            ("Artists", "avatar-default-symbolic", "artists"),
-            ("Queue", "view-list-symbolic", "queue"),
+            (_("Home"), "go-home-symbolic", "home"),
+            (_("All Music"), "audio-x-generic-symbolic", "library"),
+            (_("Albums"), "media-optical-symbolic", "albums"),
+            (_("Artists"), "avatar-default-symbolic", "artists"),
+            (_("Queue"), "view-list-symbolic", "queue"),
         ):
             row = Gtk.ListBoxRow()
             row.set_name(page)
@@ -802,18 +849,18 @@ class GrooviaWindow(Adw.ApplicationWindow):
             content.append(Gtk.Label(label=title, xalign=0))
             row.set_child(content)
             self.nav_list.append(row)
-        label = Gtk.Label(label="YOUR COLLECTION", xalign=0)
+        label = Gtk.Label(label=_("YOUR COLLECTION"), xalign=0)
         label.add_css_class("nav-section")
         box.append(label)
         box.append(self.nav_list)
-        playlist_label = Gtk.Label(label="PLAYLISTS", xalign=0)
+        playlist_label = Gtk.Label(label=_("PLAYLISTS"), xalign=0)
         playlist_label.add_css_class("nav-section")
         box.append(playlist_label)
         self.playlist_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.playlist_list.add_css_class("navigation-sidebar")
         self.playlist_list.connect("row-selected", self._on_playlist_selected)
         box.append(self.playlist_list)
-        new_playlist = Gtk.Button(label="New Playlist", icon_name="list-add-symbolic")
+        new_playlist = Gtk.Button(label=_("New Playlist"), icon_name="list-add-symbolic")
         new_playlist.add_css_class("flat")
         new_playlist.set_margin_start(14)
         new_playlist.set_margin_end(14)
@@ -822,7 +869,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         box.append(new_playlist)
         spacer = Gtk.Box(vexpand=True)
         box.append(spacer)
-        import_button = Gtk.Button(label="Import music folder", icon_name="folder-music-symbolic")
+        import_button = Gtk.Button(
+            label=_("Import music folder"), icon_name="folder-music-symbolic"
+        )
         import_button.add_css_class("suggested-action")
         import_button.set_margin_start(14)
         import_button.set_margin_end(14)
@@ -839,7 +888,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         content.add_css_class("hero")
         intro = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        intro.append(Gtk.Label(label="YOUR MUSIC, YOUR SPACE", xalign=0, css_classes=["eyebrow"]))
+        intro.append(
+            Gtk.Label(label=_("YOUR MUSIC, YOUR SPACE"), xalign=0, css_classes=["eyebrow"])
+        )
         self.home_greeting = Gtk.Label(
             xalign=0,
             halign=Gtk.Align.FILL,
@@ -854,11 +905,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._greeting_source = GLib.timeout_add_seconds(60, self._update_home_greeting)
         # intro.append(Gtk.Label(label="Put on a record and let the room change.", xalign=0, css_classes=["muted"]))
         actions = Gtk.Box(spacing=8, margin_top=18)
-        imp = Gtk.Button(label="Import music", icon_name="folder-music-symbolic")
+        imp = Gtk.Button(label=_("Import music"), icon_name="folder-music-symbolic")
         imp.add_css_class("suggested-action")
         imp.connect("clicked", self._choose_folder)
         actions.append(imp)
-        download = Gtk.Button(label="Download from URL", icon_name="document-save-symbolic")
+        download = Gtk.Button(label=_("Download from URL"), icon_name="document-save-symbolic")
         download.connect("clicked", self._download_url)
         actions.append(download)
         intro.append(actions)
@@ -876,7 +927,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         vinyl_slot.set_child(self.vinyl)
         fullscreen = Gtk.Button(
             icon_name="view-fullscreen-symbolic",
-            tooltip_text="Fullscreen vinyl",
+            tooltip_text=_("Fullscreen vinyl"),
             halign=Gtk.Align.END,
             valign=Gtk.Align.START,
             margin_top=14,
@@ -897,14 +948,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.now_playing_details = details
         details.append(
             Gtk.Label(
-                label="NOW PLAYING",
+                label=_("NOW PLAYING"),
                 xalign=0.5,
                 halign=Gtk.Align.FILL,
                 css_classes=["eyebrow"],
             )
         )
         self.now_title = Gtk.Label(
-            label="Choose an album to start listening",
+            label=_("Choose an album to start listening"),
             xalign=0.5,
             wrap=True,
             wrap_mode=Pango.WrapMode.WORD_CHAR,
@@ -914,7 +965,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.now_title.add_css_class("now-title")
         details.append(self.now_title)
         self.now_artist = Gtk.Label(
-            label="Your local library is ready when you are.",
+            label=_("Your local library is ready when you are."),
             xalign=0.5,
             wrap=True,
             wrap_mode=Pango.WrapMode.WORD_CHAR,
@@ -933,7 +984,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         details.append(self.now_album)
         self.now_play = Gtk.Button(
-            label="Play something",
+            label=_("Play something"),
             icon_name="media-playback-start-symbolic",
             halign=Gtk.Align.CENTER,
         )
@@ -945,7 +996,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
         content.append(
             Gtk.Label(
-                label="Recently added",
+                label=_("Recently added"),
                 xalign=0,
                 css_classes=["section-title"],
                 margin_top=28,
@@ -961,7 +1012,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content.append(self.album_flow)
         content.append(
             Gtk.Label(
-                label="Recently played",
+                label=_("Recently played"),
                 xalign=0,
                 css_classes=["section-title"],
                 margin_top=28,
@@ -970,19 +1021,19 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.recent_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         content.append(self.recent_box)
         self.most_played_albums_header = self._collection_section_header(
-            "Most played albums", "albums"
+            _("Most played albums"), "albums"
         )
         content.append(self.most_played_albums_header)
         self.most_played_albums_flow = self._collection_flow(max_per_line=6)
         content.append(self.most_played_albums_flow)
         self.most_played_artists_header = self._collection_section_header(
-            "Most played artists", "artists"
+            _("Most played artists"), "artists"
         )
         content.append(self.most_played_artists_header)
         self.most_played_artists_flow = self._collection_flow(max_per_line=6)
         content.append(self.most_played_artists_flow)
         empty = Gtk.Label(
-            label="Import a folder to bring your records into Groovia.",
+            label=_("Import a folder to bring your records into Groovia."),
             css_classes=["muted", "empty-state"],
         )
         self.empty_home = empty
@@ -994,17 +1045,26 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _home_greeting_text(moment=None, nickname=None, show_nickname=True):
         hour = (moment or datetime.now()).hour
         if 5 <= hour < 12:
-            greeting = "Good morning"
+            greeting = _("Good morning")
         elif 12 <= hour < 18:
-            greeting = "Good afternoon"
+            greeting = _("Good afternoon")
         else:
-            greeting = "Good evening"
+            greeting = _("Good evening")
         if not show_nickname:
             return greeting
         if nickname is None:
             nickname = GLib.get_user_name()
         nickname = str(nickname or "").strip()
-        return f"{greeting}, {nickname}" if nickname else greeting
+        # Translators: %(nickname)s is the user's system account name.
+        return (
+            _("%(greeting)s, %(nickname)s")
+            % {
+                "greeting": greeting,
+                "nickname": nickname,
+            }
+            if nickname
+            else greeting
+        )
 
     def _update_home_greeting(self, *_args):
         if hasattr(self, "home_greeting"):
@@ -1017,7 +1077,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _collection_section_header(self, title, target_page):
         header = Gtk.Box(spacing=8, margin_top=28)
         header.append(Gtk.Label(label=title, xalign=0, hexpand=True, css_classes=["section-title"]))
-        see_all = Gtk.Button(label="See all", css_classes=["flat"])
+        see_all = Gtk.Button(label=_("See all"), css_classes=["flat"])
         see_all.connect("clicked", lambda *_: self._show_page(target_page))
         header.append(see_all)
         return header
@@ -1041,7 +1101,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.library_box.set_margin_top(28)
         self.library_box.set_margin_start(38)
         self.library_box.set_margin_end(38)
-        self.search_entry = Gtk.SearchEntry(placeholder_text="Search your library", hexpand=True)
+        self.search_entry = Gtk.SearchEntry(placeholder_text=_("Search your library"), hexpand=True)
         self.search_entry.set_margin_bottom(18)
         self.search_entry.connect(
             "search-changed",
@@ -1065,10 +1125,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content.set_margin_bottom(28)
         content.set_margin_start(38)
         content.set_margin_end(38)
-        content.append(Gtk.Label(label="Albums", xalign=0, css_classes=["hero-title"]))
+        content.append(Gtk.Label(label=_("Albums"), xalign=0, css_classes=["hero-title"]))
         self.albums_subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
         content.append(self.albums_subtitle)
-        self.albums_search = Gtk.SearchEntry(placeholder_text="Search albums…", hexpand=True)
+        self.albums_search = Gtk.SearchEntry(placeholder_text=_("Search albums…"), hexpand=True)
         self.albums_search.connect(
             "search-changed", lambda entry: self._refresh_albums_page(entry.get_text())
         )
@@ -1076,7 +1136,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.albums_flow = self._collection_flow(max_per_line=6)
         content.append(self.albums_flow)
         self.albums_empty = Gtk.Label(
-            label="No albums match this search.", css_classes=["muted", "empty-state"]
+            label=_("No albums match this search."), css_classes=["muted", "empty-state"]
         )
         content.append(self.albums_empty)
         root.set_child(content)
@@ -1089,10 +1149,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content.set_margin_bottom(28)
         content.set_margin_start(38)
         content.set_margin_end(38)
-        content.append(Gtk.Label(label="Artists", xalign=0, css_classes=["hero-title"]))
+        content.append(Gtk.Label(label=_("Artists"), xalign=0, css_classes=["hero-title"]))
         self.artists_subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
         content.append(self.artists_subtitle)
-        self.artists_search = Gtk.SearchEntry(placeholder_text="Search artists…", hexpand=True)
+        self.artists_search = Gtk.SearchEntry(placeholder_text=_("Search artists…"), hexpand=True)
         self.artists_search.connect(
             "search-changed", lambda entry: self._refresh_artists_page(entry.get_text())
         )
@@ -1111,7 +1171,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             hexpand=True,
         )
         self.artist_info_indicator.append(self.artist_info_status)
-        cancel_artist_info = Gtk.Button(label="Cancel")
+        cancel_artist_info = Gtk.Button(label=_("Cancel"))
         cancel_artist_info.set_margin_end(8)
         cancel_artist_info.set_margin_top(6)
         cancel_artist_info.set_margin_bottom(6)
@@ -1122,7 +1182,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.artists_flow = self._collection_flow(max_per_line=6)
         content.append(self.artists_flow)
         self.artists_empty = Gtk.Label(
-            label="No artists match this search.", css_classes=["muted", "empty-state"]
+            label=_("No artists match this search."), css_classes=["muted", "empty-state"]
         )
         content.append(self.artists_empty)
         root.set_child(content)
@@ -1133,18 +1193,21 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return GLib.SOURCE_REMOVE
         active = pending_count > 0
         self.artist_info_spinner.set_spinning(active)
-        self.artist_info_status.set_label(
-            "Groovia is retrieving information about your artists. "
-            f"This may take a while… {pending_count} remaining."
-            if active
-            else ""
-        )
+        # Translators: %(count)d is the number of pending artist information requests.
+        status = ngettext(
+            "Groovia is retrieving information about your artists. This may take a while… "
+            "%(count)d remaining.",
+            "Groovia is retrieving information about your artists. This may take a while… "
+            "%(count)d remaining.",
+            pending_count,
+        ) % {"count": pending_count}
+        self.artist_info_status.set_label(status if active else "")
         self.artist_info_indicator.set_visible(active)
         return GLib.SOURCE_REMOVE
 
     def _cancel_artist_info_lookup(self):
         if self.artist_info.cancel_pending():
-            self._toast("Artist information retrieval cancelled")
+            self._toast(_("Artist information retrieval cancelled"))
 
     def _queue_page(self):
         root = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
@@ -1153,15 +1216,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
         box.set_margin_start(38)
         box.set_margin_end(38)
         head = Gtk.Box()
-        head.append(Gtk.Label(label="Queue", xalign=0, css_classes=["hero-title"], hexpand=True))
-        clear = Gtk.Button(label="Clear", tooltip_text="Clear queue")
+        head.append(Gtk.Label(label=_("Queue"), xalign=0, css_classes=["hero-title"], hexpand=True))
+        clear = Gtk.Button(label=_("Clear"), tooltip_text=_("Clear queue"))
         clear.connect("clicked", lambda *_: self._clear_queue())
         head.append(clear)
         box.append(head)
         self.queue_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         box.append(self.queue_box)
         self.queue_empty = Gtk.Label(
-            label="Your queue is empty.", css_classes=["muted", "empty-state"]
+            label=_("Your queue is empty."), css_classes=["muted", "empty-state"]
         )
         box.append(self.queue_empty)
         root.set_child(box)
@@ -1175,7 +1238,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         box.set_margin_end(38)
         box.set_margin_bottom(28)
         back = Gtk.Button(
-            label="Back to Albums",
+            label=_("Back to Albums"),
             icon_name="go-previous-symbolic",
             halign=Gtk.Align.START,
         )
@@ -1192,7 +1255,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             valign=Gtk.Align.CENTER,
             hexpand=True,
         )
-        identity.append(Gtk.Label(label="ALBUM", xalign=0, css_classes=["eyebrow"]))
+        identity.append(Gtk.Label(label=_("ALBUM"), xalign=0, css_classes=["eyebrow"]))
         heading = Gtk.Label(xalign=0, wrap=True, css_classes=["hero-title"])
         artist = Gtk.Label(xalign=0, wrap=True, css_classes=["title-3"])
         subtitle = Gtk.Label(xalign=0, css_classes=["muted"])
@@ -1200,9 +1263,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         identity.append(artist)
         identity.append(subtitle)
         actions = Gtk.Box(spacing=8, css_classes=["collection-actions"])
-        play = Gtk.Button(label="Play Album", icon_name="media-playback-start-symbolic")
+        play = Gtk.Button(label=_("Play Album"), icon_name="media-playback-start-symbolic")
         play.add_css_class("suggested-action")
-        add = Gtk.Button(label="Add to Queue", icon_name="list-add-symbolic")
+        add = Gtk.Button(label=_("Add to Queue"), icon_name="list-add-symbolic")
         play.connect("clicked", lambda *_: self._play_current_album())
         add.connect("clicked", lambda *_: self._queue_current_album())
         actions.append(play)
@@ -1210,7 +1273,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         identity.append(actions)
         hero.append(identity)
         box.append(hero)
-        box.append(Gtk.Label(label="Songs", xalign=0, css_classes=["section-title"]))
+        box.append(Gtk.Label(label=_("Songs"), xalign=0, css_classes=["section-title"]))
         items = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         box.append(items)
         self._album_detail_widgets = {
@@ -1233,7 +1296,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         box.set_margin_end(38)
         box.set_margin_bottom(28)
         back = Gtk.Button(
-            label="Back to Artists",
+            label=_("Back to Artists"),
             icon_name="go-previous-symbolic",
             halign=Gtk.Align.START,
         )
@@ -1251,7 +1314,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             valign=Gtk.Align.CENTER,
             hexpand=True,
         )
-        identity.append(Gtk.Label(label="ARTIST", xalign=0, css_classes=["eyebrow"]))
+        identity.append(Gtk.Label(label=_("ARTIST"), xalign=0, css_classes=["eyebrow"]))
         heading = Gtk.Label(xalign=0, wrap=True, css_classes=["hero-title"])
         metadata_summary = Gtk.Label(xalign=0, wrap=True, css_classes=["title-3"])
         metadata_summary.set_visible(False)
@@ -1263,17 +1326,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
         identity.append(activity)
         identity.append(subtitle)
         actions = Gtk.Box(spacing=8, css_classes=["collection-actions"])
-        play = Gtk.Button(label="Play Artist", icon_name="media-playback-start-symbolic")
+        play = Gtk.Button(label=_("Play Artist"), icon_name="media-playback-start-symbolic")
         play.add_css_class("suggested-action")
-        add = Gtk.Button(label="Add to Queue", icon_name="list-add-symbolic")
+        add = Gtk.Button(label=_("Add to Queue"), icon_name="list-add-symbolic")
         play.connect("clicked", lambda *_: self._play_current_artist())
         add.connect("clicked", lambda *_: self._queue_current_artist())
         actions.append(play)
         actions.append(add)
         website = Gtk.Button(
-            label="Artist website",
+            label=_("Artist website"),
             icon_name="web-browser-symbolic",
-            tooltip_text="Open the artist website",
+            tooltip_text=_("Open the artist website"),
         )
         website.add_css_class("flat")
         website.set_visible(False)
@@ -1282,23 +1345,23 @@ class GrooviaWindow(Adw.ApplicationWindow):
         identity.append(actions)
         hero.append(identity)
         box.append(hero)
-        about_title = Gtk.Label(label="About", xalign=0, css_classes=["section-title"])
+        about_title = Gtk.Label(label=_("About"), xalign=0, css_classes=["section-title"])
         about_title.set_visible(False)
         biography = Gtk.Label(xalign=0, wrap=True, selectable=True)
         biography.set_max_width_chars(100)
         biography.set_visible(False)
         biography.connect("notify::width", lambda *_: self._schedule_artist_biography_layout())
-        biography_more = Gtk.Button(label="Read more", halign=Gtk.Align.START)
+        biography_more = Gtk.Button(label=_("Read more"), halign=Gtk.Align.START)
         biography_more.add_css_class("flat")
         biography_more.set_visible(False)
         biography_more.connect("clicked", lambda *_: self._toggle_artist_biography())
         box.append(about_title)
         box.append(biography)
         box.append(biography_more)
-        box.append(Gtk.Label(label="Albums", xalign=0, css_classes=["section-title"]))
+        box.append(Gtk.Label(label=_("Albums"), xalign=0, css_classes=["section-title"]))
         albums = self._collection_flow(max_per_line=6)
         box.append(albums)
-        box.append(Gtk.Label(label="Songs", xalign=0, css_classes=["section-title"]))
+        box.append(Gtk.Label(label=_("Songs"), xalign=0, css_classes=["section-title"]))
         tracks = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         box.append(tracks)
         self._artist_detail_widgets = {
@@ -1326,23 +1389,23 @@ class GrooviaWindow(Adw.ApplicationWindow):
         header.set_margin_top(18)
         header.set_margin_start(24)
         header.set_margin_end(24)
-        back = Gtk.Button(label="Back", icon_name="go-previous-symbolic")
+        back = Gtk.Button(label=_("Back"), icon_name="go-previous-symbolic")
         back.connect("clicked", lambda *_: self._show_page("library"))
         header.append(back)
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
-        title = Gtk.Label(label="Lyrics", xalign=0, css_classes=["title-2"])
+        title = Gtk.Label(label=_("Lyrics"), xalign=0, css_classes=["title-2"])
         subtitle = Gtk.Label(label="", xalign=0, css_classes=["muted"])
         title_box.append(title)
         title_box.append(subtitle)
         header.append(title_box)
         return_current = Gtk.Button(
-            label="Return to current lyric", icon_name="find-location-symbolic"
+            label=_("Return to current lyric"), icon_name="find-location-symbolic"
         )
         return_current.set_visible(False)
         header.append(return_current)
         mode_switch = Gtk.Box(spacing=4)
-        line_mode = Gtk.ToggleButton(label="Lines")
-        word_mode = Gtk.ToggleButton(label="Words")
+        line_mode = Gtk.ToggleButton(label=_("Lines"))
+        word_mode = Gtk.ToggleButton(label=_("Words"))
         word_mode.set_group(line_mode)
         line_mode.set_active(True)
         mode_switch.append(line_mode)
@@ -1350,7 +1413,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         mode_switch.set_visible(False)
         header.append(mode_switch)
         fullscreen = Gtk.Button(
-            icon_name="view-fullscreen-symbolic", tooltip_text="Fullscreen lyrics"
+            icon_name="view-fullscreen-symbolic", tooltip_text=_("Fullscreen lyrics")
         )
         fullscreen.connect("clicked", lambda *_: self._open_lyrics_fullscreen())
         header.append(fullscreen)
@@ -1364,17 +1427,19 @@ class GrooviaWindow(Adw.ApplicationWindow):
             valign=Gtk.Align.CENTER,
         )
         empty.append(Gtk.Image.new_from_icon_name("text-x-generic-symbolic"))
-        empty.append(Gtk.Label(label="No lyrics available", css_classes=["title-2"]))
+        empty.append(Gtk.Label(label=_("No lyrics available"), css_classes=["title-2"]))
         empty.append(
             Gtk.Label(
-                label="Import an LRC, TTML, or text file, or search for lyrics later.",
+                label=_("Import an LRC, TTML, or text file, or search for lyrics later."),
                 css_classes=["muted"],
             )
         )
         empty_actions = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
-        find = Gtk.Button(label="Find Lyrics", icon_name="system-search-symbolic")
-        import_button = Gtk.Button(label="Import Lyrics File", icon_name="document-open-symbolic")
-        manual_button = Gtk.Button(label="Add Lyrics Manually", icon_name="list-add-symbolic")
+        find = Gtk.Button(label=_("Find Lyrics"), icon_name="system-search-symbolic")
+        import_button = Gtk.Button(
+            label=_("Import Lyrics File"), icon_name="document-open-symbolic"
+        )
+        manual_button = Gtk.Button(label=_("Add Lyrics Manually"), icon_name="list-add-symbolic")
         empty_actions.append(find)
         empty_actions.append(import_button)
         empty_actions.append(manual_button)
@@ -1395,8 +1460,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         footer.set_margin_start(24)
         footer.set_margin_end(24)
         status = Gtk.Label(label="", xalign=0, hexpand=True, css_classes=["muted"])
-        minus = Gtk.Button(label="− 0.5 s", tooltip_text="Advance lyrics")
-        plus = Gtk.Button(label="+ 0.5 s", tooltip_text="Delay lyrics")
+        minus = Gtk.Button(label=_("− 0.5 s"), tooltip_text=_("Advance lyrics"))
+        plus = Gtk.Button(label=_("+ 0.5 s"), tooltip_text=_("Delay lyrics"))
         footer.append(status)
         footer.append(minus)
         footer.append(plus)
@@ -1524,7 +1589,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _show_lyrics(self, track=None):
         track = track or self.current
         if not track:
-            self._toast("Nothing is playing")
+            self._toast(_("Nothing is playing"))
             return
         self._resolve_cover(track)
         self._lyrics_generation = getattr(self, "_lyrics_generation", 0) + 1
@@ -1550,11 +1615,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         widgets["word_mode"].set_active(widgets["view"].mode == "word")
         if timeline:
             widgets["status"].set_label(
-                "Synchronized lyrics" if timeline.synchronized else "Unsynchronized lyrics"
+                _("Synchronized lyrics") if timeline.synchronized else _("Unsynchronized lyrics")
             )
             widgets["find"].set_visible(False)
         else:
-            widgets["status"].set_label("No lyrics found")
+            widgets["status"].set_label(_("No lyrics found"))
             widgets["find"].set_visible(True)
         self._lyrics_track = track
         self._lyrics_row = row
@@ -1577,13 +1642,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return
         self._lyrics_row = view.selected_row
         mode_label = {
-            "line": "Line-by-line",
-            "word": "Word-by-word",
-            "plain": "Plain",
+            "line": _("Line-by-line"),
+            "word": _("Word-by-word"),
+            "plain": _("Plain"),
         }.get(view.mode)
         timeline = view.document
         if timeline and mode_label:
-            self._lyrics_widgets["status"].set_label(f"{mode_label} lyrics")
+            self._lyrics_widgets["status"].set_label(_("%(mode)s lyrics") % {"mode": mode_label})
         fullscreen_view = getattr(self, "_lyrics_fullscreen_view", None)
         if fullscreen_view is not None and view.mode in fullscreen_view.available_modes:
             fullscreen_view.set_mode(view.mode)
@@ -1598,15 +1663,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if not self.current:
             return
         self.download_service.find_lyrics(self.current, fallback=True)
-        self._toast("Searching for lyrics…")
+        self._toast(_("Searching for lyrics…"))
 
     def _add_manual_lyrics(self):
         if not self.current:
             return
-        dialog = Gtk.Dialog(title="Add Lyrics", transient_for=self, modal=True)
+        dialog = Gtk.Dialog(title=_("Add Lyrics"), transient_for=self, modal=True)
         dialog.set_default_size(620, 500)
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        save = dialog.add_button("Save", Gtk.ResponseType.OK)
+        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        save = dialog.add_button(_("Save"), Gtk.ResponseType.OK)
         save.add_css_class("suggested-action")
         editor = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
         scroll = Gtk.ScrolledWindow(vexpand=True, hexpand=True, min_content_height=350)
@@ -1625,7 +1690,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                     self.current, text, synchronized=False
                 ):
                     self._show_lyrics(self.current)
-                    self._toast("Lyrics saved")
+                    self._toast(_("Lyrics saved"))
             current.close()
 
         dialog.connect("response", response)
@@ -1634,7 +1699,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _import_current_lyrics(self):
         if not self.current:
             return
-        chooser = Gtk.FileDialog(title="Import lyrics")
+        chooser = Gtk.FileDialog(title=_("Import lyrics"))
         chooser.open(
             self,
             None,
@@ -1648,13 +1713,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return
         path = file.get_path()
         if Path(path).suffix.lower() not in {".lrc", ".txt"}:
-            self._toast("Choose an .lrc or .txt file")
+            self._toast(_("Choose an .lrc or .txt file"))
             return
         if self.download_service.lyrics.import_file(track, path):
             self._show_lyrics(track)
-            self._toast("Lyrics imported")
+            self._toast(_("Lyrics imported"))
         else:
-            self._toast("Could not import lyrics")
+            self._toast(_("Could not import lyrics"))
 
     def _adjust_lyrics_offset(self, amount):
         if not getattr(self, "_lyrics_row", None) or self._lyrics_row.get("id") is None:
@@ -1673,7 +1738,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return
         self._resolve_cover(self.current)
         variants = self.download_service.lyrics.find_variants(self.current)
-        window = Gtk.Window(title=f"Lyrics — {self.current.title}", transient_for=self)
+        window = Gtk.Window(
+            title=_("Lyrics — %(title)s") % {"title": self.current.title}, transient_for=self
+        )
         window.set_default_size(1000, 720)
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         top = Gtk.Box(spacing=10, margin_top=16, margin_start=20, margin_end=20)
@@ -1685,7 +1752,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 hexpand=True,
             )
         )
-        close = Gtk.Button(icon_name="view-restore-symbolic", tooltip_text="Exit fullscreen")
+        close = Gtk.Button(icon_name="view-restore-symbolic", tooltip_text=_("Exit fullscreen"))
         close.connect("clicked", lambda *_: window.close())
         top.append(close)
 
@@ -1704,8 +1771,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
         view.set_playing(bool(getattr(self.player, "playing", False)))
         view.connect("seek-requested", lambda _view, seconds: self.player.seek(seconds))
         if len(view.available_modes) > 1:
-            line_mode = Gtk.ToggleButton(label="Lines")
-            word_mode = Gtk.ToggleButton(label="Words")
+            line_mode = Gtk.ToggleButton(label=_("Lines"))
+            word_mode = Gtk.ToggleButton(label=_("Words"))
             word_mode.set_group(line_mode)
             line_mode.set_active(view.mode == "line")
             word_mode.set_active(view.mode == "word")
@@ -1837,14 +1904,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
         details.append(heading)
         details.append(subtitle)
         controls = Gtk.Box(spacing=8)
-        play = Gtk.Button(label="Play", icon_name="media-playback-start-symbolic")
+        play = Gtk.Button(
+            label=pgettext("playback action", "Play"),
+            icon_name="media-playback-start-symbolic",
+        )
         play.add_css_class("suggested-action")
         play.connect("clicked", lambda *_: self._play_playlist(playlist_id))
-        shuffle = Gtk.Button(label="Shuffle", icon_name="media-playlist-shuffle-symbolic")
+        shuffle = Gtk.Button(label=_("Shuffle"), icon_name="media-playlist-shuffle-symbolic")
         shuffle.connect("clicked", lambda *_: self._play_playlist(playlist_id, True))
-        more = Gtk.Button(label="More", icon_name="view-more-symbolic")
+        more = Gtk.Button(label=_("More"), icon_name="view-more-symbolic")
         more.connect("clicked", lambda button: self._show_playlist_menu(button, playlist_id))
-        sync_button = Gtk.Button(label="Sync Now", icon_name="view-refresh-symbolic")
+        sync_button = Gtk.Button(label=_("Sync Now"), icon_name="view-refresh-symbolic")
         sync_button.connect("clicked", lambda *_: self._synchronize_playlist(playlist_id))
         controls.append(play)
         controls.append(shuffle)
@@ -1855,19 +1925,26 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content.append(hero)
 
         tools = Gtk.Box(spacing=8)
-        search = Gtk.SearchEntry(placeholder_text="Search this playlist", hexpand=True)
+        search = Gtk.SearchEntry(placeholder_text=_("Search this playlist"), hexpand=True)
         sort = Gtk.DropDown.new_from_strings(
-            ["Custom order", "Title", "Artist", "Album", "Duration", "Date added"]
+            [
+                _("Custom order"),
+                _("Title"),
+                _("Artist"),
+                _("Album"),
+                _("Duration"),
+                _("Date added"),
+            ]
         )
-        sort.set_tooltip_text("Sort playlist tracks")
+        sort.set_tooltip_text(_("Sort playlist tracks"))
         tools.append(search)
         tools.append(sort)
         content.append(tools)
 
         tracks_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         empty = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)
-        empty.append(Gtk.Label(label="This playlist is empty.", css_classes=["section-title"]))
-        add = Gtk.Button(label="Add music", icon_name="list-add-symbolic")
+        empty.append(Gtk.Label(label=_("This playlist is empty."), css_classes=["section-title"]))
+        add = Gtk.Button(label=_("Add music"), icon_name="list-add-symbolic")
         add.connect("clicked", lambda *_: self._show_page("library"))
         empty.append(add)
         content.append(tracks_box)
@@ -1938,7 +2015,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 content,
             )
             content.add_controller(drop_target)
-            content.set_tooltip_text(f"Drop a track to add it to {playlist.name}")
+            content.set_tooltip_text(
+                _("Drop a track to add it to %(playlist)s") % {"playlist": playlist.name}
+            )
             self.playlist_list.append(row)
 
     def _on_playlist_drop_enter(self, _target, _x, _y, content):
@@ -2011,20 +2090,33 @@ class GrooviaWindow(Adw.ApplicationWindow):
         view["cover_slot"].append(cover_widget(self._playlist_cover_path(playlist), 180))
         view["heading"].set_label(playlist.name)
         total = sum(track.duration for track in tracks)
-        status = ""
+        details = []
         if playlist.source_url:
-            status = f" · {playlist.sync_status.replace('_', ' ').title()}"
+            details.append(_sync_status_label(playlist.sync_status))
             if playlist.last_sync_at:
-                status += f" · Last sync {playlist.last_sync_at[:16].replace('T', ' ')}"
-        subtitle_text = f"{len(tracks)} tracks · {self._total_minutes_label(total)}{status}"
+                details.append(
+                    _("Last sync %(date)s") % {"date": playlist.last_sync_at[:16].replace("T", " ")}
+                )
+        count = len(tracks)
+        subtitle_text = ngettext(
+            "%(count)d track · %(duration)s",
+            "%(count)d tracks · %(duration)s",
+            count,
+        ) % {"count": count, "duration": self._total_minutes_label(total)}
+        subtitle_parts = [subtitle_text, *details]
         if self._settings and self._settings.get_boolean("lyrics-show-availability"):
             coverage = self.database.lyrics_coverage(
                 [track.id for track in tracks if track.id is not None]
             )
-            subtitle_text += (
-                f" · Lyrics {coverage.get('synced', 0)} synced / {coverage.get('plain', 0)} plain"
+            subtitle_parts.append(
+                # Translators: "plain" means lyrics without timestamps.
+                _("Lyrics: %(synced)d synchronized / %(plain)d plain")
+                % {
+                    "synced": coverage.get("synced", 0),
+                    "plain": coverage.get("plain", 0),
+                }
             )
-        view["subtitle"].set_label(subtitle_text)
+        view["subtitle"].set_label(" · ".join(subtitle_parts))
         view["sync_button"].set_visible(bool(playlist.source_url or playlist.sync_file))
         for child in iter_gtk_children(view["tracks"]):
             view["tracks"].remove(child)
@@ -2069,69 +2161,69 @@ class GrooviaWindow(Adw.ApplicationWindow):
             menu_box.append(button)
 
         add_button(
-            "Play",
+            pgettext("playback action", "Play"),
             lambda: self._play_playlist(playlist.id),
             "media-playback-start-symbolic",
         )
         add_button(
-            "Shuffle",
+            _("Shuffle"),
             lambda: self._play_playlist(playlist.id, True),
             "media-playlist-shuffle-symbolic",
         )
-        add_button("Play Next", lambda: self._play_playlist_next(playlist.id))
-        add_button("Add to Queue", lambda: self._add_playlist_to_queue(playlist.id))
+        add_button(_("Play Next"), lambda: self._play_playlist_next(playlist.id))
+        add_button(_("Add to Queue"), lambda: self._add_playlist_to_queue(playlist.id))
         menu_box.append(Gtk.Separator())
         add_button(
-            "Rename",
+            _("Rename"),
             lambda: self._rename_playlist_dialog(playlist.id),
             sensitive=not playlist.is_favorites,
         )
-        add_button("Change Cover", lambda: self._choose_playlist_cover(playlist.id))
-        add_button("Duplicate", lambda: self._duplicate_playlist(playlist.id))
+        add_button(_("Change Cover"), lambda: self._choose_playlist_cover(playlist.id))
+        add_button(_("Duplicate"), lambda: self._duplicate_playlist(playlist.id))
         if playlist.source_url or playlist.sync_file:
             menu_box.append(Gtk.Separator())
             add_button(
-                "Synchronize Now",
+                _("Synchronize Now"),
                 lambda: self._synchronize_playlist(playlist.id),
                 "view-refresh-symbolic",
             )
             add_button(
                 (
-                    "Disable Automatic Synchronization"
+                    _("Disable Automatic Synchronization")
                     if playlist.auto_sync != "manual"
-                    else "Enable Automatic Synchronization"
+                    else _("Enable Automatic Synchronization")
                 ),
                 lambda: self._toggle_playlist_auto_sync(playlist.id),
             )
-            add_button("View Source Playlist", lambda: self._open_playlist_source(playlist.id))
+            add_button(_("View Source Playlist"), lambda: self._open_playlist_source(playlist.id))
             add_button(
-                "View Last Synchronization",
+                _("View Last Synchronization"),
                 lambda: self._show_sync_details(playlist.id),
             )
             add_button(
-                "Repair Synchronization",
+                _("Repair Synchronization"),
                 lambda: self._repair_playlist_sync(playlist.id),
             )
             add_button(
-                "Disconnect from Spotify Source",
+                _("Disconnect from Spotify Source"),
                 lambda: self._disconnect_playlist(playlist.id),
             )
         menu_box.append(Gtk.Separator())
         add_button(
-            "Download Missing Lyrics",
+            _("Download Missing Lyrics"),
             lambda: self._find_missing_playlist_lyrics(playlist.id),
         )
         add_button(
-            "Refresh Lyrics",
+            _("Refresh Lyrics"),
             lambda: self._find_missing_playlist_lyrics(playlist.id, refresh=True),
         )
         add_button(
-            "Show Lyrics Coverage",
+            _("Show Lyrics Coverage"),
             lambda: self._show_playlist_lyrics_coverage(playlist.id),
         )
         if not playlist.is_favorites:
             menu_box.append(Gtk.Separator())
-            add_button("Delete Playlist", lambda: self._confirm_delete_playlist(playlist.id))
+            add_button(_("Delete Playlist"), lambda: self._confirm_delete_playlist(playlist.id))
         popover.connect("closed", self._close_playlist_menu)
         self._playlist_menu = popover
         popover.popup()
@@ -2145,7 +2237,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             settings.get_string("download-bitrate") if settings else "auto",
         )
         if job:
-            self._toast("Playlist synchronization started")
+            self._toast(_("Playlist synchronization started"))
 
     def _find_missing_playlist_lyrics(self, playlist_id, refresh=False):
         tracks = self.database.playlist_tracks(playlist_id)
@@ -2154,7 +2246,17 @@ class GrooviaWindow(Adw.ApplicationWindow):
             if refresh or not self.download_service.lyrics.find(track)[0]:
                 if self.download_service.find_lyrics(track, fallback=True):
                     count += 1
-        self._toast(f"Searching lyrics for {count} track(s)…" if count else "No tracks need lyrics")
+        if count:
+            self._toast(
+                ngettext(
+                    "Searching lyrics for %(count)d track…",
+                    "Searching lyrics for %(count)d tracks…",
+                    count,
+                )
+                % {"count": count}
+            )
+        else:
+            self._toast(_("No tracks need lyrics"))
 
     def _show_playlist_lyrics_coverage(self, playlist_id):
         tracks = self.database.playlist_tracks(playlist_id)
@@ -2165,10 +2267,31 @@ class GrooviaWindow(Adw.ApplicationWindow):
         plain = coverage.get("plain", 0)
         total = len(tracks)
         dialog = Adw.AlertDialog(
-            heading="Lyrics coverage",
-            body=f"{synced} of {total} tracks have synchronized lyrics\n{plain} have plain lyrics\n{max(0, total - synced - plain)} have no lyrics",
+            heading=_("Lyrics coverage"),
+            body="\n".join(
+                (
+                    ngettext(
+                        "%(synced)d of %(total)d track has synchronized lyrics",
+                        "%(synced)d of %(total)d tracks have synchronized lyrics",
+                        total,
+                    )
+                    % {"synced": synced, "total": total},
+                    ngettext(
+                        "%(count)d track has plain lyrics",
+                        "%(count)d tracks have plain lyrics",
+                        plain,
+                    )
+                    % {"count": plain},
+                    ngettext(
+                        "%(count)d track has no lyrics",
+                        "%(count)d tracks have no lyrics",
+                        max(0, total - synced - plain),
+                    )
+                    % {"count": max(0, total - synced - plain)},
+                )
+            ),
         )
-        dialog.add_response("close", "Close")
+        dialog.add_response("close", _("Close"))
         dialog.present(self)
 
     def _toggle_playlist_auto_sync(self, playlist_id):
@@ -2180,9 +2303,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._refresh_playlist_sidebar()
         self._refresh_playlist_page(playlist_id)
         self._toast(
-            "Automatic synchronization enabled"
+            _("Automatic synchronization enabled")
             if policy != "manual"
-            else "Automatic synchronization disabled"
+            else _("Automatic synchronization disabled")
         )
 
     def _open_playlist_source(self, playlist_id):
@@ -2191,21 +2314,23 @@ class GrooviaWindow(Adw.ApplicationWindow):
             try:
                 Gio.AppInfo.launch_default_for_uri(playlist.source_url, None)
             except GLib.Error as error:
-                self._toast(f"Could not open Spotify: {error.message}")
+                self._toast(_("Could not open Spotify: %(error)s") % {"error": error.message})
 
     def _show_sync_details(self, playlist_id):
         playlist = self.database.playlist(playlist_id)
         if not playlist:
             return
         dialog = Adw.AlertDialog(
-            heading="Synchronization details",
-            body=(
-                f"Status: {playlist.sync_status.replace('_', ' ').title()}\n"
-                f"Last result: {playlist.last_sync_result or 'Never synchronized'}\n"
-                f"Sync file: {playlist.sync_file or 'Missing'}"
-            ),
+            heading=_("Synchronization details"),
+            # Translators: %(file)s is the path to a spotDL synchronization file.
+            body=_("Status: %(status)s\nLast result: %(result)s\nSync file: %(file)s")
+            % {
+                "status": _sync_status_label(playlist.sync_status),
+                "result": _sync_result_label(playlist.last_sync_result),
+                "file": playlist.sync_file or _("Missing"),
+            },
         )
-        dialog.add_response("close", "Close")
+        dialog.add_response("close", _("Close"))
         dialog.present(self)
 
     def _repair_playlist_sync(self, playlist_id):
@@ -2215,13 +2340,13 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if playlist.source_url:
             self._start_download(playlist.source_url, True, "sync")
         else:
-            self._toast("The original Spotify URL is missing")
+            self._toast(_("The original Spotify URL is missing"))
 
     def _disconnect_playlist(self, playlist_id):
         self.download_service.disconnect(playlist_id)
         self._refresh_playlist_sidebar()
         self._refresh_playlist_page(playlist_id)
-        self._toast("Spotify synchronization disconnected")
+        self._toast(_("Spotify synchronization disconnected"))
 
     def _automatic_playlist_sync(self):
         monitor = Gio.NetworkMonitor.get_default()
@@ -2253,7 +2378,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _play_playlist(self, playlist_id, shuffle=False):
         tracks = self.database.playlist_tracks(playlist_id)
         if not tracks:
-            self._toast("This playlist is empty")
+            self._toast(_("This playlist is empty"))
             return
         if shuffle:
             random.shuffle(tracks)
@@ -2269,13 +2394,21 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _play_playlist_next(self, playlist_id):
         tracks = self.database.playlist_tracks(playlist_id)
         if not tracks:
-            self._toast("This playlist is empty")
+            self._toast(_("This playlist is empty"))
             return
         for track in reversed(tracks):
             self.queue.insert(0, track)
         self._prepare_next_track()
         self._refresh_queue()
-        self._toast(f"Added {len(tracks)} tracks to play next")
+        count = len(tracks)
+        self._toast(
+            ngettext(
+                "Added %(count)d track to play next",
+                "Added %(count)d tracks to play next",
+                count,
+            )
+            % {"count": count}
+        )
 
     def _add_playlist_to_queue(self, playlist_id):
         tracks = self.database.playlist_tracks(playlist_id)
@@ -2283,7 +2416,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._queue_provenance.append_manual(self.queue, track)
         self._prepare_next_track()
         self._refresh_queue()
-        self._toast(f"Added {len(tracks)} tracks to the queue")
+        count = len(tracks)
+        self._toast(
+            ngettext(
+                "Added %(count)d track to the queue",
+                "Added %(count)d tracks to the queue",
+                count,
+            )
+            % {"count": count}
+        )
 
     def _copy_playlist_cover(self, path, playlist_id):
         if not path or not Path(path).exists():
@@ -2294,11 +2435,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         return str(destination)
 
     def _create_playlist_dialog(self, track_to_add=None):
-        dialog = Gtk.Dialog(title="New Playlist", transient_for=self, modal=True)
+        dialog = Gtk.Dialog(title=_("New Playlist"), transient_for=self, modal=True)
         dialog.set_default_size(500, 360)
         dialog.set_resizable(False)
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Create", Gtk.ResponseType.OK)
+        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        dialog.add_button(_("Create"), Gtk.ResponseType.OK)
         create_button = dialog.get_widget_for_response(Gtk.ResponseType.OK)
         if create_button:
             create_button.add_css_class("suggested-action")
@@ -2311,10 +2452,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
         intro_icon.add_css_class("accent")
         intro.append(intro_icon)
         intro_text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, hexpand=True)
-        intro_text.append(Gtk.Label(label="Create a playlist", xalign=0, css_classes=["title-2"]))
+        intro_text.append(
+            Gtk.Label(label=_("Create a playlist"), xalign=0, css_classes=["title-2"])
+        )
         intro_text.append(
             Gtk.Label(
-                label="Collect your favorite tracks in one place.",
+                label=_("Collect your favorite tracks in one place."),
                 xalign=0,
                 wrap=True,
                 css_classes=["dim-label", "playlist-create-hint"],
@@ -2323,7 +2466,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         intro.append(intro_text)
         content.append(intro)
 
-        entry = Gtk.Entry(placeholder_text="Playlist name", hexpand=True)
+        entry = Gtk.Entry(placeholder_text=_("Playlist name"), hexpand=True)
         entry.set_activates_default(True)
         entry.set_icon_from_icon_name(Gtk.EntryIconPosition.PRIMARY, "view-list-symbolic")
         content.append(entry)
@@ -2342,16 +2485,18 @@ class GrooviaWindow(Adw.ApplicationWindow):
             valign=Gtk.Align.CENTER,
             hexpand=True,
         )
-        cover_details.append(Gtk.Label(label="Playlist cover", xalign=0, css_classes=["heading"]))
+        cover_details.append(
+            Gtk.Label(label=_("Playlist cover"), xalign=0, css_classes=["heading"])
+        )
         cover_label = Gtk.Label(
-            label="Use the generated cover",
+            label=_("Use the generated cover"),
             xalign=0,
             ellipsize=3,
             css_classes=["dim-label"],
         )
         cover_details.append(cover_label)
         choose = Gtk.Button(
-            label="Choose an image",
+            label=_("Choose an image"),
             icon_name="image-x-generic-symbolic",
             halign=Gtk.Align.START,
         )
@@ -2370,7 +2515,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         dialog.present()
 
     def _choose_cover_for_dialog(self, dialog, label, preview=None):
-        chooser = Gtk.FileDialog(title="Choose playlist cover")
+        chooser = Gtk.FileDialog(title=_("Choose playlist cover"))
         chooser.open(
             dialog,
             None,
@@ -2396,12 +2541,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return
         name = entry.get_text().strip()
         if not name:
-            self._toast("Enter a playlist name")
+            self._toast(_("Enter a playlist name"))
             return
         try:
             playlist = self.database.create_playlist(name)
         except Exception:
-            self._toast("A playlist with that name already exists")
+            self._toast(_("A playlist with that name already exists"))
             return
         if self._pending_playlist_cover:
             cover = self._copy_playlist_cover(self._pending_playlist_cover, playlist.id)
@@ -2413,15 +2558,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._refresh_playlist_sidebar()
         self._refresh_playlist_pages()
         self._show_playlist_page(playlist.id)
-        self._toast(f"Created {playlist.name}")
+        self._toast(_("Created %(playlist)s") % {"playlist": playlist.name})
 
     def _rename_playlist_dialog(self, playlist_id):
         playlist = self.database.playlist(playlist_id)
         if not playlist or playlist.is_favorites:
             return
-        dialog = Gtk.Dialog(title="Rename Playlist", transient_for=self, modal=True)
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Rename", Gtk.ResponseType.OK)
+        dialog = Gtk.Dialog(title=_("Rename Playlist"), transient_for=self, modal=True)
+        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        dialog.add_button(_("Rename"), Gtk.ResponseType.OK)
         entry = Gtk.Entry(text=playlist.name)
         entry.set_margin_top(18)
         entry.set_margin_bottom(18)
@@ -2438,11 +2583,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 self._refresh_playlist_sidebar()
                 self._refresh_playlist_page(playlist_id)
             except Exception:
-                self._toast("A playlist with that name already exists")
+                self._toast(_("A playlist with that name already exists"))
         dialog.close()
 
     def _choose_playlist_cover(self, playlist_id):
-        chooser = Gtk.FileDialog(title="Choose playlist cover")
+        chooser = Gtk.FileDialog(title=_("Choose playlist cover"))
         chooser.open(
             self,
             None,
@@ -2464,11 +2609,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
         playlist = self.database.playlist(playlist_id)
         if not playlist:
             return
-        name = f"{playlist.name} Copy"
+        name = _("%(playlist)s Copy") % {"playlist": playlist.name}
         suffix = 2
         existing = {item.name for item in self.database.playlists()}
         while name in existing:
-            name = f"{playlist.name} Copy {suffix}"
+            name = _("%(playlist)s Copy %(number)d") % {
+                "playlist": playlist.name,
+                "number": suffix,
+            }
             suffix += 1
         duplicate = self.database.create_playlist(name)
         if playlist.cover_path and Path(playlist.cover_path).exists():
@@ -2479,18 +2627,21 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         self._refresh_playlist_sidebar()
         self._refresh_playlist_pages()
-        self._toast(f"Duplicated {playlist.name}")
+        self._toast(_("Duplicated %(playlist)s") % {"playlist": playlist.name})
 
     def _confirm_delete_playlist(self, playlist_id):
         playlist = self.database.playlist(playlist_id)
         if not playlist or playlist.is_favorites:
             return
         dialog = Adw.AlertDialog(
-            heading="Delete Playlist?",
-            body=f"“{playlist.name}” and its playlist entries will be removed. Audio files stay in your library.",
+            heading=_("Delete Playlist?"),
+            body=_(
+                "“%(playlist)s” and its playlist entries will be removed. Audio files stay in your library."
+            )
+            % {"playlist": playlist.name},
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("delete", _("Delete"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -2531,7 +2682,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             valign=Gtk.Align.CENTER,
             width_request=150,
         )
-        self.bar_title = MarqueeLabel("Nothing playing", ["player-title"], width=150)
+        self.bar_title = MarqueeLabel(_("Nothing playing"), ["player-title"], width=150)
         self.bar_artist = MarqueeLabel("Groovia", ["muted"], width=150)
         self.player_metadata.append(self.bar_title)
         self.player_metadata.append(self.bar_artist)
@@ -2540,30 +2691,34 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
         controls = Gtk.Box(spacing=4, valign=Gtk.Align.CENTER)
         controls.append(
-            icon_button("media-skip-backward-symbolic", "Previous", lambda *_: self._previous())
+            icon_button("media-skip-backward-symbolic", _("Previous"), lambda *_: self._previous())
         )
         self.play_button = icon_button(
-            "media-playback-start-symbolic", "Play", lambda *_: self.player.toggle()
+            "media-playback-start-symbolic",
+            pgettext("playback action", "Play"),
+            lambda *_: self.player.toggle(),
         )
         self.play_button.add_css_class("circular")
         controls.append(self.play_button)
-        controls.append(icon_button("media-skip-forward-symbolic", "Next", lambda *_: self._next()))
+        controls.append(
+            icon_button("media-skip-forward-symbolic", _("Next"), lambda *_: self._next())
+        )
         bar.append(controls)
 
         self.player_extra_controls = Gtk.Box(spacing=4, valign=Gtk.Align.CENTER)
         self.repeat_button = icon_button(
             "media-playlist-repeat-symbolic",
-            "Repeat all music",
+            _("Repeat all music"),
             lambda *_: self._toggle_repeat(),
         )
         self.repeat_button.add_css_class("accent-button")
         self.player_extra_controls.append(self.repeat_button)
         self.lyrics_button = icon_button(
-            "text-x-generic-symbolic", "Show Lyrics", lambda *_: self._show_lyrics()
+            "text-x-generic-symbolic", _("Show Lyrics"), lambda *_: self._show_lyrics()
         )
         self.lyrics_button.set_sensitive(False)
         self.player_extra_controls.append(self.lyrics_button)
-        self.auto_dj_badge = Gtk.Label(label="Auto DJ", css_classes=["auto-dj-badge"])
+        self.auto_dj_badge = Gtk.Label(label=_("Auto DJ"), css_classes=["auto-dj-badge"])
         self.auto_dj_badge.set_visible(False)
         self.player_extra_controls.append(self.auto_dj_badge)
         bar.append(self.player_extra_controls)
@@ -2600,7 +2755,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.volume.set_value(0.72)
         self.volume.set_size_request(80, -1)
         self.volume.set_valign(Gtk.Align.CENTER)
-        self.volume.set_tooltip_text("Volume")
+        self.volume.set_tooltip_text(_("Volume"))
         self.volume.connect(
             "value-changed", lambda scale: self.player.set_volume(scale.get_value())
         )
@@ -2612,7 +2767,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         collapsed = self.split.get_collapsed()
         self.sidebar_toggle.set_icon_name("sidebar-show-symbolic")
         self.sidebar_toggle.set_tooltip_text(
-            "Hide navigation" if self.split.get_show_sidebar() else "Show navigation"
+            _("Hide navigation") if self.split.get_show_sidebar() else _("Show navigation")
         )
         # When the sidebar is absent, the main header must regain start-side
         # window controls (notably the traffic lights on macOS).
@@ -2736,11 +2891,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
         for child in iter_gtk_children(self.library_content_box):
             self.library_content_box.remove(child)
         self.library_content_box.append(
-            Gtk.Label(label="All Music", xalign=0, css_classes=["hero-title"])
+            Gtk.Label(label=_("All Music"), xalign=0, css_classes=["hero-title"])
         )
         self.library_content_box.append(
             Gtk.Label(
-                label=f"{len(tracks)} tracks in your collection",
+                label=ngettext(
+                    "%(count)d track in your collection",
+                    "%(count)d tracks in your collection",
+                    len(tracks),
+                )
+                % {"count": len(tracks)},
                 xalign=0,
                 css_classes=["muted"],
             )
@@ -2833,14 +2993,21 @@ class GrooviaWindow(Adw.ApplicationWindow):
         box.add_css_class("album-card")
         box.append(cover_widget(album.cover_path, 144))
         box.append(Gtk.Label(label=album.title, xalign=0, ellipsize=3, css_classes=["album-title"]))
-        details = f"{album.album_artist} · {album.track_count} tracks"
+        details = [
+            album.album_artist,
+            ngettext("%(count)d track", "%(count)d tracks", album.track_count)
+            % {"count": album.track_count},
+        ]
         if album.year:
-            details += f" · {album.year}"
+            details.append(album.year)
         if show_plays:
-            details += f" · {album.play_count} plays"
+            details.append(
+                ngettext("%(count)d play", "%(count)d plays", album.play_count)
+                % {"count": album.play_count}
+            )
         box.append(
             Gtk.Label(
-                label=details,
+                label=" · ".join(details),
                 xalign=0,
                 ellipsize=3,
                 css_classes=["album-meta"],
@@ -2925,14 +3092,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
         activity = None
         if metadata:
             if metadata.formed_year and metadata.formed_year != "0":
-                activity = f"Active since {metadata.formed_year}"
+                activity = _("Active since %(year)s") % {"year": metadata.formed_year}
             elif metadata.born_year and metadata.born_year != "0":
-                activity = f"Born in {metadata.born_year}"
+                activity = _("Born in %(year)s") % {"year": metadata.born_year}
             if metadata.died_year and metadata.died_year != "0":
                 activity = (
-                    f"{activity} • Died in {metadata.died_year}"
+                    _("%(activity)s • Died in %(year)s")
+                    % {"activity": activity, "year": metadata.died_year}
                     if activity
-                    else f"Died in {metadata.died_year}"
+                    else _("Died in %(year)s") % {"year": metadata.died_year}
                 )
         widgets["activity"].set_label(activity or "")
         widgets["activity"].set_visible(bool(activity))
@@ -2974,7 +3142,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         label.set_ellipsize(
             Pango.EllipsizeMode.NONE if expanded or not has_more else Pango.EllipsizeMode.END
         )
-        widgets["biography_more"].set_label("Show less" if expanded else "Read more")
+        widgets["biography_more"].set_label(_("Show less") if expanded else _("Read more"))
         widgets["biography_more"].set_visible(has_more)
 
     def _schedule_artist_biography_layout(self):
@@ -3002,7 +3170,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         try:
             Gio.AppInfo.launch_default_for_uri(website, None)
         except GLib.Error as error:
-            self._toast(f"Could not open the artist website: {error.message}")
+            self._toast(
+                _("Could not open the artist website: %(error)s") % {"error": error.message}
+            )
 
     def _artist_group_card(self, artist, *, origin="artists", show_plays=False):
         button = Gtk.Button(css_classes=["flat", "collection-card"])
@@ -3015,10 +3185,20 @@ class GrooviaWindow(Adw.ApplicationWindow):
             )
         )
         box.append(Gtk.Label(label=artist.name, xalign=0, ellipsize=3, css_classes=["album-title"]))
-        details = f"{artist.album_count} albums · {artist.track_count} songs"
+        details = [
+            ngettext("%(count)d album", "%(count)d albums", artist.album_count)
+            % {"count": artist.album_count},
+            ngettext("%(count)d song", "%(count)d songs", artist.track_count)
+            % {"count": artist.track_count},
+        ]
         if show_plays:
-            details += f" · {artist.play_count} plays"
-        box.append(Gtk.Label(label=details, xalign=0, ellipsize=3, css_classes=["album-meta"]))
+            details.append(
+                ngettext("%(count)d play", "%(count)d plays", artist.play_count)
+                % {"count": artist.play_count}
+            )
+        box.append(
+            Gtk.Label(label=" · ".join(details), xalign=0, ellipsize=3, css_classes=["album-meta"])
+        )
         button.set_child(box)
         button.connect("clicked", lambda *_: self._show_artist_group(artist, origin=origin))
         return button
@@ -3061,7 +3241,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 for value in (album.title, album.album_artist, *album.artist_names)
             )
         ]
-        self.albums_subtitle.set_label(f"{len(albums)} albums in your collection")
+        self.albums_subtitle.set_label(
+            ngettext(
+                "%(count)d album in your collection",
+                "%(count)d albums in your collection",
+                len(albums),
+            )
+            % {"count": len(albums)}
+        )
         for album in albums:
             self.albums_flow.append(self._album_group_card(album, origin="albums"))
         self.albums_empty.set_visible(not albums)
@@ -3077,7 +3264,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
             for artist in self._artist_groups
             if not needle or needle in normalize_group_name(artist.name)
         ]
-        self.artists_subtitle.set_label(f"{len(artists)} artists in your collection")
+        self.artists_subtitle.set_label(
+            ngettext(
+                "%(count)d artist in your collection",
+                "%(count)d artists in your collection",
+                len(artists),
+            )
+            % {"count": len(artists)}
+        )
         for artist in artists:
             self.artists_flow.append(self._artist_group_card(artist, origin="artists"))
         self.artists_empty.set_visible(not artists)
@@ -3100,9 +3294,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         box.set_accessible_role(Gtk.AccessibleRole.BUTTON)
         box.update_property(
             [Gtk.AccessibleProperty.LABEL],
-            [f"Play {track.title} by {track.artist}"],
+            [_("Play %(title)s by %(artist)s") % {"title": track.title, "artist": track.artist}],
         )
-        box.set_tooltip_text(f"Play {track.title} by {track.artist}")
+        box.set_tooltip_text(
+            _("Play %(title)s by %(artist)s") % {"title": track.title, "artist": track.artist}
+        )
         if position is not None:
             box.append(
                 Gtk.Label(label=f"{position}.", width_chars=3, xalign=1, css_classes=["muted"])
@@ -3120,7 +3316,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         box.append(
             icon_button(
                 "media-playback-start-symbolic",
-                "Play",
+                pgettext("playback action", "Play"),
                 lambda *_: self._play_selected_track(
                     track, playlist, source_tracks, playback_context
                 ),
@@ -3174,7 +3370,8 @@ class GrooviaWindow(Adw.ApplicationWindow):
             drag_source.connect("drag-begin", self._on_track_drag_begin, click, track)
             box.add_controller(drag_source)
             box.set_tooltip_text(
-                f"Play {track.title} by {track.artist}. Drag to add it to a playlist."
+                _("Play %(title)s by %(artist)s. Drag to add it to a playlist.")
+                % {"title": track.title, "artist": track.artist}
             )
         if playlist and track.id is not None:
             drop_target = Gtk.DropTarget.new(GObject.TYPE_INT, Gdk.DragAction.MOVE)
@@ -3192,7 +3389,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         favorite = self.database.is_favorite(track)
         button = icon_button(
             "starred-symbolic",
-            "Remove from Favorites" if favorite else "Add to Favorites",
+            _("Remove from Favorites") if favorite else _("Add to Favorites"),
             lambda *_: self._toggle_favorite(track),
         )
         if favorite:
@@ -3203,7 +3400,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         favorite = not self.database.is_favorite(track)
         self.database.set_favorite(track, favorite)
         LOGGER.info("favorite changed track=%r favorite=%s", track.path, favorite)
-        self._toast(f"{'Added to' if favorite else 'Removed from'} Favorites")
+        self._toast(_("Added to Favorites") if favorite else _("Removed from Favorites"))
         self._refresh_library(self.search_entry.get_text())
 
     def _on_track_row_pressed(
@@ -3383,55 +3580,57 @@ class GrooviaWindow(Adw.ApplicationWindow):
         popover.set_child(menu_box)
 
         favorite_label = (
-            "Remove from Favorites" if self.database.is_favorite(track) else "Add to Favorites"
+            _("Remove from Favorites")
+            if self.database.is_favorite(track)
+            else _("Add to Favorites")
         )
         direct_items = [
             (
                 "play",
-                "Play",
+                pgettext("playback action", "Play"),
                 lambda: self._play_selected_track(track, playlist, source_tracks, playback_context),
             ),
-            ("play-next", "Play Next", lambda: self._play_next(track)),
-            ("add-to-queue", "Add to Queue", lambda: self._add_to_queue(track)),
-            ("go-to-album", "Go to Album", lambda: self._go_to_album(track)),
-            ("go-to-artist", "Go to Artist", lambda: self._go_to_artist(track)),
+            ("play-next", _("Play Next"), lambda: self._play_next(track)),
+            ("add-to-queue", _("Add to Queue"), lambda: self._add_to_queue(track)),
+            ("go-to-album", _("Go to Album"), lambda: self._go_to_album(track)),
+            ("go-to-artist", _("Go to Artist"), lambda: self._go_to_artist(track)),
         ]
         categories = [
             (
-                "Library",
+                _("Library"),
                 [
-                    ("add-to-playlist", "Add to Playlist"),
+                    ("add-to-playlist", _("Add to Playlist")),
                     ("favorite", favorite_label),
-                    ("remove-from-library", "Remove from Library"),
+                    ("remove-from-library", _("Remove from Library")),
                 ],
             ),
             (
-                "Lyrics",
+                _("Lyrics"),
                 [
-                    ("show-lyrics", "Show Lyrics"),
-                    ("find-lyrics", "Find Lyrics"),
-                    ("find-artworks", "Find Artworks"),
-                    ("import-lyrics", "Import Lyrics"),
-                    ("edit-lyrics", "Edit Lyrics"),
-                    ("remove-lyrics", "Remove Downloaded Lyrics"),
+                    ("show-lyrics", _("Show Lyrics")),
+                    ("find-lyrics", _("Find Lyrics")),
+                    ("find-artworks", _("Find Artworks")),
+                    ("import-lyrics", _("Import Lyrics")),
+                    ("edit-lyrics", _("Edit Lyrics")),
+                    ("remove-lyrics", _("Remove Downloaded Lyrics")),
                 ],
             ),
             (
-                "More",
+                _("More"),
                 [
-                    ("show-in-file-manager", "Show in File Manager"),
-                    ("song-information", "Song Information"),
+                    ("show-in-file-manager", _("Show in File Manager")),
+                    ("song-information", _("Song Information")),
                 ],
             ),
         ]
         if playlist:
             categories.append(
                 (
-                    "Playlist",
+                    _("Playlist"),
                     [
-                        ("remove-from-playlist", "Remove from Playlist"),
-                        ("move-up", "Move Up in Playlist"),
-                        ("move-down", "Move Down in Playlist"),
+                        ("remove-from-playlist", _("Remove from Playlist")),
+                        ("move-up", _("Move Up in Playlist")),
+                        ("move-down", _("Move Down in Playlist")),
                     ],
                 ),
             )
@@ -3604,7 +3803,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 lambda _button, pid=playlist.id: self._add_track_to_playlist(track, pid, popover),
             )
             menu_box.append(button)
-        create = Gtk.Button(label="Create New Playlist", icon_name="list-add-symbolic")
+        create = Gtk.Button(label=_("Create New Playlist"), icon_name="list-add-symbolic")
         create.add_css_class("flat")
         create.connect(
             "clicked",
@@ -3633,7 +3832,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
             added,
         )
         self._toast(
-            f"Added to {playlist.name}" if added and playlist else "Track already in playlist"
+            _("Added to %(playlist)s") % {"playlist": playlist.name}
+            if added and playlist
+            else _("Track already in playlist")
         )
         if playlist and playlist.is_favorites:
             self._refresh_library(self.search_entry.get_text())
@@ -3645,7 +3846,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if not playlist or track.id is None:
             return
         self.database.remove_track_from_playlist(playlist.id, track.id)
-        self._toast(f"Removed from {playlist.name}")
+        self._toast(_("Removed from %(playlist)s") % {"playlist": playlist.name})
         self._refresh_playlist_page(playlist.id)
 
     def _move_playlist_track(self, playlist, track, direction):
@@ -3776,22 +3977,32 @@ class GrooviaWindow(Adw.ApplicationWindow):
     ):
         source = list(tracks)
         if not source:
-            self._toast("This collection is empty")
+            self._toast(_("This collection is empty"))
             return
         start = start_track or source[0]
         self.shuffle = False
         self._play_selected_track(start, source_tracks=source, playback_context=context)
 
-    def _add_collection_to_queue(self, tracks, label="collection"):
+    def _add_collection_to_queue(self, tracks, label=None):
         source = list(tracks)
         if not source:
-            self._toast("This collection is empty")
+            self._toast(_("This collection is empty"))
             return
         for track in source:
             self._queue_provenance.append_manual(self.queue, track)
         self._prepare_next_track()
         self._refresh_queue()
-        self._toast(f"Added {len(source)} {label} tracks to the queue")
+        count = len(source)
+        self._toast(
+            # Translators: %(collection)s is a translated collection type, such as
+            # "album" or "artist".
+            ngettext(
+                "Added %(count)d %(collection)s track to the queue",
+                "Added %(count)d %(collection)s tracks to the queue",
+                count,
+            )
+            % {"count": count, "collection": label or _("collection")}
+        )
 
     def _play_first(self):
         tracks = self.database.all_tracks()
@@ -4026,9 +4237,11 @@ class GrooviaWindow(Adw.ApplicationWindow):
         details = [album.year] if album.year else []
         details.extend(
             [
-                f"{album.track_count} songs",
+                ngettext("%(count)d song", "%(count)d songs", album.track_count)
+                % {"count": album.track_count},
                 self._total_minutes_label(album.duration),
-                f"{album.play_count} plays",
+                ngettext("%(count)d play", "%(count)d plays", album.play_count)
+                % {"count": album.play_count},
             ]
         )
         widgets["subtitle"].set_label(" · ".join(details))
@@ -4055,7 +4268,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
         widgets["image"].append(self._artist_avatar(artist, 180, priority="high"))
         widgets["heading"].set_label(artist.name)
         widgets["subtitle"].set_label(
-            f"{artist.album_count} albums · {artist.track_count} songs · {artist.play_count} plays"
+            " · ".join(
+                (
+                    ngettext("%(count)d album", "%(count)d albums", artist.album_count)
+                    % {"count": artist.album_count},
+                    ngettext("%(count)d song", "%(count)d songs", artist.track_count)
+                    % {"count": artist.track_count},
+                    ngettext("%(count)d play", "%(count)d plays", artist.play_count)
+                    % {"count": artist.play_count},
+                )
+            )
         )
         self._current_artist_website_url = None
         self._update_artist_detail_metadata(artist)
@@ -4083,7 +4305,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _queue_current_album(self):
         album = getattr(self, "_current_album_group", None)
         if album:
-            self._add_collection_to_queue(album.tracks, "album")
+            self._add_collection_to_queue(album.tracks, _("album"))
 
     def _play_current_artist(self):
         artist = getattr(self, "_current_artist_group", None)
@@ -4093,20 +4315,20 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _queue_current_artist(self):
         artist = getattr(self, "_current_artist_group", None)
         if artist:
-            self._add_collection_to_queue(artist.tracks, "artist")
+            self._add_collection_to_queue(artist.tracks, _("artist"))
 
     def _show_in_file_manager(self, track):
         LOGGER.info("show in file manager track=%r path=%r", track.title, track.path)
         if not track.path or not Path(track.path).exists():
             LOGGER.warning("file manager action skipped; file does not exist path=%r", track.path)
-            self._toast("The audio file is no longer available")
+            self._toast(_("The audio file is no longer available"))
             return
         if IS_WINDOWS:
             try:
                 open_folder(Path(track.path).parent)
             except OSError as error:
                 LOGGER.warning("Windows file manager launch failed: %s", error)
-                self._toast("Could not open the file manager")
+                self._toast(_("Could not open the file manager"))
             return
         file = Gio.File.new_for_path(str(Path(track.path).resolve()))
         try:
@@ -4142,12 +4364,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 LOGGER.info("file manager fallback launched uri=%r", parent.get_uri())
             except GLib.Error as error:
                 LOGGER.exception("file manager fallback failed uri=%r", parent.get_uri())
-                self._toast(f"Could not open the file manager: {error.message}")
+                self._toast(
+                    _("Could not open the file manager: %(error)s") % {"error": error.message}
+                )
 
     def _show_song_information(self, track):
         LOGGER.info("song information requested track=%r path=%r", track.title, track.path)
-        dialog = Gtk.Dialog(title="Song Information", transient_for=self, modal=True)
-        dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+        dialog = Gtk.Dialog(title=_("Song Information"), transient_for=self, modal=True)
+        dialog.add_button(_("Close"), Gtk.ResponseType.CLOSE)
         dialog.set_default_size(660, 640)
 
         scroll = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
@@ -4168,10 +4392,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
             valign=Gtk.Align.CENTER,
             hexpand=True,
         )
-        identity.append(Gtk.Label(label="SONG", xalign=0, css_classes=["eyebrow"]))
+        identity.append(Gtk.Label(label=_("SONG"), xalign=0, css_classes=["eyebrow"]))
         identity.append(
             Gtk.Label(
-                label=track.title or "Unknown title",
+                label=track.title or _("Unknown title"),
                 xalign=0,
                 wrap=True,
                 css_classes=["hero-title"],
@@ -4179,7 +4403,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         identity.append(
             Gtk.Label(
-                label=track.artist or "Unknown artist",
+                label=track.artist or _("Unknown artist"),
                 xalign=0,
                 wrap=True,
                 css_classes=["title-3"],
@@ -4187,7 +4411,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         identity.append(
             Gtk.Label(
-                label=track.album or "Unknown album",
+                label=track.album or _("Unknown album"),
                 xalign=0,
                 wrap=True,
                 css_classes=["muted"],
@@ -4240,27 +4464,27 @@ class GrooviaWindow(Adw.ApplicationWindow):
             content.append(group)
 
         append_section(
-            "Music",
+            _("Music"),
             (
-                ("Album artist", track.album_artist),
-                ("Year", track.year),
-                ("Genre", track.genre),
-                ("Track", track.track_number or "—"),
-                ("Disc", track.disc_number or "—"),
+                (_("Album artist"), track.album_artist),
+                (_("Year"), track.year),
+                (_("Genre"), track.genre),
+                (_("Track"), track.track_number or "—"),
+                (_("Disc"), track.disc_number or "—"),
             ),
         )
         append_section(
-            "Audio",
+            _("Audio"),
             (
-                ("Codec", technical.get("codec", "Unknown")),
-                ("Bitrate", technical.get("bitrate", "Unknown")),
-                ("Sample rate", technical.get("sample_rate", "Unknown")),
-                ("Channels", technical.get("channels", "Unknown")),
+                (_("Codec"), technical.get("codec", _("Unknown"))),
+                (_("Bitrate"), technical.get("bitrate", _("Unknown"))),
+                (_("Sample rate"), technical.get("sample_rate", _("Unknown"))),
+                (_("Channels"), technical.get("channels", _("Unknown"))),
             ),
         )
 
         file_group = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        file_group.append(Gtk.Label(label="File", xalign=0, css_classes=["section-title"]))
+        file_group.append(Gtk.Label(label=_("File"), xalign=0, css_classes=["section-title"]))
         file_group.append(
             Gtk.Label(
                 label=track.path or "—",
@@ -4282,7 +4506,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             existing.present()
             return
 
-        window = Gtk.Window(title="Vinyl — Groovia", transient_for=self)
+        window = Gtk.Window(title=_("Vinyl — Groovia"), transient_for=self)
         window.set_default_size(1100, 820)
         # Keep the toolbar in the layout flow.  An overlay lets the drawing
         # area occupy the whole window, so the record can be painted over the
@@ -4324,7 +4548,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         metadata = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
         title = Gtk.Label(
-            label=self.current.title if self.current else "Nothing playing",
+            label=self.current.title if self.current else _("Nothing playing"),
             xalign=0,
             ellipsize=3,
             css_classes=["title-3"],
@@ -4340,7 +4564,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         toolbar.append(metadata)
         close = Gtk.Button(
             icon_name="view-restore-symbolic",
-            tooltip_text="Exit fullscreen",
+            tooltip_text=_("Exit fullscreen"),
             css_classes=["circular"],
         )
         close.connect("clicked", lambda *_: window.close())
@@ -4374,7 +4598,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _find_lyrics_for_track(self, track):
         self.download_service.find_lyrics(track, fallback=True)
-        self._toast("Searching for lyrics…")
+        self._toast(_("Searching for lyrics…"))
 
     def _find_artworks_for_track(self, track):
         """Manually request Better Lyrics artwork without touching audio data."""
@@ -4387,10 +4611,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if cached:
             if self._same_track(track, self.current):
                 self._show_lyrics(track)
-            self._toast("Artwork already cached")
+            self._toast(_("Artwork already cached"))
             return
 
-        self._toast("Searching for animated artwork…")
+        self._toast(_("Searching for animated artwork…"))
 
         def worker():
             try:
@@ -4407,15 +4631,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if path:
             if self._same_track(track, self.current):
                 self._show_lyrics(track)
-            self._toast("Animated artwork found")
+            self._toast(_("Animated artwork found"))
         elif error:
-            self._toast(f"Artwork search failed: {error}")
+            self._toast(_("Artwork search failed: %(error)s") % {"error": error})
         else:
-            self._toast("No animated artwork found")
+            self._toast(_("No animated artwork found"))
         return GLib.SOURCE_REMOVE
 
     def _import_lyrics_for_track(self, track):
-        chooser = Gtk.FileDialog(title="Import lyrics")
+        chooser = Gtk.FileDialog(title=_("Import lyrics"))
         chooser.open(
             self,
             None,
@@ -4425,7 +4649,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _edit_lyrics(self, track):
         timeline, row = self.download_service.lyrics.find(track)
         if not timeline:
-            self._toast("No lyrics available to edit")
+            self._toast(_("No lyrics available to edit"))
             return
         content = "\n".join(line.text for line in timeline.lines)
         if row and row.get("file_path"):
@@ -4433,10 +4657,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 content = Path(row["file_path"]).read_text(encoding="utf-8-sig")
             except OSError:
                 pass
-        dialog = Gtk.Dialog(title="Edit Lyrics", transient_for=self, modal=True)
+        dialog = Gtk.Dialog(title=_("Edit Lyrics"), transient_for=self, modal=True)
         dialog.set_default_size(620, 520)
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        save = dialog.add_button("Save", Gtk.ResponseType.OK)
+        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        save = dialog.add_button(_("Save"), Gtk.ResponseType.OK)
         save.add_css_class("suggested-action")
         editor = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, monospace=timeline.synchronized)
         editor.get_buffer().set_text(content)
@@ -4456,7 +4680,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                     track, text, synchronized=timeline.synchronized
                 ):
                     self._show_lyrics(track)
-                    self._toast("Lyrics saved")
+                    self._toast(_("Lyrics saved"))
             current.close()
 
         dialog.connect("response", response)
@@ -4464,11 +4688,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _confirm_remove_lyrics(self, track):
         dialog = Adw.AlertDialog(
-            heading="Remove downloaded lyrics?",
-            body=f"Remove downloaded lyrics for “{track.title}”? Manually edited lyrics are kept.",
+            heading=_("Remove downloaded lyrics?"),
+            body=_("Remove downloaded lyrics for “%(title)s”? Manually edited lyrics are kept.")
+            % {"title": track.title},
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("remove", "Remove")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("remove", _("Remove"))
         dialog.set_response_appearance("remove", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -4485,11 +4710,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _confirm_remove_from_library(self, track):
         LOGGER.info("remove confirmation opened track=%r path=%r", track.title, track.path)
         dialog = Adw.AlertDialog(
-            heading="Remove from Library?",
-            body=f"“{track.title}” will be removed from Groovia, but its audio file will not be deleted.",
+            heading=_("Remove from Library?"),
+            body=_(
+                "“%(title)s” will be removed from Groovia, but its audio file will not be deleted."
+            )
+            % {"title": track.title},
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("remove", "Remove from Library")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("remove", _("Remove from Library"))
         dialog.set_response_appearance("remove", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -4515,7 +4743,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self._playback_source = [item for item in self._playback_source if item.path != track.path]
         self._prepare_next_track()
         self._refresh_library(self.search_entry.get_text())
-        self._toast(f"Removed {track.title} from the library")
+        self._toast(_("Removed %(title)s from the library") % {"title": track.title})
 
     def _resolve_cover(self, track):
         """Backfill artwork for tracks imported before embedded-cover support."""
@@ -4567,7 +4795,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             elif self.repeat_mode == "all":
                 next_index = 0
             else:
-                self._toast("The queue is empty")
+                self._toast(_("The queue is empty"))
                 self._refresh_queue()
                 return
             if next_index >= 0:
@@ -4575,7 +4803,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                     self._history.append(self.current)
                 self._play_track(self._playback_source[next_index])
         else:
-            self._toast("The queue is empty")
+            self._toast(_("The queue is empty"))
         self._refresh_queue()
 
     def _on_track_transitioned(self, _player, previous_track, next_track):
@@ -4600,15 +4828,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.repeat_all = self.repeat_mode == "all"
         if self.repeat_mode == "one":
             self.repeat_button.set_icon_name("media-playlist-repeat-song-symbolic")
-            self.repeat_button.set_tooltip_text("Repeat one")
+            self.repeat_button.set_tooltip_text(_("Repeat one"))
             self.repeat_button.set_opacity(1.0)
         elif self.repeat_mode == "all":
             self.repeat_button.set_icon_name("media-playlist-repeat-symbolic")
-            self.repeat_button.set_tooltip_text("Repeat all music")
+            self.repeat_button.set_tooltip_text(_("Repeat all music"))
             self.repeat_button.set_opacity(1.0)
         else:
             self.repeat_button.set_icon_name("media-playlist-repeat-symbolic")
-            self.repeat_button.set_tooltip_text("Repeat is off")
+            self.repeat_button.set_tooltip_text(_("Repeat is off"))
             self.repeat_button.set_opacity(0.45)
         self._apply_auto_dj_setting()
         self._prepare_next_track()
@@ -4669,7 +4897,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             track.cover_path if track.cover_path and Path(track.cover_path).exists() else None
         )
         self._set_album_palette(cover_path)
-        title = track.title or "Unknown title"
+        title = track.title or _("Unknown title")
         artist = track.artist or ""
         album = track.album or ""
         self.now_title.set_label(title)
@@ -4690,13 +4918,15 @@ class GrooviaWindow(Adw.ApplicationWindow):
             fullscreen_vinyl.set_progress(0)
             self._vinyl_fullscreen_title.set_label(track.title)
             self._vinyl_fullscreen_artist.set_label(track.artist)
-        self.now_play.set_label("Pause")
+        self.now_play.set_label(_("Pause"))
         if hasattr(self, "lyrics_button"):
             timeline, _row = self.download_service.lyrics.find(track)
             self.lyrics_button.set_sensitive(bool(timeline))
         self._update_lyrics_for_current()
         if getattr(self, "_lyrics_fullscreen_window", None):
-            self._lyrics_fullscreen_window.set_title(f"Lyrics — {track.title}")
+            self._lyrics_fullscreen_window.set_title(
+                _("Lyrics — %(title)s") % {"title": track.title}
+            )
             variants = self.download_service.lyrics.find_variants(track)
             self._lyrics_fullscreen_view.set_documents(variants, preferred_mode="line")
             self._set_fullscreen_lyrics_cover(track)
@@ -4713,7 +4943,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         application = self.get_application()
         if not application:
             return
-        notification = Gio.Notification.new("Now playing")
+        notification = Gio.Notification.new(_("Now playing"))
         notification.set_body(f"{track.title} · {track.artist}")
         if cover_path:
             notification.set_icon(Gio.FileIcon.new(Gio.File.new_for_path(cover_path)))
@@ -4792,7 +5022,9 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.play_button.set_icon_name(
             "media-playback-pause-symbolic" if playing else "media-playback-start-symbolic"
         )
-        self.play_button.set_tooltip_text("Pause" if playing else "Play")
+        self.play_button.set_tooltip_text(
+            _("Pause") if playing else pgettext("playback action", "Play")
+        )
         self.vinyl.set_playing(playing)
         fullscreen_vinyl = getattr(self, "_vinyl_fullscreen_view", None)
         if fullscreen_vinyl is not None:
@@ -4800,7 +5032,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.now_play.set_icon_name(
             "media-playback-pause-symbolic" if playing else "media-playback-start-symbolic"
         )
-        self.now_play.set_label("Pause" if playing else "Play")
+        self.now_play.set_label(_("Pause") if playing else pgettext("playback action", "Play"))
         if hasattr(self, "_lyrics_widgets"):
             self._lyrics_widgets["view"].set_playing(playing)
         if getattr(self, "_lyrics_fullscreen_view", None):
@@ -4830,7 +5062,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _total_minutes_label(seconds):
         """Format a playlist duration as its total number of minutes."""
         minutes = max(0, int(float(seconds) / 60))
-        return f"{minutes} min"
+        return ngettext("%(count)d min", "%(count)d min", minutes) % {"count": minutes}
 
     def _on_nav_selected(self, _list, row):
         if row:
@@ -5067,7 +5299,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
         self.volume.set_value(self.player.volume)
 
     def _choose_folder(self, *_args):
-        dialog = Gtk.FileDialog(title="Choose a music folder")
+        dialog = Gtk.FileDialog(title=_("Choose a music folder"))
         dialog.select_folder(self, None, self._folder_selected)
 
     def open_paths(self, paths: list[str]):
@@ -5084,7 +5316,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 except Exception:
                     continue
         if folders:
-            self._toast("Scanning dropped music…")
+            self._toast(_("Scanning dropped music…"))
             self.scanner.scan_async(folders, self._scan_update)
         if tracks:
             # Opening a file from the desktop can target a track that is
@@ -5137,29 +5369,31 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._play_track(track)
 
     def _download_url(self, *_args):
-        dialog = Gtk.Dialog(title="Import from Spotify", transient_for=self, modal=True)
+        dialog = Gtk.Dialog(title=_("Import from Spotify"), transient_for=self, modal=True)
         dialog.set_default_size(620, 600)
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        download_button = dialog.add_button("Download", Gtk.ResponseType.ACCEPT)
+        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        download_button = dialog.add_button(_("Download"), Gtk.ResponseType.ACCEPT)
         download_button.add_css_class("suggested-action")
         body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         body.set_margin_top(22)
         body.set_margin_bottom(18)
         body.set_margin_start(22)
         body.set_margin_end(22)
-        title = Gtk.Label(label="Import Spotify music", xalign=0, css_classes=["title-2"])
+        title = Gtk.Label(label=_("Import Spotify music"), xalign=0, css_classes=["title-2"])
         body.append(title)
         body.append(
             Gtk.Label(
-                label="Groovia uses spotDL to find matching audio and import Spotify metadata and artwork."
-                " Audio is not downloaded directly from Spotify; you are responsible for respecting copyright and service terms.",
+                label=_(
+                    "Groovia uses spotDL to find matching audio and import Spotify metadata and artwork. "
+                    "Audio is not downloaded directly from Spotify; you are responsible for respecting copyright and service terms."
+                ),
                 wrap=True,
                 xalign=0,
                 css_classes=["dim-label"],
             )
         )
         workflow = Gtk.Label(
-            label=(
+            label=_(
                 "Workflow: read source → find matching audio → download/convert → "
                 "write metadata and lyrics → add tracks to your library"
             ),
@@ -5170,43 +5404,43 @@ class GrooviaWindow(Adw.ApplicationWindow):
         body.append(workflow)
         source_row = Gtk.Box(spacing=8)
         entry = Gtk.Entry(
-            placeholder_text="Paste a Spotify track, playlist or .spotdl file",
+            placeholder_text=_("Paste a Spotify track, playlist or .spotdl file"),
             hexpand=True,
         )
-        paste = Gtk.Button(label="Paste", icon_name="edit-paste-symbolic")
+        paste = Gtk.Button(label=_("Paste"), icon_name="edit-paste-symbolic")
         paste.connect("clicked", lambda *_: self._paste_download_source(entry))
         source_row.append(entry)
         source_row.append(paste)
         body.append(source_row)
         detected = Gtk.Label(
-            label="Paste a source to detect its type",
+            label=_("Paste a source to detect its type"),
             xalign=0,
             css_classes=["dim-label"],
         )
         body.append(detected)
         destination = Gtk.Label(xalign=0, wrap=True, css_classes=["dim-label"])
         body.append(destination)
-        sync = Gtk.CheckButton(label="Keep this Spotify playlist synchronized in the future")
+        sync = Gtk.CheckButton(label=_("Keep this Spotify playlist synchronized in the future"))
         sync.set_active(True)
         sync.set_visible(False)
         body.append(sync)
         permission = Gtk.CheckButton(
-            label="I understand and accept responsibility for this download"
+            label=_("I understand and accept responsibility for this download")
         )
         if self._settings:
             permission.set_active(self._settings.get_boolean("spotdl-legal-acknowledged"))
         body.append(permission)
         progress = Gtk.ProgressBar(show_text=True)
-        progress.set_text("Waiting for a source")
+        progress.set_text(_("Waiting for a source"))
         body.append(progress)
         download_phase = Gtk.Label(
-            label="Waiting for a source",
+            label=_("Waiting for a source"),
             xalign=0,
             css_classes=["download-phase"],
         )
         body.append(download_phase)
         download_status = Gtk.Label(
-            label="The total will appear as soon as spotDL reports it.",
+            label=_("The total will appear as soon as spotDL reports it."),
             xalign=0,
             css_classes=["dim-label"],
         )
@@ -5286,19 +5520,22 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _update_download_detection(self, entry, detected, destination, sync, button, permission):
         info = classify_input(entry.get_text())
         labels = {
-            "track": "Spotify track detected",
-            "playlist": "Spotify playlist detected",
-            "album": "Spotify album detected",
-            "sync": "spotDL synchronization file detected",
-            "invalid": "Waiting for a valid Spotify source",
+            "track": _("Spotify track detected"),
+            "playlist": _("Spotify playlist detected"),
+            "album": _("Spotify album detected"),
+            "sync": _("spotDL synchronization file detected"),
+            "invalid": _("Waiting for a valid Spotify source"),
         }
         detected.set_label(labels[info.kind])
         sync.set_visible(info.kind in {"playlist", "album", "sync"})
         if info.kind == "track":
-            destination.set_label(f"Destination: {self.download_service.music_dir}")
+            destination.set_label(
+                _("Destination: %(directory)s") % {"directory": self.download_service.music_dir}
+            )
         elif info.kind in {"playlist", "album", "sync"}:
             destination.set_label(
-                f"Managed synchronization directory: {self.download_service.sync_root}"
+                _("Managed synchronization directory: %(directory)s")
+                % {"directory": self.download_service.sync_root}
             )
         else:
             destination.set_label("")
@@ -5321,10 +5558,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
             return
         info = classify_input(entry.get_text())
         if info.kind == "invalid":
-            self._download_error("Enter a valid Spotify track, playlist or .spotdl file.")
+            self._download_error(_("Enter a valid Spotify track, playlist or .spotdl file."))
             return
         if not permission.get_active():
-            self._download_error("Please acknowledge the legal notice before downloading.")
+            self._download_error(_("Please acknowledge the legal notice before downloading."))
             return
         # Lock the action before checking dependencies or starting the worker.
         # This also prevents a second click while the dependency dialog is open.
@@ -5341,14 +5578,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
             missing.append("Deno")
         if not status.deno:
             self._append_download_log(
-                "Deno was not found; spotDL recommends it for reliable YouTube matching."
+                _("Deno was not found; spotDL recommends it for reliable YouTube matching.")
                 if not IS_WINDOWS
-                else "Bundled Deno was not found in this Windows installation."
+                else _("Bundled Deno was not found in this Windows installation.")
             )
         if missing:
             if IS_WINDOWS:
                 self._download_error(
-                    "Bundled downloader tools are missing. Reinstall Groovia or rebuild the Windows package."
+                    _(
+                        "Bundled downloader tools are missing. Reinstall Groovia or rebuild the Windows package."
+                    )
                 )
                 return
             self._show_dependency_dialog(
@@ -5360,16 +5599,18 @@ class GrooviaWindow(Adw.ApplicationWindow):
 
     def _start_download(self, value, sync_enabled=True, existing_action=None):
         self._set_download_button_busy(True)
-        self._append_download_log(f"Starting: {value}")
+        self._append_download_log(_("Starting: %(source)s") % {"source": value})
         self._append_download_log(
-            "The downloader will search for matching audio, download it, convert it "
-            "to the selected format, write metadata, then import it into the library."
+            _(
+                "The downloader will search for matching audio, download it, convert it "
+                "to the selected format, write metadata, then import it into the library."
+            )
         )
         progress = getattr(self, "_download_progress", None)
         if progress:
             progress.set_fraction(0)
-            progress.set_text("Starting spotDL…")
-        self._set_download_phase("Step 1/5 · Preparing downloader")
+            progress.set_text(_("Starting spotDL…"))
+        self._set_download_phase(_("Step 1/5 · Preparing downloader"))
         settings = self._settings
         job = self.download_service.submit(
             value,
@@ -5383,12 +5624,18 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         if job:
             self._download_job = job
-            self._append_download_log(f"Destination: {job.destination}")
             self._append_download_log(
-                f"Format: {job.output_format.upper()} · bitrate: {job.bitrate} · "
-                "lyrics are fetched separately from track metadata"
+                _("Destination: %(directory)s") % {"directory": job.destination}
             )
-            self._toast("Import started")
+            self._append_download_log(
+                # Translators: %(format)s is an audio format such as MP3 and
+                # %(bitrate)s is a technical bitrate value such as "320k".
+                _(
+                    "Format: %(format)s · bitrate: %(bitrate)s · lyrics are fetched separately from track metadata"
+                )
+                % {"format": job.output_format.upper(), "bitrate": job.bitrate}
+            )
+            self._toast(_("Import started"))
         else:
             self._restore_download_button()
 
@@ -5400,6 +5647,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             phase = data.get(
                 "phase", getattr(job, "phase", "Downloading") if job else "Downloading"
             )
+            phase_label = _download_phase_label(phase)
             failed = getattr(job, "failed", 0) if job else data.get("failed", 0)
             overall = data.get("overall_progress")
             if total and overall is not None and getattr(self, "_download_progress", None):
@@ -5407,46 +5655,69 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 fraction = min(1.0, max(0.0, overall / 100))
                 self._download_progress.set_fraction(fraction)
                 self._download_progress.set_text(
-                    f"Overall {fraction * 100:.0f}% · {completed}/{total} tracks"
+                    # Translators: %(percent).0f is the overall percentage, while
+                    # %(completed)d and %(total)d are track counts.
+                    ngettext(
+                        "Overall %(percent).0f%% · %(completed)d/%(total)d track",
+                        "Overall %(percent).0f%% · %(completed)d/%(total)d tracks",
+                        total,
+                    )
+                    % {
+                        "percent": fraction * 100,
+                        "completed": completed,
+                        "total": total,
+                    }
                 )
             elif getattr(self, "_download_progress", None):
                 # A per-file percentage is not an overall playlist percentage.
                 # Keep the bar honest until spotDL gives us a reliable total.
-                self._set_download_progress_indeterminate("Downloading current track…")
-            self._set_download_phase(f"Step {self._download_step_for_phase(phase)}/5 · {phase}")
+                self._set_download_progress_indeterminate(_("Downloading current track…"))
+            self._set_download_phase(
+                _("Step %(step)d/5 · %(phase)s")
+                % {"step": self._download_step_for_phase(phase), "phase": phase_label}
+            )
             if getattr(self, "_download_status", None):
                 if total:
-                    suffix = f" · {failed} failed" if failed else ""
-                    self._download_status.set_label(f"{completed}/{total} tracks completed{suffix}")
+                    status = ngettext(
+                        "%(completed)d/%(total)d track completed",
+                        "%(completed)d/%(total)d tracks completed",
+                        total,
+                    ) % {"completed": completed, "total": total}
+                    if failed:
+                        status += " · " + (
+                            ngettext("%(count)d failed", "%(count)d failed", failed)
+                            % {"count": failed}
+                        )
+                    self._download_status.set_label(status)
                 else:
                     self._download_status.set_label(
-                        "Waiting for the downloader to report the playlist total…"
+                        _("Waiting for the downloader to report the playlist total…")
                     )
             if data.get("current") and getattr(self, "_download_current", None):
                 self._download_current.set_label(data["current"])
             self._append_download_log(data.get("line", ""))
         elif event == "started":
-            self._set_download_phase("Step 1/5 · Starting downloader")
+            self._set_download_phase(_("Step 1/5 · Starting downloader"))
             if getattr(self, "_download_status", None):
-                self._download_status.set_label("Starting spotDL process…")
-            self._append_download_log("spotDL process started")
+                self._download_status.set_label(_("Starting spotDL process…"))
+            self._append_download_log(_("spotDL process started"))
         elif event == "command":
-            self._set_download_phase("Step 2/5 · Finding matching audio")
+            self._set_download_phase(_("Step 2/5 · Finding matching audio"))
             if getattr(self, "_download_status", None):
-                self._download_status.set_label("Reading the source and finding an audio match…")
+                self._download_status.set_label(_("Reading the source and finding an audio match…"))
             command = payload.get("command", [])
             if command:
                 self._append_download_log(
                     "Command: " + " ".join(shlex.quote(str(part)) for part in command)
                 )
         elif event == "import-started":
-            self._set_download_phase("Step 5/5 · Adding tracks to library")
+            self._set_download_phase(_("Step 5/5 · Adding tracks to library"))
             self._stop_download_pulse()
             if getattr(self, "_download_progress", None):
                 self._download_progress.set_fraction(0)
-                self._download_progress.set_text("Importing into library…")
+                self._download_progress.set_text(_("Importing into library…"))
             if getattr(self, "_download_status", None):
-                self._download_status.set_label("Scanning files and associating metadata…")
+                self._download_status.set_label(_("Scanning files and associating metadata…"))
         elif event == "import-progress":
             current = payload.get("current", 0)
             total = payload.get("total", 0)
@@ -5454,34 +5725,74 @@ class GrooviaWindow(Adw.ApplicationWindow):
             phase = payload.get("phase", "Importing")
             if getattr(self, "_download_progress", None) and total:
                 self._download_progress.set_fraction(min(1.0, current / total))
-                self._download_progress.set_text(f"Library {current}/{total} tracks")
-            self._set_download_phase("Step 5/5 · Adding tracks to library")
+                self._download_progress.set_text(
+                    ngettext(
+                        "Library %(current)d/%(total)d track",
+                        "Library %(current)d/%(total)d tracks",
+                        total,
+                    )
+                    % {"current": current, "total": total}
+                )
+            self._set_download_phase(_("Step 5/5 · Adding tracks to library"))
             if getattr(self, "_download_status", None):
-                self._download_status.set_label(f"{phase} · {current}/{total} tracks")
+                self._download_status.set_label(
+                    ngettext(
+                        "%(phase)s · %(current)d/%(total)d track",
+                        "%(phase)s · %(current)d/%(total)d tracks",
+                        total,
+                    )
+                    % {
+                        "phase": _download_phase_label(phase),
+                        "current": current,
+                        "total": total,
+                    }
+                )
             if title and getattr(self, "_download_current", None):
                 self._download_current.set_label(title)
         elif event == "completed":
             self._restore_download_button()
             self._stop_download_pulse()
-            self._set_download_phase("Finished · Download and library import complete")
+            self._set_download_phase(_("Finished · Download and library import complete"))
             if getattr(self, "_download_progress", None):
                 self._download_progress.set_fraction(1)
-                self._download_progress.set_text("Completed")
+                self._download_progress.set_text(_("Completed"))
             if getattr(self, "_download_status", None):
+                count = len(payload.get("tracks", []))
                 self._download_status.set_label(
-                    f"Completed · {len(payload.get('tracks', []))} track(s) available in your library"
+                    ngettext(
+                        "Completed · %(count)d track available in your library",
+                        "Completed · %(count)d tracks available in your library",
+                        count,
+                    )
+                    % {"count": count}
                 )
             self._refresh_library(self.search_entry.get_text())
             tracks = payload.get("tracks", [])
             if payload.get("playlist"):
-                self._toast(f"Playlist imported: {len(tracks)} tracks")
+                count = len(tracks)
+                self._toast(
+                    ngettext(
+                        "Playlist imported: %(count)d track",
+                        "Playlist imported: %(count)d tracks",
+                        count,
+                    )
+                    % {"count": count}
+                )
             else:
-                self._toast("Track downloaded and added to your library")
-            self._append_download_log(f"Completed: {len(tracks)} track(s) imported")
+                self._toast(_("Track downloaded and added to your library"))
+            count = len(tracks)
+            self._append_download_log(
+                ngettext(
+                    "Completed: %(count)d track imported",
+                    "Completed: %(count)d tracks imported",
+                    count,
+                )
+                % {"count": count}
+            )
         elif event == "lyrics-completed":
             track = payload.get("track")
             if self._same_track(track, self.current):
-                self._toast("Lyrics found")
+                self._toast(_("Lyrics found"))
                 self._show_lyrics(track)
         elif event == "lyrics-enriched":
             track = payload.get("track")
@@ -5511,31 +5822,39 @@ class GrooviaWindow(Adw.ApplicationWindow):
         elif event == "lyrics-failed":
             track = payload.get("track")
             if self._same_track(track, self.current):
-                self._toast(f"Lyrics unavailable: {payload.get('error', 'search failed')}")
+                self._toast(
+                    _("Lyrics unavailable: %(error)s")
+                    % {"error": payload.get("error", _("search failed"))}
+                )
         elif event in {"failed", "cancelled"}:
             self._restore_download_button()
             self._stop_download_pulse()
-            self._set_download_phase("Cancelled" if event == "cancelled" else "Failed")
+            self._set_download_phase(_("Cancelled") if event == "cancelled" else _("Failed"))
             message = payload.get("error") or (job.error if job else event)
             if payload.get("tracks"):
                 self._refresh_library(self.search_entry.get_text())
-                message = (
-                    f"Import partially completed: {len(payload['tracks'])} track(s); {message}"
-                )
+                count = len(payload["tracks"])
+                message = ngettext(
+                    "Import partially completed: %(count)d track; %(error)s",
+                    "Import partially completed: %(count)d tracks; %(error)s",
+                    count,
+                ) % {"count": count, "error": message}
             self._download_error(
-                "Download cancelled" if event == "cancelled" else f"Download failed: {message}"
+                _("Download cancelled")
+                if event == "cancelled"
+                else _("Download failed: %(error)s") % {"error": message}
             )
         elif event == "input-error":
-            self._download_error(payload.get("message", "Invalid source"))
+            self._download_error(payload.get("message", _("Invalid source")))
         elif event == "sync-error":
-            self._download_error(payload.get("message", "Synchronization could not start"))
+            self._download_error(payload.get("message", _("Synchronization could not start")))
         elif event == "conflict":
             self._show_playlist_conflict(payload)
         elif event == "dependency-installed":
             message = (
-                "Bundled downloader tools verified"
+                _("Bundled downloader tools verified")
                 if payload.get("bundled")
-                else "Dependencies installed"
+                else _("Dependencies installed")
             )
             self._toast(message)
             self._append_download_log(message)
@@ -5548,41 +5867,54 @@ class GrooviaWindow(Adw.ApplicationWindow):
             if resume:
                 resume()
         elif event == "dependency-verified":
-            self._append_download_log("Downloader tool versions:")
+            self._append_download_log(_("Downloader tool versions:"))
             for name, result in payload.get("tools", {}).items():
                 if result.get("available"):
-                    self._append_download_log(f"{name}: {result.get('version', 'available')}")
+                    self._append_download_log(
+                        _("%(tool)s: %(version)s")
+                        % {"tool": name, "version": result.get("version", _("available"))}
+                    )
                 else:
                     self._append_download_log(
-                        f"{name}: unavailable ({result.get('error', 'unknown error')})"
+                        _("%(tool)s: unavailable (%(error)s)")
+                        % {
+                            "tool": name,
+                            "error": result.get("error", _("unknown error")),
+                        }
                     )
-            self._toast("Bundled downloader tools verified")
+            self._toast(_("Bundled downloader tools verified"))
         elif event == "dependency-started":
             status = payload.get("status")
-            self._set_dependency_feedback("Preparing dependency installation…")
+            self._set_dependency_feedback(_("Preparing dependency installation…"))
             if status:
                 self._append_download_log(
-                    f"Dependencies: spotDL={'yes' if status.spotdl else 'no'}, "
-                    f"FFmpeg={'yes' if status.ffmpeg else 'no'}, "
-                    f"Deno={'yes' if status.deno else 'no'}"
+                    # Translators: Keep the tool names spotDL, FFmpeg and Deno.
+                    _("Dependencies: spotDL=%(spotdl)s, FFmpeg=%(ffmpeg)s, Deno=%(deno)s")
+                    % {
+                        "spotdl": _("yes") if status.spotdl else _("no"),
+                        "ffmpeg": _("yes") if status.ffmpeg else _("no"),
+                        "deno": _("yes") if status.deno else _("no"),
+                    }
                 )
         elif event == "dependency-command":
-            self._set_dependency_feedback(payload.get("label", "Installing dependency…"))
+            self._set_dependency_feedback(payload.get("label", _("Installing dependency…")))
         elif event == "dependency-output":
             self._set_dependency_feedback(
-                payload.get("label", "Installing dependency…"), pulse=True
+                payload.get("label", _("Installing dependency…")), pulse=True
             )
             self._append_dependency_log(payload.get("line", ""))
         elif event == "dependency-cancelled":
-            self._set_dependency_feedback("Dependency installation cancelled")
-            self._append_dependency_log("Installation cancelled. No system packages were changed.")
+            self._set_dependency_feedback(_("Dependency installation cancelled"))
+            self._append_dependency_log(
+                _("Installation cancelled. No system packages were changed.")
+            )
         elif event == "dependency-failed":
-            self._set_dependency_feedback("Dependency installation failed")
-            self._append_dependency_log(payload.get("error", "Unknown installation error"))
+            self._set_dependency_feedback(_("Dependency installation failed"))
+            self._append_dependency_log(payload.get("error", _("Unknown installation error")))
             install_button = getattr(self, "_dependency_install_button", None)
             if install_button:
                 install_button.set_sensitive(True)
-            self._download_error(payload.get("error", "Dependency installation failed"))
+            self._download_error(payload.get("error", _("Dependency installation failed")))
         return GLib.SOURCE_REMOVE
 
     def _append_download_log(self, line):
@@ -5692,13 +6024,14 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _show_playlist_conflict(self, payload):
         playlist = payload["playlist"]
         dialog = Adw.AlertDialog(
-            heading="Playlist already imported",
-            body=f"{playlist.name} is already connected to this Spotify source.",
+            heading=_("Playlist already imported"),
+            body=_("%(playlist)s is already connected to this Spotify source.")
+            % {"playlist": playlist.name},
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("sync", "Synchronize existing")
-        dialog.add_response("duplicate", "Import as new")
-        dialog.add_response("replace", "Replace local playlist")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("sync", _("Synchronize existing"))
+        dialog.add_response("duplicate", _("Import as new"))
+        dialog.add_response("replace", _("Replace local playlist"))
         dialog.set_default_response("sync")
         dialog.set_close_response("cancel")
         dialog.connect(
@@ -5720,12 +6053,12 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self._verify_download_tools(presenter)
             return
         dialog = Gtk.Dialog(
-            title="Install download dependencies",
+            title=_("Install download dependencies"),
             transient_for=presenter or self,
             modal=True,
         )
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        install_button = dialog.add_button("Install", Gtk.ResponseType.ACCEPT)
+        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        install_button = dialog.add_button(_("Install"), Gtk.ResponseType.ACCEPT)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         content.set_margin_top(20)
         content.set_margin_bottom(20)
@@ -5733,14 +6066,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
         content.set_margin_end(20)
         content.append(
             Gtk.Label(
-                label="Groovia needs a few tools to import Spotify music.",
+                label=_("Groovia needs a few tools to import Spotify music."),
                 xalign=0,
                 css_classes=["title-3"],
             )
         )
         content.append(
             Gtk.Label(
-                label="spotDL will be installed in Groovia's private environment. FFmpeg is required; Deno is recommended for reliable YouTube matching.",
+                label=_(
+                    "spotDL will be installed in Groovia's private environment. FFmpeg is required; Deno is recommended for reliable YouTube matching."
+                ),
                 wrap=True,
                 xalign=0,
                 css_classes=["dim-label"],
@@ -5748,14 +6083,16 @@ class GrooviaWindow(Adw.ApplicationWindow):
         )
         checks = {}
         for name in ("spotDL", "FFmpeg", "Deno"):
-            check = Gtk.CheckButton(label=f"Install or repair {name}")
+            check = Gtk.CheckButton(label=_("Install or repair %(tool)s") % {"tool": name})
             check.set_active(name in missing)
             check.set_sensitive(name in missing or name != "spotDL")
             content.append(check)
             checks[name] = check
-        feedback = Gtk.Label(label="Waiting for confirmation", xalign=0, css_classes=["dim-label"])
+        feedback = Gtk.Label(
+            label=_("Waiting for confirmation"), xalign=0, css_classes=["dim-label"]
+        )
         progress = Gtk.ProgressBar(show_text=True)
-        progress.set_text("Waiting")
+        progress.set_text(_("Waiting"))
         log_view = Gtk.TextView(editable=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR)
         log_scroll = Gtk.ScrolledWindow(min_content_height=110, vexpand=True)
         log_scroll.set_child(log_view)
@@ -5778,26 +6115,26 @@ class GrooviaWindow(Adw.ApplicationWindow):
             install_button = getattr(self, "_dependency_install_button", None)
             if install_button:
                 install_button.set_sensitive(False)
-            self._set_dependency_feedback("Starting installation…")
+            self._set_dependency_feedback(_("Starting installation…"))
             self.download_service.manager.install_dependencies(
                 checks["FFmpeg"].get_active(),
                 checks["Deno"].get_active(),
                 self._download_event,
                 install_spotdl=checks["spotDL"].get_active(),
             )
-            self._append_dependency_log("Installing selected dependencies…")
+            self._append_dependency_log(_("Installing selected dependencies…"))
         else:
             if self.download_service.manager.cancel_dependency_installation():
-                self._append_dependency_log("Stopping dependency installation…")
+                self._append_dependency_log(_("Stopping dependency installation…"))
             self._download_resume = None
             self._dependency_dialog = None
             self._restore_download_button()
             dialog.close()
 
     def _verify_download_tools(self, presenter=None):
-        self._append_download_log("Verifying bundled downloader tools…")
+        self._append_download_log(_("Verifying bundled downloader tools…"))
         self.download_service.manager.verify_tools(self._download_event)
-        self._toast("Verifying bundled downloader tools")
+        self._toast(_("Verifying bundled downloader tools"))
 
     def _set_dependency_feedback(self, message, pulse=False):
         feedback = getattr(self, "_dependency_feedback", None)
@@ -5821,18 +6158,18 @@ class GrooviaWindow(Adw.ApplicationWindow):
             self.download_service.manager.active
             or self.download_service.manager._dependency_process
         ):
-            self._toast("Stop active downloads before removing managed tools")
+            self._toast(_("Stop active downloads before removing managed tools"))
             return
         dialog = Adw.AlertDialog(
-            heading="Remove Groovia-managed download tools?",
-            body=(
+            heading=_("Remove Groovia-managed download tools?"),
+            body=_(
                 "This removes only Groovia's private spotDL environment and its locally "
                 "downloaded FFmpeg/Deno copies. System installations and your music files "
                 "will not be touched."
             ),
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("remove", "Remove")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("remove", _("Remove"))
         dialog.set_response_appearance("remove", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -5843,7 +6180,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
                 return
             removed = self.download_service.manager.remove_managed_dependencies()
             self._toast(
-                "Managed download tools removed" if removed else "No managed tools to remove"
+                _("Managed download tools removed") if removed else _("No managed tools to remove")
             )
 
         dialog.connect("response", response)
@@ -5853,23 +6190,24 @@ class GrooviaWindow(Adw.ApplicationWindow):
         manager = self.download_service.manager
         running_jobs = [job for job in manager.jobs() if job.state in {"queued", "running"}]
         if running_jobs or manager._dependency_process:
-            self._toast("Stop active downloads before deleting Groovia data")
+            self._toast(_("Stop active downloads before deleting Groovia data"))
             return
 
         data_root = self.download_service.data_root
         music_dir = self.download_service.music_dir
         cache_root = self.scanner.artwork_dir.parent
         dialog = Adw.AlertDialog(
-            heading="Delete all Groovia data?",
-            body=(
+            heading=_("Delete all Groovia data?"),
+            body=_(
                 "This permanently deletes Groovia's library database, downloaded music, lyrics, "
                 "playlists, artwork, synchronization files, cache and managed download tools. "
-                f"The music folder to delete is {music_dir}. Music imported from other folders will not be touched. "
+                "The music folder to delete is %(directory)s. Music imported from other folders will not be touched. "
                 "Groovia will close after deletion."
-            ),
+            )
+            % {"directory": music_dir},
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete all data")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("delete", _("Delete all data"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -5899,7 +6237,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             if path in {Path("/"), Path.home().resolve()}:
                 LOGGER.error("Refusing to delete unsafe Groovia data path: %s", path)
                 self._data_reset = False
-                self._toast("Could not delete Groovia data")
+                self._toast(_("Could not delete Groovia data"))
                 return
             try:
                 if path.is_dir():
@@ -5909,7 +6247,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
             except OSError:
                 LOGGER.exception("Could not delete Groovia data path: %s", path)
                 self._data_reset = False
-                self._toast("Could not delete all Groovia data")
+                self._toast(_("Could not delete all Groovia data"))
                 return
 
         if self._settings:
@@ -5924,7 +6262,7 @@ class GrooviaWindow(Adw.ApplicationWindow):
     def _folder_selected(self, dialog, result):
         try:
             folder = dialog.select_folder_finish(result)
-            self._toast("Scanning your music…")
+            self._toast(_("Scanning your music…"))
             self.scanner.scan_async([folder.get_path()], self._scan_update)
         except GLib.Error:
             pass
@@ -5933,7 +6271,10 @@ class GrooviaWindow(Adw.ApplicationWindow):
         if state == "finished":
             self.download_service.enrich_tracks_async(tracks or [])
             self._refresh_library()
-            self._toast(f"Imported {current} tracks")
+            self._toast(
+                ngettext("Imported %(count)d track", "Imported %(count)d tracks", current)
+                % {"count": current}
+            )
         return GLib.SOURCE_REMOVE if state == "finished" else GLib.SOURCE_CONTINUE
 
     def _toast(self, message):

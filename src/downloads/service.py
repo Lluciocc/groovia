@@ -26,6 +26,7 @@ from pathlib import Path
 
 from gi.repository import GLib
 
+from ..i18n import _
 from ..lyrics import LyricsService
 from ..platform_compat import get_data_dir, get_music_dir
 from .importer import SpotDLImportService
@@ -86,7 +87,7 @@ class SpotDLService:
             self._emit(
                 "input-error",
                 None,
-                {"message": "Enter a Spotify track, Spotify playlist or .spotdl file."},
+                {"message": _("Enter a Spotify track, Spotify playlist or .spotdl file.")},
             )
             return None
         if (
@@ -97,7 +98,7 @@ class SpotDLService:
             self._emit(
                 "input-error",
                 None,
-                {"message": "This .spotdl file is invalid or cannot be read."},
+                {"message": _("This .spotdl file is invalid or cannot be read.")},
             )
             return None
         playlist = None
@@ -185,7 +186,9 @@ class SpotDLService:
                     "sync-error",
                     None,
                     {
-                        "message": "Mirror synchronization is restricted to Groovia-managed directories."
+                        "message": _(
+                            "Mirror synchronization is restricted to Groovia-managed directories."
+                        )
                     },
                 )
                 self._discard_temporary_playlist(context)
@@ -227,7 +230,7 @@ class SpotDLService:
                 None,
                 {
                     "playlist_id": playlist_id,
-                    "message": "Synchronization data is missing.",
+                    "message": _("Synchronization data is missing."),
                 },
             )
             return None
@@ -239,7 +242,9 @@ class SpotDLService:
                 None,
                 {
                     "playlist_id": playlist_id,
-                    "message": "Mirror synchronization is restricted to Groovia-managed directories.",
+                    "message": _(
+                        "Mirror synchronization is restricted to Groovia-managed directories."
+                    ),
                 },
             )
             return None
@@ -298,7 +303,7 @@ class SpotDLService:
             if bundle:
                 completed(bundle)
             else:
-                failed("No lyrics found online.")
+                failed(_("No lyrics found online."))
 
         threading.Thread(target=worker, daemon=True, name="groovia-better-lyrics").start()
         return True

@@ -64,6 +64,7 @@ For detailed setup and packaging instructions, see:
 - [Windows development and packaging](docs/windows-development.md)
 - [Spotify imports](docs/spotify-imports.md)
 - [Auto DJ](docs/auto-dj.md)
+- [Translations](docs/translations.md)
 
 ## License
 This project is licensed under the GPL3 License. See the [LICENSE file](COPYING) for details

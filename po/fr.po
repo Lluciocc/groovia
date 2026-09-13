@@ -1,0 +1,2734 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: groovia\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-09 14:56+0200\n"
+"PO-Revision-Date: 2026-09-09 00:00+0200\n"
+"Last-Translator: Groovia contributors\n"
+"Language-Team: French\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: data/io.github.Lluciocc.Groovia.desktop.in:2
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:7
+msgid "Groovia"
+msgstr "Groovia"
+
+#: data/io.github.Lluciocc.Groovia.desktop.in:3
+msgid "Music Player"
+msgstr "Lecteur de musique"
+
+#: data/io.github.Lluciocc.Groovia.desktop.in:4
+msgid "Play and organize your local music collection"
+msgstr "Lisez et organisez votre collection musicale locale"
+
+#: data/io.github.Lluciocc.Groovia.desktop.in:10
+msgid "Music;Audio;Player;Vinyl;Library;"
+msgstr "Musique;Audio;Lecteur;Vinyle;Bibliothèque;"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:4
+msgid "Crossfade duration"
+msgstr "Durée du fondu enchaîné"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:4
+msgid "0 means disabled, followed by 1, 3, 5, 8 and 10 seconds."
+msgstr "0 signifie désactivé, suivi de 1, 3, 5, 8 et 10 secondes."
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:5 src/preferences.py:59
+msgid "Enable Auto DJ"
+msgstr "Activer Auto DJ"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:6
+msgid "Auto DJ transition style"
+msgstr "Style de transition Auto DJ"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:7
+msgid "Auto DJ transition length"
+msgstr "Longueur de transition Auto DJ"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:8
+msgid "Use beat matching when analysis is confident"
+msgstr "Utilisez la correspondance de rythme lorsque l'analyse est fiable"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:9
+msgid "Prefer phrase-safe transitions"
+msgstr "Préférer les transitions entre deux phrases musicales"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:10
+msgid "Allow conservative tempo matching"
+msgstr "Autoriser une correspondance de tempo conservatrice"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:11
+msgid "Use bass-aware Auto DJ mixing"
+msgstr "Utiliser le mixage Auto DJ prenant en compte les basses"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:12
+msgid "Use silence analysis for transition planning"
+msgstr "Utiliser l'analyse du silence pour la planification de la transition"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:13
+msgid "Animate artwork during Auto DJ transitions"
+msgstr "Animer des illustrations pendant les transitions Auto DJ"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:14
+msgid "Show the Auto DJ badge"
+msgstr "Afficher le badge Auto DJ"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:15 src/preferences.py:139
+msgid "Gapless playback"
+msgstr "Lecture sans interruption"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:16
+msgid "ReplayGain normalization"
+msgstr "Normalisation ReplayGain"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:17
+msgid "Dynamic background"
+msgstr "Arrière-plan dynamique"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:18 src/preferences.py:160
+msgid "Follow the app accent color"
+msgstr "Suivre la couleur d’accentuation de l’application"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:18
+msgid ""
+"Tint the sidebar and interface controls with the current artwork accent "
+"color."
+msgstr ""
+"Teinter la barre latérale et les contrôles de l’interface avec la couleur "
+"d’accentuation actuelle de l’illustration."
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:19
+msgid "Show nickname in the Home greeting"
+msgstr "Afficher le surnom dans le message d'accueil"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:20
+msgid "Vinyl rotation"
+msgstr "Rotation des vinyles"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:21
+msgid "Interface animations"
+msgstr "Animations d'interfaces"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:22 src/preferences.py:228
+msgid "Now playing notifications"
+msgstr "Notifications de lecture en cours"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:23
+msgid "Keep Groovia running after its window is closed"
+msgstr "Laisser Groovia fonctionner après la fermeture de sa fenêtre"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:24
+msgid "spotDL legal notice acknowledged"
+msgstr "Avis légal spotDL reconnu"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:25
+msgid "Download format"
+msgstr "Format de téléchargement"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:26
+msgid "Download bitrate"
+msgstr "Débit de téléchargement"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:27
+msgid "Playlist synchronization mode"
+msgstr "Mode de synchronisation des playlists"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:28
+msgid "Automatic synchronization policy"
+msgstr "Politique de synchronisation automatique"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:29
+msgid "Playlist cover policy"
+msgstr "Gestion de la pochette des playlists"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:30
+msgid "Playlist order policy"
+msgstr "Gestion de l’ordre des playlists"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:31 src/preferences.py:427
+msgid "Use LRCLIB when Better Lyrics is unavailable"
+msgstr "Utiliser LRCLIB lorsque Better Lyrics n’est pas disponible"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:32
+msgid "Search missing lyrics automatically"
+msgstr "Rechercher automatiquement les paroles manquantes"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:33
+msgid "Preserve edited lyrics"
+msgstr "Conserver les paroles modifiées"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:34 src/preferences.py:433
+msgid "Show lyrics availability"
+msgstr "Afficher la disponibilité des paroles"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:35
+msgid "Lyrics wave effect"
+msgstr "Effet de vague des paroles"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:36
+msgid "Lyrics glow effect"
+msgstr "Effet lumineux des paroles"
+
+#: data/io.github.Lluciocc.Groovia.gschema.xml:37
+msgid "Lyrics background artwork preference"
+msgstr "Préférence d’illustration pour l’arrière-plan des paroles"
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:8
+msgid "Your local music, beautifully organized"
+msgstr "Votre musique locale, joliment organisée"
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:11
+msgid ""
+"Groovia is a local music player for GNOME that makes a personal collection "
+"feel like a record shelf. It scans folders in the background, groups tracks "
+"into albums, reads embedded metadata and artwork, and keeps the library in a "
+"local database."
+msgstr ""
+"Groovia est un lecteur de musique local pour GNOME qui donne à une "
+"collection personnelle l'impression d'être une étagère à disques. Il analyse "
+"les dossiers en arrière-plan, regroupe les morceaux dans des albums, lit les "
+"métadonnées et les illustrations intégrées et conserve la bibliothèque dans "
+"une base de données locale."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:12
+msgid ""
+"The player combines GStreamer playback with an animated vinyl deck, a "
+"responsive queue, configurable crossfade, gapless playback, ReplayGain "
+"normalization, notifications, and MPRIS controls where supported. Album "
+"artwork can shape the interface's color palette, while animations and other "
+"visual options can be adjusted in Preferences."
+msgstr ""
+"Le lecteur combine la lecture GStreamer avec une platine vinyle animée, une "
+"file d'attente réactive, un fondu enchaîné configurable, une lecture sans "
+"interruption, une normalisation ReplayGain, des notifications et des "
+"commandes MPRIS lorsqu'elles sont prises en charge. Les illustrations "
+"d'album peuvent façonner la palette de couleurs de l'interface, tandis que "
+"les animations et autres options visuelles peuvent être ajustées dans les "
+"Préférences."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:13
+msgid ""
+"Organize music with playlists and favorites, search and sort tracks, create "
+"custom playlist covers, and play common local formats including MP3, FLAC, "
+"Ogg Vorbis, Opus, WAV, AAC, and M4A."
+msgstr ""
+"Organisez votre musique avec des playlists et des favoris, recherchez et "
+"triez les morceaux, créez des pochettes de playlist personnalisées et lisez "
+"les formats locaux courants, notamment MP3, FLAC, Ogg Vorbis, Opus, WAV, AAC "
+"et M4A."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:14
+msgid ""
+"Optional Spotify imports use spotDL to find matching audio and preserve "
+"playlist metadata and artwork. Groovia does not stream or download audio "
+"directly from Spotify. Synchronized and plain lyrics can be imported, "
+"downloaded when supported, edited locally, and displayed line by line or "
+"word by word."
+msgstr ""
+"Les importations Spotify facultatives utilisent spotDL pour trouver les "
+"fichiers audio correspondants et conserver les métadonnées et la pochette de "
+"la playlist. Groovia ne diffuse ni ne télécharge directement de contenu "
+"audio depuis Spotify. Les paroles synchronisées et non synchronisées peuvent "
+"être importées, téléchargées lorsque cela est possible, modifiées localement "
+"et affichées ligne par ligne ou mot par mot."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:15
+msgid ""
+"Auto DJ is an opt-in feature that analyzes tracks in the background and "
+"plans queue-safe transitions using phrase, silence, beat, tempo, and bass "
+"information when available. It keeps the queue intact and falls back "
+"gracefully when advanced audio processing is unavailable."
+msgstr ""
+"Auto DJ est une fonctionnalité facultative qui analyse les morceaux en "
+"arrière-plan et planifie des transitions respectant la file d’attente à "
+"partir des phrases musicales, des silences, du rythme, du tempo et des "
+"basses lorsque ces informations sont disponibles. La file d’attente reste "
+"intacte et l’application utilise une transition simple lorsque l’analyse "
+"audio avancée n’est pas disponible."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:19
+msgid "Lluciocc"
+msgstr "Lluciocc"
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:36 src/window.py:4467
+msgid "Music"
+msgstr "Musique"
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:37 src/window.py:4477
+msgid "Audio"
+msgstr "Audio"
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:38
+msgid "Player"
+msgstr "Lecteur"
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:39 src/preferences.py:253
+#: src/shortcuts-dialog.ui:86 src/window.py:3600
+msgid "Library"
+msgstr "Bibliothèque"
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:40
+msgid "Vinyl"
+msgstr "Vinyle"
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:41 src/preferences.py:422
+#: src/window.py:1396 src/window.py:3608
+msgid "Lyrics"
+msgstr "Paroles"
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:42
+msgid "Spotify"
+msgstr "Spotify"
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:60
+msgid "Control playback from the queue and animated vinyl deck."
+msgstr ""
+"Contrôlez la lecture depuis la file d’attente et la platine vinyle animée."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:64
+msgid "Browse a local music collection in an album-first library."
+msgstr ""
+"Parcourez une collection de musique locale dans une bibliothèque d'albums."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:68
+msgid "Read synchronized lyrics while listening."
+msgstr "Lisez les paroles synchronisées tout en écoutant."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:76
+msgid "Added dedicated album and artist pages."
+msgstr "Ajout de pages dédiées aux albums et aux artistes."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:77
+msgid "Added artist artwork, biographies, and locally cached metadata."
+msgstr ""
+"Ajout d'illustrations d'artistes, de biographies et de métadonnées mises en "
+"cache localement."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:78
+msgid "Added optional background playback."
+msgstr "Ajout de la lecture en arrière-plan facultative."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:79
+msgid "Improved downloads, Auto DJ dependencies, and library grouping."
+msgstr ""
+"Amélioration des téléchargements, des dépendances d’Auto DJ et du "
+"regroupement dans la bibliothèque."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:80
+msgid "Improved Windows startup, packaging, icons, and installer metadata."
+msgstr ""
+"Amélioration du démarrage, de l'empaquetage, des icônes et des métadonnées "
+"du programme d'installation de Windows."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:87
+msgid ""
+"Improved Groovia's interface, playback experience, Auto DJ integration, and "
+"cross-platform support."
+msgstr ""
+"Amélioration de l'interface de Groovia, de l'expérience de lecture, de "
+"l'intégration de Auto DJ et de la prise en charge multiplateforme."
+
+#: data/io.github.Lluciocc.Groovia.metainfo.xml.in:92
+msgid ""
+"Initial release of Groovia, with local library scanning, album browsing, "
+"playlists, queue-based playback, animated vinyl artwork, lyrics support, "
+"Spotify imports through spotDL, and the optional Auto DJ transition engine."
+msgstr ""
+"Version initiale de Groovia, avec analyse de bibliothèque locale, navigation "
+"dans les albums, playlists, lecture basée sur une file d'attente, "
+"illustrations vinyles animées, prise en charge des paroles, importations "
+"Spotify via spotDL et moteur de transition Auto DJ en option."
+
+#: src/audio/player.py:133
+msgid "GStreamer playback is unavailable on this system."
+msgstr "La lecture GStreamer n’est pas disponible sur ce système."
+
+#: src/downloads/importer.py:69
+msgid "Preparing library import"
+msgstr "Préparation de l’importation dans la bibliothèque"
+
+#: src/downloads/manager.py:514 src/window.py:5907
+msgid "Dependency installation cancelled"
+msgstr "Installation des dépendances annulée"
+
+#: src/downloads/manager.py:536
+#, python-format
+msgid ""
+"Bundled Windows downloader tools are missing: %(tools)s. Reinstall Groovia "
+"or rebuild the package."
+msgstr ""
+"Les outils de téléchargement Windows intégrés sont manquants : %(tools)s. "
+"Réinstallez Groovia ou reconstruisez le paquet."
+
+#: src/downloads/manager.py:545
+msgid ""
+"Bundled Windows downloader tools are installed. They are managed by the "
+"Groovia installer."
+msgstr ""
+"Les outils de téléchargement Windows intégrés sont installés. Ils sont gérés "
+"par le programme d’installation de Groovia."
+
+#: src/downloads/manager.py:565
+msgid "Creating private Python environment"
+msgstr "Création d'un environnement Python privé"
+
+#: src/downloads/manager.py:570
+msgid "Installing spotDL"
+msgstr "Installation de spotDL"
+
+#: src/downloads/manager.py:579
+msgid "spotDL is already available; keeping the existing installation."
+msgstr "spotDL est déjà disponible ; l’installation existante est conservée."
+
+#: src/downloads/manager.py:587
+msgid "FFmpeg is already available; skipping overwrite."
+msgstr "FFmpeg est déjà disponible ; l’installation est ignorée."
+
+#: src/downloads/manager.py:590
+msgid "Installing FFmpeg"
+msgstr "Installation de FFmpeg"
+
+#: src/downloads/manager.py:594
+msgid "Deno is already available; skipping overwrite."
+msgstr "Deno est déjà disponible ; l’installation est ignorée."
+
+#: src/downloads/manager.py:597
+msgid "Installing Deno"
+msgstr "Installation de Deno"
+
+#: src/downloads/service.py:90
+msgid "Enter a Spotify track, Spotify playlist or .spotdl file."
+msgstr ""
+"Saisissez un morceau Spotify, une playlist Spotify ou un fichier .spotdl."
+
+#: src/downloads/service.py:101
+msgid "This .spotdl file is invalid or cannot be read."
+msgstr "Ce fichier .spotdl n'est pas valide ou ne peut pas être lu."
+
+#: src/downloads/service.py:190 src/downloads/service.py:246
+msgid "Mirror synchronization is restricted to Groovia-managed directories."
+msgstr ""
+"La synchronisation miroir est limitée aux répertoires gérés par Groovia."
+
+#: src/downloads/service.py:233
+msgid "Synchronization data is missing."
+msgstr "Les données de synchronisation sont manquantes."
+
+#: src/downloads/service.py:306
+msgid "No lyrics found online."
+msgstr "Aucune parole trouvée en ligne."
+
+#: src/downloads/spotdl.py:185
+msgid "spotDL is not installed or is not executable"
+msgstr "spotDL n’est pas installé ou n’est pas exécutable"
+
+#: src/downloads/spotdl.py:250
+msgid ""
+"Windows downloader tools are staged at build time; runtime venv and pip "
+"installation are disabled."
+msgstr ""
+"Les outils de téléchargement pour Windows sont intégrés lors de la création "
+"du paquet ; la création d’un environnement virtuel et l’installation avec "
+"pip sont désactivées à l’exécution."
+
+#: src/main.py:156
+msgid ""
+"Groovia is built for people who still keep and enjoy their own music "
+"collection.\n"
+"\n"
+"It combines a clean, album-focused library with a playful vinyl-inspired "
+"interface, while keeping your music local and under your control. There are "
+"no accounts or subscriptions: Groovia helps you rediscover the music you "
+"already own.\n"
+"\n"
+"Groovia is still growing, but the goal is simple: make listening to a local "
+"music library feel personal, modern and enjoyable again.\n"
+"\n"
+msgstr ""
+"Groovia est conçu pour les personnes qui conservent et apprécient toujours "
+"leur propre collection de musique.\n"
+"\n"
+"Il combine une bibliothèque épurée axée sur les albums avec une interface "
+"ludique inspirée du vinyle, tout en gardant votre musique locale et sous "
+"votre contrôle. Il n'y a pas de compte ni d'abonnement : Groovia vous aide à "
+"redécouvrir la musique que vous possédez déjà.\n"
+"\n"
+"Groovia continue de croître, mais l'objectif est simple : rendre l'écoute "
+"d'une bibliothèque musicale locale à nouveau personnelle, moderne et "
+"agréable.\n"
+
+#: src/main.py:169
+msgid "Data Providers"
+msgstr "Fournisseurs de données"
+
+#: src/main.py:182
+msgid "Tools and Audio Sources"
+msgstr "Outils et sources audio"
+
+#: src/main.py:190
+msgid "License"
+msgstr "Licence"
+
+#: src/main.py:191
+msgid "Donate"
+msgstr "Faire un don"
+
+#: src/preferences.py:27
+#, python-format
+msgid "%(count)d second"
+msgid_plural "%(count)d seconds"
+msgstr[0] "%(count)d seconde"
+msgstr[1] "%(count)d secondes"
+
+#: src/preferences.py:32 src/window.py:825
+msgid "Preferences"
+msgstr "Préférences"
+
+#: src/preferences.py:36 src/shortcuts-dialog.ui:7
+msgid "Playback"
+msgstr "Lecture"
+
+#: src/preferences.py:39
+msgid "Crossfade"
+msgstr "Fondu enchaîné"
+
+#: src/preferences.py:39
+msgid "Mix the end of a track into the next one"
+msgstr "Mélanger la fin d’un morceau avec le début du suivant"
+
+#: src/preferences.py:42
+msgid "Off"
+msgstr "Désactivé"
+
+#: src/preferences.py:49
+msgid "Transitions"
+msgstr "Transitions"
+
+#: src/preferences.py:53 src/window.py:2721
+msgid "Auto DJ"
+msgstr "Auto DJ"
+
+#: src/preferences.py:55
+msgid ""
+"Analyze the next track in the background and create musical, queue-safe "
+"transitions."
+msgstr ""
+"Analyser le morceau suivant en arrière-plan et créer des transitions "
+"musicales qui respectent la file d’attente."
+
+#: src/preferences.py:60
+msgid "Use intelligent transitions while keeping the existing queue unchanged"
+msgstr ""
+"Utiliser des transitions intelligentes sans modifier la file d’attente "
+"existante"
+
+#: src/preferences.py:65
+msgid "Transition style"
+msgstr "Style de transition"
+
+#: src/preferences.py:66
+msgid "Choose how expressive the mix should feel"
+msgstr "Choisir le caractère du mixage"
+
+#: src/preferences.py:69
+msgid "Subtle"
+msgstr "Subtil"
+
+#: src/preferences.py:69
+msgid "Balanced"
+msgstr "Équilibré"
+
+#: src/preferences.py:69
+msgid "Energetic"
+msgstr "Énergique"
+
+#: src/preferences.py:77
+msgid "Transition length"
+msgstr "Longueur de transition"
+
+#: src/preferences.py:78
+msgid "Automatic chooses a musical duration from the analysis"
+msgstr "Le mode automatique choisit une durée musicale à partir de l’analyse"
+
+#: src/preferences.py:84 src/preferences.py:345
+msgid "Automatic"
+msgstr "Automatique"
+
+#: src/preferences.py:101
+msgid "Beat matching"
+msgstr "Correspondance des battements"
+
+#: src/preferences.py:101
+msgid "Use BPM data only when confidence is high"
+msgstr "Utilisez les données BPM uniquement lorsque la confiance est élevée"
+
+#: src/preferences.py:104
+msgid "Phrase matching"
+msgstr "Correspondance des phrases musicales"
+
+#: src/preferences.py:105
+msgid "Avoid switching in the middle of musical phrases"
+msgstr "Éviter les changements au milieu des phrases musicales"
+
+#: src/preferences.py:108
+msgid "Tempo matching"
+msgstr "Correspondance du tempo"
+
+#: src/preferences.py:108
+msgid "Never exceed the conservative tempo range"
+msgstr "Ne jamais dépasser la plage de tempo recommandée"
+
+#: src/preferences.py:111
+msgid "Smart EQ"
+msgstr "Égaliseur intelligent"
+
+#: src/preferences.py:111
+msgid "Reduce bass buildup during overlap"
+msgstr "Réduire l’accumulation des basses pendant le chevauchement"
+
+#: src/preferences.py:114
+msgid "Silence detection"
+msgstr "Détection des silences"
+
+#: src/preferences.py:115
+msgid "Use intro and outro silence in the plan"
+msgstr "Tenir compte des silences d’introduction et de fin"
+
+#: src/preferences.py:118
+msgid "Artwork animation"
+msgstr "Animation de l’illustration"
+
+#: src/preferences.py:119
+msgid "Animate the player artwork during a transition"
+msgstr "Animer l’illustration du lecteur pendant une transition"
+
+#: src/preferences.py:122
+msgid "Show Auto DJ badge"
+msgstr "Afficher le badge Auto DJ"
+
+#: src/preferences.py:123
+msgid "Display a small indicator while tracks are mixed"
+msgstr "Afficher un petit indicateur pendant le mixage des morceaux"
+
+#: src/preferences.py:137
+msgid "Options"
+msgstr "Options"
+
+#: src/preferences.py:139
+msgid "Avoid silence between compatible tracks"
+msgstr "Éviter les silences entre les morceaux compatibles"
+
+#: src/preferences.py:143
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: src/preferences.py:143
+msgid "Keep albums at a consistent listening level"
+msgstr "Maintenir un niveau d’écoute homogène entre les albums"
+
+#: src/preferences.py:151
+msgid "Interface"
+msgstr "Interface"
+
+#: src/preferences.py:153 src/shortcuts-dialog.ui:61
+msgid "Visuals"
+msgstr "Visuels"
+
+#: src/preferences.py:155
+msgid "Dynamic album background"
+msgstr "Arrière-plan dynamique de l’album"
+
+#: src/preferences.py:156
+msgid "Tint the player with the current artwork"
+msgstr "Teinter le lecteur avec les couleurs de l’illustration actuelle"
+
+#: src/preferences.py:161
+msgid "Tint the sidebar and controls with the current artwork accent"
+msgstr ""
+"Teinter la barre latérale et les contrôles avec la couleur d’accentuation de "
+"l’illustration actuelle"
+
+#: src/preferences.py:170
+msgid "Show nickname in greeting"
+msgstr "Afficher le surnom dans le message d'accueil"
+
+#: src/preferences.py:171
+msgid "Display your system username on the Home page"
+msgstr "Afficher votre nom d’utilisateur système sur la page d’accueil"
+
+#: src/preferences.py:180
+msgid "Spinning vinyl"
+msgstr "Vinyle qui tourne"
+
+#: src/preferences.py:180
+msgid "Animate the record while music is playing"
+msgstr "Faire tourner le disque pendant la lecture"
+
+#: src/preferences.py:184
+msgid "Animations"
+msgstr "Animations"
+
+#: src/preferences.py:184
+msgid "Respect the system reduced-motion preference"
+msgstr "Respecter la préférence de mouvement réduit du système"
+
+#: src/preferences.py:188
+msgid "Lyrics wave"
+msgstr "Vague des paroles"
+
+#: src/preferences.py:189
+msgid "Apply the soft vertical emphasis wave to word-synced lyrics"
+msgstr ""
+"Appliquer une légère vague verticale aux paroles synchronisées mot par mot"
+
+#: src/preferences.py:193
+msgid "Lyrics glow"
+msgstr "Halo des paroles"
+
+#: src/preferences.py:194
+msgid "Add a subtle light bloom around the current lyric position"
+msgstr "Ajouter un léger halo autour des paroles en cours"
+
+#: src/preferences.py:198
+msgid "Lyrics background"
+msgstr "Arrière-plan des paroles"
+
+#: src/preferences.py:199
+msgid "Choose animated Better Lyrics artwork or the album cover"
+msgstr ""
+"Choisir l’illustration animée de Better Lyrics ou la pochette de l’album"
+
+#: src/preferences.py:202
+msgid "Animated artwork when available"
+msgstr "Illustration animée si disponible"
+
+#: src/preferences.py:202
+msgid "Album cover"
+msgstr "Pochette de l’album"
+
+#: src/preferences.py:226
+msgid "Notifications"
+msgstr "Notifications"
+
+#: src/preferences.py:229
+msgid "Show a notification when the track changes"
+msgstr "Afficher une notification lors du changement de morceau"
+
+#: src/preferences.py:239
+msgid "Behavior"
+msgstr "Comportement"
+
+#: src/preferences.py:241
+msgid "Keep Groovia running in the background"
+msgstr "Laisser Groovia fonctionner en arrière-plan"
+
+#: src/preferences.py:242
+msgid "Closing the window hides Groovia and keeps the music playing"
+msgstr ""
+"La fermeture de la fenêtre masque Groovia et continue la lecture de la "
+"musique"
+
+#: src/preferences.py:254
+msgid "Music folders"
+msgstr "Dossiers de musique"
+
+#: src/preferences.py:257
+msgid "Folders are scanned in the background"
+msgstr "Les dossiers sont analysés en arrière-plan"
+
+#: src/preferences.py:258
+msgid "Use Import music folder from the sidebar to add a location"
+msgstr ""
+"Utiliser « Importer un dossier de musique » dans la barre latérale pour "
+"ajouter un emplacement"
+
+#: src/preferences.py:263
+msgid "Downloads"
+msgstr "Téléchargements"
+
+#: src/preferences.py:265
+msgid "Spotify imports"
+msgstr "Importations Spotify"
+
+#: src/preferences.py:267
+msgid ""
+"Groovia uses spotDL to find matching audio and preserve Spotify metadata."
+msgstr ""
+"Groovia utilise spotDL pour trouver l'audio correspondant et préserver les "
+"métadonnées Spotify."
+
+#: src/preferences.py:271
+msgid "Bundled downloader tools"
+msgstr "Outils de téléchargement intégrés"
+
+#: src/preferences.py:271
+msgid "spotDL dependencies"
+msgstr "Dépendances spotDL"
+
+#: src/preferences.py:274
+msgid ""
+"spotDL, FFmpeg and Deno are installed with Groovia and managed by the "
+"installer."
+msgstr ""
+"spotDL, FFmpeg et Deno sont installés avec Groovia et gérés par le programme "
+"d'installation."
+
+#: src/preferences.py:277
+msgid "spotDL, FFmpeg and Deno are managed separately from playback."
+msgstr "spotDL, FFmpeg et Deno sont gérés séparément de la lecture."
+
+#: src/preferences.py:281
+msgid "Verify bundled tools"
+msgstr "Vérifier les outils intégrés"
+
+#: src/preferences.py:281
+msgid "Install or repair"
+msgstr "Installer ou réparer"
+
+#: src/preferences.py:301
+msgid "Packaged tools"
+msgstr "Outils intégrés"
+
+#: src/preferences.py:302
+msgid "Reinstall Groovia to repair bundled downloader files."
+msgstr ""
+"Réinstallez Groovia pour réparer les outils de téléchargement intégrés."
+
+#: src/preferences.py:307
+msgid "Remove Groovia-managed tools"
+msgstr "Supprimer les outils gérés par Groovia"
+
+#: src/preferences.py:308
+msgid "Remove the private spotDL environment, FFmpeg and Deno copies."
+msgstr ""
+"Supprimer l’environnement privé de spotDL ainsi que les copies de FFmpeg et "
+"de Deno."
+
+#: src/preferences.py:310 src/window.py:4696 src/window.py:6172
+msgid "Remove"
+msgstr "Retirer"
+
+#: src/preferences.py:319
+msgid "Locations"
+msgstr "Emplacements"
+
+#: src/preferences.py:321
+msgid "Music download directory"
+msgstr "Répertoire de téléchargement de musique"
+
+#: src/preferences.py:325
+msgid "Synchronized playlists"
+msgstr "Playlists synchronisées"
+
+#: src/preferences.py:332
+msgid "Download options"
+msgstr "Options de téléchargement"
+
+#: src/preferences.py:333
+msgid "Audio format"
+msgstr "Format audio"
+
+#: src/preferences.py:343
+msgid "Audio bitrate"
+msgstr "Débit audio"
+
+#: src/preferences.py:361
+msgid "Synchronization"
+msgstr "Synchronisation"
+
+#: src/preferences.py:363
+msgid "Synchronization mode"
+msgstr "Mode de synchronisation"
+
+#: src/preferences.py:364
+msgid "Safe mode never deletes local audio files."
+msgstr "Le mode sans échec ne supprime jamais les fichiers audio locaux."
+
+#: src/preferences.py:366
+msgid "Safe"
+msgstr "Sécurisé"
+
+#: src/preferences.py:366
+msgid "Mirror"
+msgstr "Miroir"
+
+#: src/preferences.py:373
+msgid "Automatic synchronization"
+msgstr "Synchronisation automatique"
+
+#: src/preferences.py:376
+msgid "Manually only"
+msgstr "Manuellement uniquement"
+
+#: src/preferences.py:376
+msgid "On startup"
+msgstr "Au démarrage"
+
+#: src/preferences.py:376
+msgid "Once per day"
+msgstr "Une fois par jour"
+
+#: src/preferences.py:376
+msgid "Once per week"
+msgstr "Une fois par semaine"
+
+#: src/preferences.py:387 src/window.py:2489
+msgid "Playlist cover"
+msgstr "Pochette de la playlist"
+
+#: src/preferences.py:389
+msgid "Follow Spotify"
+msgstr "Suivre Spotify"
+
+#: src/preferences.py:389
+msgid "Keep custom local cover"
+msgstr "Conserver une couverture locale personnalisée"
+
+#: src/preferences.py:401
+msgid "Playlist order"
+msgstr "Ordre des playlists"
+
+#: src/preferences.py:403
+msgid "Follow Spotify order"
+msgstr "Suivre l’ordre de Spotify"
+
+#: src/preferences.py:403
+msgid "Keep local order"
+msgstr "Conserver l’ordre local"
+
+#: src/preferences.py:424
+msgid ""
+"Synchronized lyrics are optional and may not be available for every track."
+msgstr ""
+"Les paroles synchronisées sont facultatives et peuvent ne pas être "
+"disponibles pour chaque morceau."
+
+#: src/preferences.py:429
+msgid "Search automatically for missing lyrics"
+msgstr "Rechercher automatiquement les paroles manquantes"
+
+#: src/preferences.py:431
+msgid "Keep manually edited lyrics"
+msgstr "Conserver les paroles modifiées manuellement"
+
+#: src/preferences.py:441
+msgid "Online lyrics providers"
+msgstr "Fournisseurs de paroles en ligne"
+
+#: src/preferences.py:442
+msgid "Better Lyrics (syllable sync) with LRCLIB as a fallback"
+msgstr ""
+"Better Lyrics (synchronisation des syllabes) avec LRCLIB comme solution de "
+"repli"
+
+#: src/preferences.py:454
+msgid "Data"
+msgstr "Données"
+
+#: src/preferences.py:456
+msgid "Reset Groovia"
+msgstr "Réinitialiser Groovia"
+
+#: src/preferences.py:458
+msgid ""
+"Remove Groovia's downloaded music, lyrics, playlists, cache and settings."
+msgstr ""
+"Supprimer la musique téléchargée par Groovia, les paroles, les playlists, le "
+"cache et les paramètres."
+
+#: src/preferences.py:462
+msgid "Delete all Groovia data"
+msgstr "Supprimer toutes les données Groovia"
+
+#: src/preferences.py:464
+msgid ""
+"Downloaded music in Music/Groovia and all local application data will be "
+"permanently deleted."
+msgstr ""
+"La musique téléchargée dans Music/Groovia et toutes les données des "
+"applications locales seront définitivement supprimées."
+
+#: src/preferences.py:467 src/window.py:6210
+msgid "Delete all data"
+msgstr "Supprimer toutes les données"
+
+#: src/shortcuts-dialog.ui:4 src/window.py:826
+msgid "Keyboard Shortcuts"
+msgstr "Raccourcis clavier"
+
+#: src/shortcuts-dialog.ui:10
+msgctxt "shortcut window"
+msgid "Play / Pause"
+msgstr "Lecture / Pause"
+
+#: src/shortcuts-dialog.ui:16
+msgctxt "shortcut window"
+msgid "Previous Track"
+msgstr "Morceau précédent"
+
+#: src/shortcuts-dialog.ui:22
+msgctxt "shortcut window"
+msgid "Next Track"
+msgstr "Morceau suivant"
+
+#: src/shortcuts-dialog.ui:28
+msgctxt "shortcut window"
+msgid "Mute / Unmute"
+msgstr "Couper / rétablir le son"
+
+#: src/shortcuts-dialog.ui:34
+msgctxt "shortcut window"
+msgid "Show Lyrics"
+msgstr "Afficher les paroles"
+
+#: src/shortcuts-dialog.ui:40
+msgctxt "shortcut window"
+msgid "Toggle lyrics Lines / Words"
+msgstr "Basculer les paroles entre lignes et mots"
+
+#: src/shortcuts-dialog.ui:48
+msgid "Navigation"
+msgstr "Navigation"
+
+#: src/shortcuts-dialog.ui:49 src/window.py:838
+msgid "Home"
+msgstr "Accueil"
+
+#: src/shortcuts-dialog.ui:50 src/window.py:839 src/window.py:2894
+msgid "All Music"
+msgstr "Toute la musique"
+
+#: src/shortcuts-dialog.ui:51 src/window.py:840 src/window.py:1128
+#: src/window.py:1361
+msgid "Albums"
+msgstr "Albums"
+
+#: src/shortcuts-dialog.ui:52 src/window.py:841 src/window.py:1152
+msgid "Artists"
+msgstr "Artistes"
+
+#: src/shortcuts-dialog.ui:53 src/window.py:842 src/window.py:1219
+msgid "Queue"
+msgstr "File d’attente"
+
+#: src/shortcuts-dialog.ui:54 src/window.py:912
+msgid "Download from URL"
+msgstr "Télécharger depuis une URL"
+
+#: src/shortcuts-dialog.ui:55
+msgid "Open / Close menu"
+msgstr "Ouvrir / fermer le menu"
+
+#: src/shortcuts-dialog.ui:56
+msgid "Open / Close sidebar"
+msgstr "Ouvrir / fermer la barre latérale"
+
+#: src/shortcuts-dialog.ui:62
+msgid "Fullscreen current view"
+msgstr "Afficher la vue actuelle en plein écran"
+
+#: src/shortcuts-dialog.ui:63 src/window.py:930
+msgid "Fullscreen vinyl"
+msgstr "Afficher le vinyle en plein écran"
+
+#: src/shortcuts-dialog.ui:64 src/window.py:1416
+msgid "Fullscreen lyrics"
+msgstr "Afficher les paroles en plein écran"
+
+#: src/shortcuts-dialog.ui:69 src/window.py:3629
+msgid "Playlist"
+msgstr "Playlist"
+
+#: src/shortcuts-dialog.ui:72
+msgctxt "shortcut window"
+msgid "Move Track Up"
+msgstr "Monter le morceau"
+
+#: src/shortcuts-dialog.ui:78
+msgctxt "shortcut window"
+msgid "Move Track Down"
+msgstr "Descendre le morceau"
+
+#: src/shortcuts-dialog.ui:89
+msgctxt "shortcut window"
+msgid "Search"
+msgstr "Rechercher"
+
+#: src/shortcuts-dialog.ui:95
+msgctxt "shortcut window"
+msgid "Import Music Folder"
+msgstr "Importer un dossier de musique"
+
+#: src/shortcuts-dialog.ui:103
+msgid "Application"
+msgstr "Application"
+
+#: src/shortcuts-dialog.ui:106
+msgctxt "shortcut window"
+msgid "Show Shortcuts"
+msgstr "Afficher les raccourcis"
+
+#: src/shortcuts-dialog.ui:112
+msgctxt "shortcut window"
+msgid "Quit"
+msgstr "Quitter"
+
+#: src/widgets/lyrics_view.py:1251 src/widgets/lyrics_view.py:1273
+msgid "Seek to this lyric line"
+msgstr "Aller à cette ligne de paroles"
+
+#: src/window.py:186 src/window.py:207 src/window.py:5832
+msgid "Cancelled"
+msgstr "Annulé"
+
+#: src/window.py:187
+msgid "Disconnected"
+msgstr "Déconnecté"
+
+#: src/window.py:188 src/window.py:208 src/window.py:217 src/window.py:5832
+msgid "Failed"
+msgstr "Échec"
+
+#: src/window.py:189
+msgid "Synchronized"
+msgstr "Synchronisé"
+
+#: src/window.py:190
+msgid "Synchronizing"
+msgstr "Synchronisation"
+
+#: src/window.py:196
+msgid "Never synchronized"
+msgstr "Jamais synchronisé"
+
+#: src/window.py:201
+#, python-format
+msgid "%(count)d track imported"
+msgid_plural "%(count)d tracks imported"
+msgstr[0] "%(count)d morceau importé"
+msgstr[1] "%(count)d morceaux importés"
+
+#: src/window.py:205
+msgid "Library import failed"
+msgstr "L'importation de la bibliothèque a échoué"
+
+#: src/window.py:206
+msgid "Partial failure"
+msgstr "Échec partiel"
+
+#: src/window.py:214
+msgid "Converting audio"
+msgstr "Conversion audio"
+
+#: src/window.py:215
+msgid "Downloading"
+msgstr "Téléchargement"
+
+#: src/window.py:216
+msgid "Downloading audio"
+msgstr "Téléchargement de fichiers audio"
+
+#: src/window.py:218
+msgid "Imported"
+msgstr "Importé"
+
+#: src/window.py:219
+msgid "Importing"
+msgstr "Importation"
+
+#: src/window.py:220
+msgid "Matching audio"
+msgstr "Recherche du fichier audio correspondant"
+
+#: src/window.py:221
+msgid "Preparing"
+msgstr "Préparation"
+
+#: src/window.py:222
+msgid "Processing audio"
+msgstr "Traitement du son"
+
+#: src/window.py:223
+msgid "Reusing existing file"
+msgstr "Réutilisation du fichier existant"
+
+#: src/window.py:224
+msgid "Searching for a match"
+msgstr "Recherche d'une correspondance"
+
+#: src/window.py:225
+msgid "Skipped"
+msgstr "Ignoré"
+
+#: src/window.py:226
+msgid "Writing metadata"
+msgstr "Écriture de métadonnées"
+
+#: src/window.py:780
+msgid "Toggle navigation"
+msgstr "Afficher ou masquer la navigation"
+
+#: src/window.py:784
+msgid "Main Menu"
+msgstr "Menu principal"
+
+#: src/window.py:827
+msgid "About Groovia"
+msgstr "À propos de Groovia"
+
+#: src/window.py:852
+msgid "YOUR COLLECTION"
+msgstr "VOTRE COLLECTION"
+
+#: src/window.py:856
+msgid "PLAYLISTS"
+msgstr "PLAYLISTS"
+
+#: src/window.py:863 src/window.py:2438
+msgid "New Playlist"
+msgstr "Nouvelle playlist"
+
+#: src/window.py:873
+msgid "Import music folder"
+msgstr "Importer un dossier de musique"
+
+#: src/window.py:892
+msgid "YOUR MUSIC, YOUR SPACE"
+msgstr "VOTRE MUSIQUE, VOTRE ESPACE"
+
+#: src/window.py:908
+msgid "Import music"
+msgstr "Importer de la musique"
+
+#: src/window.py:951
+msgid "NOW PLAYING"
+msgstr "LECTURE EN COURS"
+
+#: src/window.py:958
+msgid "Choose an album to start listening"
+msgstr "Choisissez un album pour commencer l’écoute"
+
+#: src/window.py:968
+msgid "Your local library is ready when you are."
+msgstr "Votre bibliothèque locale est prête quand vous l'êtes."
+
+#: src/window.py:987
+msgid "Play something"
+msgstr "Lancer la lecture"
+
+#: src/window.py:999
+msgid "Recently added"
+msgstr "Ajouts récents"
+
+#: src/window.py:1015
+msgid "Recently played"
+msgstr "Écoutés récemment"
+
+#: src/window.py:1024
+msgid "Most played albums"
+msgstr "Albums les plus écoutés"
+
+#: src/window.py:1030
+msgid "Most played artists"
+msgstr "Artistes les plus écoutés"
+
+#: src/window.py:1036
+msgid "Import a folder to bring your records into Groovia."
+msgstr "Importez un dossier pour ajouter vos disques à Groovia."
+
+#: src/window.py:1048
+msgid "Good morning"
+msgstr "Bonjour"
+
+#: src/window.py:1050
+msgid "Good afternoon"
+msgstr "Bon après-midi"
+
+#: src/window.py:1052
+msgid "Good evening"
+msgstr "Bonsoir"
+
+#: src/window.py:1060
+#, python-format
+msgid "%(greeting)s, %(nickname)s"
+msgstr "%(greeting)s, %(nickname)s"
+
+#: src/window.py:1080
+msgid "See all"
+msgstr "Voir tout"
+
+#: src/window.py:1104
+msgid "Search your library"
+msgstr "Rechercher dans votre bibliothèque"
+
+#: src/window.py:1131
+msgid "Search albums…"
+msgstr "Rechercher des albums…"
+
+#: src/window.py:1139
+msgid "No albums match this search."
+msgstr "Aucun album ne correspond à cette recherche."
+
+#: src/window.py:1155
+msgid "Search artists…"
+msgstr "Rechercher des artistes…"
+
+#: src/window.py:1174 src/window.py:1673 src/window.py:2441 src/window.py:2568
+#: src/window.py:2643 src/window.py:4662 src/window.py:4695 src/window.py:4719
+#: src/window.py:5374 src/window.py:6031 src/window.py:6060 src/window.py:6171
+#: src/window.py:6209
+msgid "Cancel"
+msgstr "Annuler"
+
+#: src/window.py:1185
+msgid "No artists match this search."
+msgstr "Aucun artiste ne correspond à cette recherche."
+
+#: src/window.py:1198
+#, python-format
+msgid ""
+"Groovia is retrieving information about your artists. This may take a while… "
+"%(count)d remaining."
+msgid_plural ""
+"Groovia is retrieving information about your artists. This may take a while… "
+"%(count)d remaining."
+msgstr[0] ""
+"Groovia récupère des informations sur vos artistes. Cette opération peut "
+"prendre un moment… %(count)d restant."
+msgstr[1] ""
+"Groovia récupère des informations sur vos artistes. Cette opération peut "
+"prendre un moment… %(count)d restants."
+
+#: src/window.py:1210
+msgid "Artist information retrieval cancelled"
+msgstr "Récupération des informations sur l'artiste annulée"
+
+#: src/window.py:1220
+msgid "Clear"
+msgstr "Effacer"
+
+#: src/window.py:1220
+msgid "Clear queue"
+msgstr "Effacer la file d'attente"
+
+#: src/window.py:1227
+msgid "Your queue is empty."
+msgstr "Votre file d’attente est vide."
+
+#: src/window.py:1241
+msgid "Back to Albums"
+msgstr "Retour aux albums"
+
+#: src/window.py:1258
+msgid "ALBUM"
+msgstr "ALBUM"
+
+#: src/window.py:1266
+msgid "Play Album"
+msgstr "Lire l'album"
+
+#: src/window.py:1268 src/window.py:1331 src/window.py:2174 src/window.py:3594
+msgid "Add to Queue"
+msgstr "Ajouter à la file d’attente"
+
+#: src/window.py:1276 src/window.py:1364
+msgid "Songs"
+msgstr "Morceaux"
+
+#: src/window.py:1299
+msgid "Back to Artists"
+msgstr "Retour aux artistes"
+
+#: src/window.py:1317
+msgid "ARTIST"
+msgstr "ARTISTE"
+
+#: src/window.py:1329
+msgid "Play Artist"
+msgstr "Lire l’artiste"
+
+#: src/window.py:1337
+msgid "Artist website"
+msgstr "Site Internet de l'artiste"
+
+#: src/window.py:1339
+msgid "Open the artist website"
+msgstr "Ouvrir le site de l'artiste"
+
+#: src/window.py:1348
+msgid "About"
+msgstr "À propos"
+
+#: src/window.py:1354 src/window.py:3145
+msgid "Read more"
+msgstr "En savoir plus"
+
+#: src/window.py:1392
+msgid "Back"
+msgstr "Retour"
+
+#: src/window.py:1402
+msgid "Return to current lyric"
+msgstr "Revenir à la ligne de paroles en cours"
+
+#: src/window.py:1407 src/window.py:1774
+msgid "Lines"
+msgstr "Lignes"
+
+#: src/window.py:1408 src/window.py:1775
+msgid "Words"
+msgstr "Mots"
+
+#: src/window.py:1430
+msgid "No lyrics available"
+msgstr "Aucune parole disponible"
+
+#: src/window.py:1433
+msgid "Import an LRC, TTML, or text file, or search for lyrics later."
+msgstr ""
+"Importez un fichier LRC, TTML ou texte, ou recherchez des paroles plus tard."
+
+#: src/window.py:1438 src/window.py:3611
+msgid "Find Lyrics"
+msgstr "Rechercher les paroles"
+
+#: src/window.py:1440
+msgid "Import Lyrics File"
+msgstr "Importer un fichier de paroles"
+
+#: src/window.py:1442
+msgid "Add Lyrics Manually"
+msgstr "Ajouter des paroles manuellement"
+
+#: src/window.py:1463
+msgid "− 0.5 s"
+msgstr "− 0,5 s"
+
+#: src/window.py:1463
+msgid "Advance lyrics"
+msgstr "Avancer les paroles"
+
+#: src/window.py:1464
+msgid "+ 0.5 s"
+msgstr "+ 0,5 s"
+
+#: src/window.py:1464
+msgid "Delay lyrics"
+msgstr "Retarder les paroles"
+
+#: src/window.py:1592
+msgid "Nothing is playing"
+msgstr "Aucune lecture en cours"
+
+#: src/window.py:1618
+msgid "Synchronized lyrics"
+msgstr "Paroles synchronisées"
+
+#: src/window.py:1618
+msgid "Unsynchronized lyrics"
+msgstr "Paroles non synchronisées"
+
+#: src/window.py:1622
+msgid "No lyrics found"
+msgstr "Aucune parole trouvée"
+
+#: src/window.py:1645
+msgid "Line-by-line"
+msgstr "Ligne par ligne"
+
+#: src/window.py:1646
+msgid "Word-by-word"
+msgstr "Mot par mot"
+
+#: src/window.py:1647
+msgid "Plain"
+msgstr "Texte simple"
+
+#: src/window.py:1651
+#, python-format
+msgid "%(mode)s lyrics"
+msgstr "Paroles : %(mode)s"
+
+#: src/window.py:1666 src/window.py:4601
+msgid "Searching for lyrics…"
+msgstr "Recherche de paroles…"
+
+#: src/window.py:1671
+msgid "Add Lyrics"
+msgstr "Ajouter des paroles"
+
+#: src/window.py:1674 src/window.py:4663
+msgid "Save"
+msgstr "Enregistrer"
+
+#: src/window.py:1693 src/window.py:4683
+msgid "Lyrics saved"
+msgstr "Paroles enregistrées"
+
+#: src/window.py:1702 src/window.py:4642
+msgid "Import lyrics"
+msgstr "Importer des paroles"
+
+#: src/window.py:1716
+msgid "Choose an .lrc or .txt file"
+msgstr "Choisissez un fichier .lrc ou .txt"
+
+#: src/window.py:1720
+msgid "Lyrics imported"
+msgstr "Paroles importées"
+
+#: src/window.py:1722
+msgid "Could not import lyrics"
+msgstr "Impossible d'importer les paroles"
+
+#: src/window.py:1742 src/window.py:4928
+#, python-format
+msgid "Lyrics — %(title)s"
+msgstr "Paroles — %(title)s"
+
+#: src/window.py:1755 src/window.py:4567
+msgid "Exit fullscreen"
+msgstr "Quitter le plein écran"
+
+#: src/window.py:1908 src/window.py:2164 src/window.py:2698 src/window.py:3319
+#: src/window.py:3590 src/window.py:5026 src/window.py:5035
+msgctxt "playback action"
+msgid "Play"
+msgstr "Lire"
+
+#: src/window.py:1913 src/window.py:2169
+msgid "Shuffle"
+msgstr "Lecture aléatoire"
+
+#: src/window.py:1915 src/window.py:3619
+msgid "More"
+msgstr "Plus d’options"
+
+#: src/window.py:1917
+msgid "Sync Now"
+msgstr "Synchroniser maintenant"
+
+#: src/window.py:1928
+msgid "Search this playlist"
+msgstr "Rechercher cette playlist"
+
+#: src/window.py:1931
+msgid "Custom order"
+msgstr "Ordre personnalisé"
+
+#: src/window.py:1932
+msgid "Title"
+msgstr "Titre"
+
+#: src/window.py:1933
+msgid "Artist"
+msgstr "Artiste"
+
+#: src/window.py:1934
+msgid "Album"
+msgstr "Album"
+
+#: src/window.py:1935
+msgid "Duration"
+msgstr "Durée"
+
+#: src/window.py:1936
+msgid "Date added"
+msgstr "Date d'ajout"
+
+#: src/window.py:1939
+msgid "Sort playlist tracks"
+msgstr "Trier les morceaux de la playlist"
+
+#: src/window.py:1946
+msgid "This playlist is empty."
+msgstr "Cette playlist est vide."
+
+#: src/window.py:1947
+msgid "Add music"
+msgstr "Ajouter de la musique"
+
+#: src/window.py:2019
+#, python-format
+msgid "Drop a track to add it to %(playlist)s"
+msgstr "Déposez un morceau pour l’ajouter à %(playlist)s"
+
+#: src/window.py:2098
+#, python-format
+msgid "Last sync %(date)s"
+msgstr "Dernière synchronisation %(date)s"
+
+#: src/window.py:2102
+#, python-format
+msgid "%(count)d track · %(duration)s"
+msgid_plural "%(count)d tracks · %(duration)s"
+msgstr[0] "%(count)d morceau · %(duration)s"
+msgstr[1] "%(count)d morceaux · %(duration)s"
+
+#. Translators: "plain" means lyrics without timestamps.
+#: src/window.py:2113
+#, python-format
+msgid "Lyrics: %(synced)d synchronized / %(plain)d plain"
+msgstr "Paroles : %(synced)d synchronisées / %(plain)d non synchronisées"
+
+#: src/window.py:2173 src/window.py:3593
+msgid "Play Next"
+msgstr "Lire ensuite"
+
+#: src/window.py:2177 src/window.py:2569
+msgid "Rename"
+msgstr "Renommer"
+
+#: src/window.py:2181
+msgid "Change Cover"
+msgstr "Changer la pochette"
+
+#: src/window.py:2182
+msgid "Duplicate"
+msgstr "Dupliquer"
+
+#: src/window.py:2186
+msgid "Synchronize Now"
+msgstr "Synchroniser maintenant"
+
+#: src/window.py:2192
+msgid "Disable Automatic Synchronization"
+msgstr "Désactiver la synchronisation automatique"
+
+#: src/window.py:2194
+msgid "Enable Automatic Synchronization"
+msgstr "Activer la synchronisation automatique"
+
+#: src/window.py:2198
+msgid "View Source Playlist"
+msgstr "Afficher la playlist source"
+
+#: src/window.py:2200
+msgid "View Last Synchronization"
+msgstr "Afficher la dernière synchronisation"
+
+#: src/window.py:2204
+msgid "Repair Synchronization"
+msgstr "Réparer la synchronisation"
+
+#: src/window.py:2208
+msgid "Disconnect from Spotify Source"
+msgstr "Se déconnecter de la source Spotify"
+
+#: src/window.py:2213
+msgid "Download Missing Lyrics"
+msgstr "Télécharger les paroles manquantes"
+
+#: src/window.py:2217
+msgid "Refresh Lyrics"
+msgstr "Actualiser les paroles"
+
+#: src/window.py:2221
+msgid "Show Lyrics Coverage"
+msgstr "Afficher la disponibilité des paroles"
+
+#: src/window.py:2226
+msgid "Delete Playlist"
+msgstr "Supprimer la playlist"
+
+#: src/window.py:2240
+msgid "Playlist synchronization started"
+msgstr "La synchronisation de la playlist a commencé"
+
+#: src/window.py:2252
+#, python-format
+msgid "Searching lyrics for %(count)d track…"
+msgid_plural "Searching lyrics for %(count)d tracks…"
+msgstr[0] "Recherche des paroles pour %(count)d morceau…"
+msgstr[1] "Recherche des paroles pour %(count)d morceaux…"
+
+#: src/window.py:2259
+msgid "No tracks need lyrics"
+msgstr "Aucun morceau n'a besoin de paroles"
+
+#: src/window.py:2270
+msgid "Lyrics coverage"
+msgstr "Disponibilité des paroles"
+
+#: src/window.py:2274
+#, python-format
+msgid "%(synced)d of %(total)d track has synchronized lyrics"
+msgid_plural "%(synced)d of %(total)d tracks have synchronized lyrics"
+msgstr[0] "%(synced)d morceau sur %(total)d a des paroles synchronisées"
+msgstr[1] "%(synced)d morceaux sur %(total)d ont des paroles synchronisées"
+
+#: src/window.py:2280
+#, python-format
+msgid "%(count)d track has plain lyrics"
+msgid_plural "%(count)d tracks have plain lyrics"
+msgstr[0] "%(count)d morceau a des paroles non synchronisées"
+msgstr[1] "%(count)d morceaux ont des paroles non synchronisées"
+
+#: src/window.py:2286
+#, python-format
+msgid "%(count)d track has no lyrics"
+msgid_plural "%(count)d tracks have no lyrics"
+msgstr[0] "%(count)d morceau n’a pas de paroles"
+msgstr[1] "%(count)d morceaux n’ont pas de paroles"
+
+#: src/window.py:2294 src/window.py:2333 src/window.py:4374
+msgid "Close"
+msgstr "Fermer"
+
+#: src/window.py:2306
+msgid "Automatic synchronization enabled"
+msgstr "Synchronisation automatique activée"
+
+#: src/window.py:2308
+msgid "Automatic synchronization disabled"
+msgstr "Synchronisation automatique désactivée"
+
+#: src/window.py:2317
+#, python-format
+msgid "Could not open Spotify: %(error)s"
+msgstr "Impossible d'ouvrir Spotify : %(error)s"
+
+#: src/window.py:2324
+msgid "Synchronization details"
+msgstr "Détails de la synchronisation"
+
+#. Translators: %(file)s is the path to a spotDL synchronization file.
+#: src/window.py:2326
+#, python-format
+msgid ""
+"Status: %(status)s\n"
+"Last result: %(result)s\n"
+"Sync file: %(file)s"
+msgstr ""
+"Statut : %(status)s\n"
+"Dernier résultat: %(result)s\n"
+"Fichier de synchronisation : %(file)s"
+
+#: src/window.py:2330
+msgid "Missing"
+msgstr "Manquant"
+
+#: src/window.py:2343
+msgid "The original Spotify URL is missing"
+msgstr "L'URL Spotify d'origine est manquante"
+
+#: src/window.py:2349
+msgid "Spotify synchronization disconnected"
+msgstr "Synchronisation Spotify déconnectée"
+
+#: src/window.py:2381 src/window.py:2397
+msgid "This playlist is empty"
+msgstr "Cette playlist est vide"
+
+#: src/window.py:2406
+#, python-format
+msgid "Added %(count)d track to play next"
+msgid_plural "Added %(count)d tracks to play next"
+msgstr[0] "%(count)d morceau ajouté à la lecture suivante"
+msgstr[1] "%(count)d morceaux ajoutés à la lecture suivante"
+
+#: src/window.py:2422
+#, python-format
+msgid "Added %(count)d track to the queue"
+msgid_plural "Added %(count)d tracks to the queue"
+msgstr[0] "%(count)d morceau ajouté à la file d’attente"
+msgstr[1] "%(count)d morceaux ajoutés à la file d’attente"
+
+#: src/window.py:2442
+msgid "Create"
+msgstr "Créer"
+
+#: src/window.py:2456
+msgid "Create a playlist"
+msgstr "Créer une playlist"
+
+#: src/window.py:2460
+msgid "Collect your favorite tracks in one place."
+msgstr "Rassemblez vos morceaux préférés en un seul endroit."
+
+#: src/window.py:2469
+msgid "Playlist name"
+msgstr "Nom de la playlist"
+
+#: src/window.py:2492
+msgid "Use the generated cover"
+msgstr "Utiliser la pochette générée"
+
+#: src/window.py:2499
+msgid "Choose an image"
+msgstr "Choisissez une image"
+
+#: src/window.py:2518 src/window.py:2590
+msgid "Choose playlist cover"
+msgstr "Choisir la pochette de la playlist"
+
+#: src/window.py:2544
+msgid "Enter a playlist name"
+msgstr "Saisissez un nom de playlist"
+
+#: src/window.py:2549 src/window.py:2586
+msgid "A playlist with that name already exists"
+msgstr "Une playlist portant ce nom existe déjà"
+
+#: src/window.py:2561
+#, python-format
+msgid "Created %(playlist)s"
+msgstr "Playlist %(playlist)s créée"
+
+#: src/window.py:2567
+msgid "Rename Playlist"
+msgstr "Renommer la playlist"
+
+#: src/window.py:2612
+#, python-format
+msgid "%(playlist)s Copy"
+msgstr "Copie de %(playlist)s"
+
+#: src/window.py:2616
+#, python-format
+msgid "%(playlist)s Copy %(number)d"
+msgstr "Copie %(number)d de %(playlist)s"
+
+#: src/window.py:2630
+#, python-format
+msgid "Duplicated %(playlist)s"
+msgstr "Playlist %(playlist)s dupliquée"
+
+#: src/window.py:2637
+msgid "Delete Playlist?"
+msgstr "Supprimer la playlist ?"
+
+#: src/window.py:2639
+#, python-format
+msgid ""
+"“%(playlist)s” and its playlist entries will be removed. Audio files stay in "
+"your library."
+msgstr ""
+"« %(playlist)s » et les entrées qu’elle contient seront supprimées. Les "
+"fichiers audio resteront dans votre bibliothèque."
+
+#: src/window.py:2644
+msgid "Delete"
+msgstr "Supprimer"
+
+#: src/window.py:2685 src/window.py:4551
+msgid "Nothing playing"
+msgstr "Aucune lecture en cours"
+
+#: src/window.py:2694
+msgid "Previous"
+msgstr "Précédent"
+
+#: src/window.py:2704
+msgid "Next"
+msgstr "Suivant"
+
+#: src/window.py:2711 src/window.py:4835
+msgid "Repeat all music"
+msgstr "Répéter toute la musique"
+
+#: src/window.py:2717 src/window.py:3610
+msgid "Show Lyrics"
+msgstr "Afficher les paroles"
+
+#: src/window.py:2758
+msgid "Volume"
+msgstr "Volume"
+
+#: src/window.py:2770
+msgid "Hide navigation"
+msgstr "Masquer la navigation"
+
+#: src/window.py:2770
+msgid "Show navigation"
+msgstr "Afficher la navigation"
+
+#: src/window.py:2899
+#, python-format
+msgid "%(count)d track in your collection"
+msgid_plural "%(count)d tracks in your collection"
+msgstr[0] "%(count)d morceau dans votre collection"
+msgstr[1] "%(count)d morceaux dans votre collection"
+
+#: src/window.py:2998
+#, python-format
+msgid "%(count)d track"
+msgid_plural "%(count)d tracks"
+msgstr[0] "%(count)d morceau"
+msgstr[1] "%(count)d morceaux"
+
+#: src/window.py:3005 src/window.py:3196 src/window.py:4243 src/window.py:4277
+#, python-format
+msgid "%(count)d play"
+msgid_plural "%(count)d plays"
+msgstr[0] "%(count)d lecture"
+msgstr[1] "%(count)d lectures"
+
+#: src/window.py:3095
+#, python-format
+msgid "Active since %(year)s"
+msgstr "Actif depuis %(year)s"
+
+#: src/window.py:3097
+#, python-format
+msgid "Born in %(year)s"
+msgstr "Né en %(year)s"
+
+#: src/window.py:3100
+#, python-format
+msgid "%(activity)s • Died in %(year)s"
+msgstr "%(activity)s • Décédé en %(year)s"
+
+#: src/window.py:3103
+#, python-format
+msgid "Died in %(year)s"
+msgstr "Décédé en %(year)s"
+
+#: src/window.py:3145
+msgid "Show less"
+msgstr "Afficher moins"
+
+#: src/window.py:3174
+#, python-format
+msgid "Could not open the artist website: %(error)s"
+msgstr "Impossible d'ouvrir le site Web de l'artiste : %(error)s"
+
+#: src/window.py:3189 src/window.py:4273
+#, python-format
+msgid "%(count)d album"
+msgid_plural "%(count)d albums"
+msgstr[0] "%(count)d album"
+msgstr[1] "%(count)d albums"
+
+#: src/window.py:3191 src/window.py:4240 src/window.py:4275
+#, python-format
+msgid "%(count)d song"
+msgid_plural "%(count)d songs"
+msgstr[0] "%(count)d morceau"
+msgstr[1] "%(count)d morceaux"
+
+#: src/window.py:3246
+#, python-format
+msgid "%(count)d album in your collection"
+msgid_plural "%(count)d albums in your collection"
+msgstr[0] "%(count)d album dans votre collection"
+msgstr[1] "%(count)d albums dans votre collection"
+
+#: src/window.py:3269
+#, python-format
+msgid "%(count)d artist in your collection"
+msgid_plural "%(count)d artists in your collection"
+msgstr[0] "%(count)d artiste dans votre collection"
+msgstr[1] "%(count)d artistes dans votre collection"
+
+#: src/window.py:3297 src/window.py:3300
+#, python-format
+msgid "Play %(title)s by %(artist)s"
+msgstr "Lire %(title)s par %(artist)s"
+
+#: src/window.py:3373
+#, python-format
+msgid "Play %(title)s by %(artist)s. Drag to add it to a playlist."
+msgstr ""
+"Lire %(title)s par %(artist)s. Faites-le glisser pour l’ajouter à une "
+"playlist."
+
+#: src/window.py:3392 src/window.py:3583
+msgid "Remove from Favorites"
+msgstr "Retirer des favoris"
+
+#: src/window.py:3392 src/window.py:3585
+msgid "Add to Favorites"
+msgstr "Ajouter aux favoris"
+
+#: src/window.py:3403
+msgid "Added to Favorites"
+msgstr "Ajouté aux favoris"
+
+#: src/window.py:3403
+msgid "Removed from Favorites"
+msgstr "Retiré des favoris"
+
+#: src/window.py:3595
+msgid "Go to Album"
+msgstr "Accéder à l’album"
+
+#: src/window.py:3596
+msgid "Go to Artist"
+msgstr "Accéder à l’artiste"
+
+#: src/window.py:3602
+msgid "Add to Playlist"
+msgstr "Ajouter à une playlist"
+
+#: src/window.py:3604 src/window.py:4720
+msgid "Remove from Library"
+msgstr "Retirer de la bibliothèque"
+
+#: src/window.py:3612
+msgid "Find Artworks"
+msgstr "Rechercher des illustrations"
+
+#: src/window.py:3613
+msgid "Import Lyrics"
+msgstr "Importer des paroles"
+
+#: src/window.py:3614 src/window.py:4660
+msgid "Edit Lyrics"
+msgstr "Modifier les paroles"
+
+#: src/window.py:3615
+msgid "Remove Downloaded Lyrics"
+msgstr "Supprimer les paroles téléchargées"
+
+#: src/window.py:3621
+msgid "Show in File Manager"
+msgstr "Afficher dans le gestionnaire de fichiers"
+
+#: src/window.py:3622 src/window.py:4373
+msgid "Song Information"
+msgstr "Informations sur le morceau"
+
+#: src/window.py:3631
+msgid "Remove from Playlist"
+msgstr "Retirer de la playlist"
+
+#: src/window.py:3632
+msgid "Move Up in Playlist"
+msgstr "Monter dans la playlist"
+
+#: src/window.py:3633
+msgid "Move Down in Playlist"
+msgstr "Descendre dans la playlist"
+
+#: src/window.py:3806
+msgid "Create New Playlist"
+msgstr "Créer une nouvelle playlist"
+
+#: src/window.py:3835
+#, python-format
+msgid "Added to %(playlist)s"
+msgstr "Ajouté à %(playlist)s"
+
+#: src/window.py:3837
+msgid "Track already in playlist"
+msgstr "Ce morceau est déjà dans la playlist"
+
+#: src/window.py:3849
+#, python-format
+msgid "Removed from %(playlist)s"
+msgstr "Supprimé de %(playlist)s"
+
+#: src/window.py:3980 src/window.py:3989
+msgid "This collection is empty"
+msgstr "Cette collection est vide"
+
+#: src/window.py:4000
+#, python-format
+msgid "Added %(count)d %(collection)s track to the queue"
+msgid_plural "Added %(count)d %(collection)s tracks to the queue"
+msgstr[0] ""
+"%(count)d morceau de la collection %(collection)s ajouté à la file d’attente"
+msgstr[1] ""
+"%(count)d morceaux de la collection %(collection)s ajoutés à la file "
+"d’attente"
+
+#: src/window.py:4004
+msgid "collection"
+msgstr "collection"
+
+#: src/window.py:4308
+msgid "album"
+msgstr "album"
+
+#: src/window.py:4318
+msgid "artist"
+msgstr "artiste"
+
+#: src/window.py:4324
+msgid "The audio file is no longer available"
+msgstr "Le fichier audio n'est plus disponible"
+
+#: src/window.py:4331
+msgid "Could not open the file manager"
+msgstr "Impossible d'ouvrir le gestionnaire de fichiers"
+
+#: src/window.py:4368
+#, python-format
+msgid "Could not open the file manager: %(error)s"
+msgstr "Impossible d'ouvrir le gestionnaire de fichiers : %(error)s"
+
+#: src/window.py:4395
+msgid "SONG"
+msgstr "MORCEAU"
+
+#: src/window.py:4398 src/window.py:4900
+msgid "Unknown title"
+msgstr "Titre inconnu"
+
+#: src/window.py:4406
+msgid "Unknown artist"
+msgstr "Artiste inconnu"
+
+#: src/window.py:4414
+msgid "Unknown album"
+msgstr "Album inconnu"
+
+#: src/window.py:4469
+msgid "Album artist"
+msgstr "Artiste de l’album"
+
+#: src/window.py:4470
+msgid "Year"
+msgstr "Année"
+
+#: src/window.py:4471
+msgid "Genre"
+msgstr "Genre"
+
+#: src/window.py:4472
+msgid "Track"
+msgstr "Morceau"
+
+#: src/window.py:4473
+msgid "Disc"
+msgstr "Disque"
+
+#: src/window.py:4479
+msgid "Codec"
+msgstr "Codec"
+
+#: src/window.py:4479 src/window.py:4480 src/window.py:4481 src/window.py:4482
+msgid "Unknown"
+msgstr "Inconnu"
+
+#: src/window.py:4480
+msgid "Bitrate"
+msgstr "Débit"
+
+#: src/window.py:4481
+msgid "Sample rate"
+msgstr "Fréquence d’échantillonnage"
+
+#: src/window.py:4482
+msgid "Channels"
+msgstr "Canaux"
+
+#: src/window.py:4487
+msgid "File"
+msgstr "Fichier"
+
+#: src/window.py:4509
+msgid "Vinyl — Groovia"
+msgstr "Vinyle — Groovia"
+
+#: src/window.py:4614
+msgid "Artwork already cached"
+msgstr "Illustration déjà en cache"
+
+#: src/window.py:4617
+msgid "Searching for animated artwork…"
+msgstr "Recherche d’une illustration animée…"
+
+#: src/window.py:4634
+msgid "Animated artwork found"
+msgstr "Illustration animée trouvée"
+
+#: src/window.py:4636
+#, python-format
+msgid "Artwork search failed: %(error)s"
+msgstr "Échec de la recherche d’illustration : %(error)s"
+
+#: src/window.py:4638
+msgid "No animated artwork found"
+msgstr "Aucune illustration animée trouvée"
+
+#: src/window.py:4652
+msgid "No lyrics available to edit"
+msgstr "Aucune parole à modifier"
+
+#: src/window.py:4691
+msgid "Remove downloaded lyrics?"
+msgstr "Supprimer les paroles téléchargées ?"
+
+#: src/window.py:4692
+#, python-format
+msgid ""
+"Remove downloaded lyrics for “%(title)s”? Manually edited lyrics are kept."
+msgstr ""
+"Supprimer les paroles téléchargées pour « %(title)s » ? Les paroles "
+"modifiées manuellement sont conservées."
+
+#: src/window.py:4713
+msgid "Remove from Library?"
+msgstr "Retirer de la bibliothèque ?"
+
+#: src/window.py:4715
+#, python-format
+msgid ""
+"“%(title)s” will be removed from Groovia, but its audio file will not be "
+"deleted."
+msgstr ""
+"« %(title)s » sera supprimé de Groovia, mais son fichier audio ne sera pas "
+"supprimé."
+
+#: src/window.py:4746
+#, python-format
+msgid "Removed %(title)s from the library"
+msgstr "%(title)s supprimé de la bibliothèque"
+
+#: src/window.py:4798 src/window.py:4806
+msgid "The queue is empty"
+msgstr "La file d’attente est vide"
+
+#: src/window.py:4831
+msgid "Repeat one"
+msgstr "Répéter le morceau"
+
+#: src/window.py:4839
+msgid "Repeat is off"
+msgstr "Répétition désactivée"
+
+#: src/window.py:4921 src/window.py:5026 src/window.py:5035
+msgid "Pause"
+msgstr "Pause"
+
+#: src/window.py:4946
+msgid "Now playing"
+msgstr "Lecture en cours"
+
+#: src/window.py:5065
+#, python-format
+msgid "%(count)d min"
+msgid_plural "%(count)d min"
+msgstr[0] "%(count)d min"
+msgstr[1] "%(count)d min"
+
+#: src/window.py:5302
+msgid "Choose a music folder"
+msgstr "Choisir un dossier de musique"
+
+#: src/window.py:5319
+msgid "Scanning dropped music…"
+msgstr "Analyse de la musique déposée…"
+
+#: src/window.py:5372
+msgid "Import from Spotify"
+msgstr "Importer depuis Spotify"
+
+#: src/window.py:5375
+msgid "Download"
+msgstr "Télécharger"
+
+#: src/window.py:5382
+msgid "Import Spotify music"
+msgstr "Importer de la musique depuis Spotify"
+
+#: src/window.py:5387
+msgid ""
+"Groovia uses spotDL to find matching audio and import Spotify metadata and "
+"artwork. Audio is not downloaded directly from Spotify; you are responsible "
+"for respecting copyright and service terms."
+msgstr ""
+"Groovia utilise spotDL pour rechercher l'audio correspondant et importer les "
+"métadonnées et les illustrations Spotify. L'audio n'est pas téléchargé "
+"directement depuis Spotify ; vous êtes responsable du respect des droits "
+"d’auteur et des conditions de service."
+
+#: src/window.py:5397
+msgid ""
+"Workflow: read source → find matching audio → download/convert → write "
+"metadata and lyrics → add tracks to your library"
+msgstr ""
+"Déroulement : lecture de la source → recherche du fichier audio "
+"correspondant → téléchargement et conversion → écriture des métadonnées et "
+"des paroles → ajout des morceaux à votre bibliothèque"
+
+#: src/window.py:5407
+msgid "Paste a Spotify track, playlist or .spotdl file"
+msgstr ""
+"Collez l’adresse d’un morceau ou d’une playlist Spotify, ou indiquez un "
+"fichier .spotdl"
+
+#: src/window.py:5410
+msgid "Paste"
+msgstr "Coller"
+
+#: src/window.py:5416
+msgid "Paste a source to detect its type"
+msgstr "Coller une source pour détecter son type"
+
+#: src/window.py:5423
+msgid "Keep this Spotify playlist synchronized in the future"
+msgstr "Conserver cette playlist Spotify synchronisée à l’avenir"
+
+#: src/window.py:5428
+msgid "I understand and accept responsibility for this download"
+msgstr "Je comprends et accepte la responsabilité de ce téléchargement"
+
+#: src/window.py:5434 src/window.py:5437
+msgid "Waiting for a source"
+msgstr "En attente d’une source"
+
+#: src/window.py:5443
+msgid "The total will appear as soon as spotDL reports it."
+msgstr "Le total apparaîtra dès que spotDL le signalera."
+
+#: src/window.py:5523
+msgid "Spotify track detected"
+msgstr "Morceau Spotify détecté"
+
+#: src/window.py:5524
+msgid "Spotify playlist detected"
+msgstr "Playlist Spotify détectée"
+
+#: src/window.py:5525
+msgid "Spotify album detected"
+msgstr "Album Spotify détecté"
+
+#: src/window.py:5526
+msgid "spotDL synchronization file detected"
+msgstr "Fichier de synchronisation spotDL détecté"
+
+#: src/window.py:5527
+msgid "Waiting for a valid Spotify source"
+msgstr "En attente d'une source Spotify valide"
+
+#: src/window.py:5533 src/window.py:5628
+#, python-format
+msgid "Destination: %(directory)s"
+msgstr "Destination : %(directory)s"
+
+#: src/window.py:5537
+#, python-format
+msgid "Managed synchronization directory: %(directory)s"
+msgstr "Répertoire de synchronisation géré : %(directory)s"
+
+#: src/window.py:5561
+msgid "Enter a valid Spotify track, playlist or .spotdl file."
+msgstr ""
+"Saisissez l’adresse d’un morceau ou d’une playlist Spotify valide, ou "
+"indiquez un fichier .spotdl."
+
+#: src/window.py:5564
+msgid "Please acknowledge the legal notice before downloading."
+msgstr ""
+"Veuillez prendre connaissance des mentions légales avant de télécharger."
+
+#: src/window.py:5581
+msgid "Deno was not found; spotDL recommends it for reliable YouTube matching."
+msgstr ""
+"Deno n'a pas été trouvé ; spotDL le recommande pour une correspondance "
+"fiable avec YouTube."
+
+#: src/window.py:5583
+msgid "Bundled Deno was not found in this Windows installation."
+msgstr "Le Deno fourni est introuvable dans cette installation Windows."
+
+#: src/window.py:5589
+msgid ""
+"Bundled downloader tools are missing. Reinstall Groovia or rebuild the "
+"Windows package."
+msgstr ""
+"Des outils de téléchargement intégrés sont manquants. Réinstallez Groovia ou "
+"reconstruisez le paquet Windows."
+
+#: src/window.py:5602
+#, python-format
+msgid "Starting: %(source)s"
+msgstr "Démarrage : %(source)s"
+
+#: src/window.py:5605
+msgid ""
+"The downloader will search for matching audio, download it, convert it to "
+"the selected format, write metadata, then import it into the library."
+msgstr ""
+"Le téléchargeur recherchera l'audio correspondant, le téléchargera, le "
+"convertira au format sélectionné, écrira les métadonnées, puis l'importera "
+"dans la bibliothèque."
+
+#: src/window.py:5612
+msgid "Starting spotDL…"
+msgstr "Démarrage de spotDL…"
+
+#: src/window.py:5613
+msgid "Step 1/5 · Preparing downloader"
+msgstr "Étape 1/5 · Préparation du téléchargeur"
+
+#: src/window.py:5634
+#, python-format
+msgid ""
+"Format: %(format)s · bitrate: %(bitrate)s · lyrics are fetched separately "
+"from track metadata"
+msgstr ""
+"Format : %(format)s · débit : %(bitrate)s · les paroles sont récupérées "
+"séparément des métadonnées du morceau"
+
+#: src/window.py:5638
+msgid "Import started"
+msgstr "L'importation a commencé"
+
+#: src/window.py:5661
+#, python-format
+msgid "Overall %(percent).0f%% · %(completed)d/%(total)d track"
+msgid_plural "Overall %(percent).0f%% · %(completed)d/%(total)d tracks"
+msgstr[0] "Progression %(percent).0f%% · %(completed)d/%(total)d morceau"
+msgstr[1] "Progression %(percent).0f%% · %(completed)d/%(total)d morceaux"
+
+#. A per-file percentage is not an overall playlist percentage.
+#. Keep the bar honest until spotDL gives us a reliable total.
+#: src/window.py:5674
+msgid "Downloading current track…"
+msgstr "Téléchargement du morceau en cours…"
+
+#: src/window.py:5676
+#, python-format
+msgid "Step %(step)d/5 · %(phase)s"
+msgstr "Étape %(step)d/5 · %(phase)s"
+
+#: src/window.py:5682
+#, python-format
+msgid "%(completed)d/%(total)d track completed"
+msgid_plural "%(completed)d/%(total)d tracks completed"
+msgstr[0] "%(completed)d/%(total)d morceau terminé"
+msgstr[1] "%(completed)d/%(total)d morceaux terminés"
+
+#: src/window.py:5688
+#, python-format
+msgid "%(count)d failed"
+msgid_plural "%(count)d failed"
+msgstr[0] "%(count)d échec"
+msgstr[1] "%(count)d échecs"
+
+#: src/window.py:5694
+msgid "Waiting for the downloader to report the playlist total…"
+msgstr "En attente que le téléchargeur rapporte le total de la playlist…"
+
+#: src/window.py:5700
+msgid "Step 1/5 · Starting downloader"
+msgstr "Étape 1/5 · Démarrage du téléchargeur"
+
+#: src/window.py:5702
+msgid "Starting spotDL process…"
+msgstr "Démarrage du processus spotDL…"
+
+#: src/window.py:5703
+msgid "spotDL process started"
+msgstr "Processus spotDL démarré"
+
+#: src/window.py:5705
+msgid "Step 2/5 · Finding matching audio"
+msgstr "Étape 2/5 · Recherche du fichier audio correspondant"
+
+#: src/window.py:5707
+msgid "Reading the source and finding an audio match…"
+msgstr "Lecture de la source et recherche d’un fichier audio correspondant…"
+
+#: src/window.py:5714 src/window.py:5736
+msgid "Step 5/5 · Adding tracks to library"
+msgstr "Étape 5/5 · Ajout de morceaux à la bibliothèque"
+
+#: src/window.py:5718
+msgid "Importing into library…"
+msgstr "Importation dans la bibliothèque…"
+
+#: src/window.py:5720
+msgid "Scanning files and associating metadata…"
+msgstr "Analyse des fichiers et association des métadonnées…"
+
+#: src/window.py:5730
+#, python-format
+msgid "Library %(current)d/%(total)d track"
+msgid_plural "Library %(current)d/%(total)d tracks"
+msgstr[0] "Bibliothèque : %(current)d/%(total)d morceau"
+msgstr[1] "Bibliothèque : %(current)d/%(total)d morceaux"
+
+#: src/window.py:5740
+#, python-format
+msgid "%(phase)s · %(current)d/%(total)d track"
+msgid_plural "%(phase)s · %(current)d/%(total)d tracks"
+msgstr[0] "%(phase)s · %(current)d/%(total)d morceau"
+msgstr[1] "%(phase)s · %(current)d/%(total)d morceaux"
+
+#: src/window.py:5755
+msgid "Finished · Download and library import complete"
+msgstr "Terminé · Téléchargement et importation dans la bibliothèque achevés"
+
+#: src/window.py:5758
+msgid "Completed"
+msgstr "Terminé"
+
+#: src/window.py:5763
+#, python-format
+msgid "Completed · %(count)d track available in your library"
+msgid_plural "Completed · %(count)d tracks available in your library"
+msgstr[0] "Terminé · %(count)d morceau disponible dans votre bibliothèque"
+msgstr[1] "Terminé · %(count)d morceaux disponibles dans votre bibliothèque"
+
+#: src/window.py:5775
+#, python-format
+msgid "Playlist imported: %(count)d track"
+msgid_plural "Playlist imported: %(count)d tracks"
+msgstr[0] "Playlist importée : %(count)d morceau"
+msgstr[1] "Playlist importée : %(count)d morceaux"
+
+#: src/window.py:5782
+msgid "Track downloaded and added to your library"
+msgstr "Morceau téléchargé et ajouté à votre bibliothèque"
+
+#: src/window.py:5786
+#, python-format
+msgid "Completed: %(count)d track imported"
+msgid_plural "Completed: %(count)d tracks imported"
+msgstr[0] "Terminé : %(count)d morceau importé"
+msgstr[1] "Terminé : %(count)d morceaux importés"
+
+#: src/window.py:5795
+msgid "Lyrics found"
+msgstr "Paroles trouvées"
+
+#: src/window.py:5826
+#, python-format
+msgid "Lyrics unavailable: %(error)s"
+msgstr "Paroles indisponibles : %(error)s"
+
+#: src/window.py:5827
+msgid "search failed"
+msgstr "la recherche a échoué"
+
+#: src/window.py:5838
+#, python-format
+msgid "Import partially completed: %(count)d track; %(error)s"
+msgid_plural "Import partially completed: %(count)d tracks; %(error)s"
+msgstr[0] "Importation partiellement terminée : %(count)d morceau ; %(error)s"
+msgstr[1] "Importation partiellement terminée : %(count)d morceaux ; %(error)s"
+
+#: src/window.py:5843
+msgid "Download cancelled"
+msgstr "Téléchargement annulé"
+
+#: src/window.py:5845
+#, python-format
+msgid "Download failed: %(error)s"
+msgstr "Échec du téléchargement : %(error)s"
+
+#: src/window.py:5848
+msgid "Invalid source"
+msgstr "Source invalide"
+
+#: src/window.py:5850
+msgid "Synchronization could not start"
+msgstr "La synchronisation n'a pas pu démarrer"
+
+#: src/window.py:5855 src/window.py:5885
+msgid "Bundled downloader tools verified"
+msgstr "Outils de téléchargement intégrés vérifiés"
+
+#: src/window.py:5857
+msgid "Dependencies installed"
+msgstr "Dépendances installées"
+
+#: src/window.py:5870
+msgid "Downloader tool versions:"
+msgstr "Versions des outils de téléchargement :"
+
+#: src/window.py:5874
+#, python-format
+msgid "%(tool)s: %(version)s"
+msgstr "%(tool)s : %(version)s"
+
+#: src/window.py:5875
+msgid "available"
+msgstr "disponible"
+
+#: src/window.py:5879
+#, python-format
+msgid "%(tool)s: unavailable (%(error)s)"
+msgstr "%(tool)s : indisponible (%(error)s)"
+
+#: src/window.py:5882
+msgid "unknown error"
+msgstr "erreur inconnue"
+
+#: src/window.py:5888
+msgid "Preparing dependency installation…"
+msgstr "Préparation de l'installation des dépendances…"
+
+#. Translators: Keep the tool names spotDL, FFmpeg and Deno.
+#: src/window.py:5892
+#, python-format
+msgid "Dependencies: spotDL=%(spotdl)s, FFmpeg=%(ffmpeg)s, Deno=%(deno)s"
+msgstr "Dépendances : spotDL=%(spotdl)s, FFmpeg=%(ffmpeg)s, Deno=%(deno)s"
+
+#: src/window.py:5894 src/window.py:5895 src/window.py:5896
+msgid "yes"
+msgstr "oui"
+
+#: src/window.py:5894 src/window.py:5895 src/window.py:5896
+msgid "no"
+msgstr "non"
+
+#: src/window.py:5900 src/window.py:5903
+msgid "Installing dependency…"
+msgstr "Installation de la dépendance…"
+
+#: src/window.py:5909
+msgid "Installation cancelled. No system packages were changed."
+msgstr "Installation annulée. Aucun paquet système n’a été modifié."
+
+#: src/window.py:5912 src/window.py:5917
+msgid "Dependency installation failed"
+msgstr "L'installation des dépendances a échoué"
+
+#: src/window.py:5913
+msgid "Unknown installation error"
+msgstr "Erreur d'installation inconnue"
+
+#: src/window.py:6027
+msgid "Playlist already imported"
+msgstr "Playlist déjà importée"
+
+#: src/window.py:6028
+#, python-format
+msgid "%(playlist)s is already connected to this Spotify source."
+msgstr "La playlist %(playlist)s est déjà associée à cette source Spotify."
+
+#: src/window.py:6032
+msgid "Synchronize existing"
+msgstr "Synchroniser l'existant"
+
+#: src/window.py:6033
+msgid "Import as new"
+msgstr "Importer en tant que nouvelle playlist"
+
+#: src/window.py:6034
+msgid "Replace local playlist"
+msgstr "Remplacer la playlist locale"
+
+#: src/window.py:6056
+msgid "Install download dependencies"
+msgstr "Installer les dépendances de téléchargement"
+
+#: src/window.py:6061
+msgid "Install"
+msgstr "Installer"
+
+#: src/window.py:6069
+msgid "Groovia needs a few tools to import Spotify music."
+msgstr ""
+"Groovia a besoin de quelques outils pour importer de la musique Spotify."
+
+#: src/window.py:6077
+msgid ""
+"spotDL will be installed in Groovia's private environment. FFmpeg is "
+"required; Deno is recommended for reliable YouTube matching."
+msgstr ""
+"spotDL sera installé dans l'environnement privé de Groovia. FFmpeg est "
+"requis ; Deno est recommandé pour une correspondance fiable avec YouTube."
+
+#: src/window.py:6086
+#, python-format
+msgid "Install or repair %(tool)s"
+msgstr "Installer ou réparer %(tool)s"
+
+#: src/window.py:6092
+msgid "Waiting for confirmation"
+msgstr "En attente de confirmation"
+
+#: src/window.py:6095
+msgid "Waiting"
+msgstr "En attente"
+
+#: src/window.py:6118
+msgid "Starting installation…"
+msgstr "Démarrage de l'installation…"
+
+#: src/window.py:6125
+msgid "Installing selected dependencies…"
+msgstr "Installation des dépendances sélectionnées…"
+
+#: src/window.py:6128
+msgid "Stopping dependency installation…"
+msgstr "Arrêt de l'installation des dépendances…"
+
+#: src/window.py:6135
+msgid "Verifying bundled downloader tools…"
+msgstr "Vérification des outils de téléchargement intégrés…"
+
+#: src/window.py:6137
+msgid "Verifying bundled downloader tools"
+msgstr "Vérification des outils de téléchargement intégrés"
+
+#: src/window.py:6161
+msgid "Stop active downloads before removing managed tools"
+msgstr "Arrêtez les téléchargements actifs avant de supprimer les outils gérés"
+
+#: src/window.py:6164
+msgid "Remove Groovia-managed download tools?"
+msgstr "Supprimer les outils de téléchargement gérés par Groovia ?"
+
+#: src/window.py:6166
+msgid ""
+"This removes only Groovia's private spotDL environment and its locally "
+"downloaded FFmpeg/Deno copies. System installations and your music files "
+"will not be touched."
+msgstr ""
+"Cela supprime uniquement l'environnement privé spotDL de Groovia et ses "
+"copies FFmpeg/Deno téléchargées localement. Les installations du système et "
+"vos fichiers musicaux ne seront pas touchés."
+
+#: src/window.py:6183
+msgid "Managed download tools removed"
+msgstr "Outils de téléchargement gérés supprimés"
+
+#: src/window.py:6183
+msgid "No managed tools to remove"
+msgstr "Aucun outil géré à supprimer"
+
+#: src/window.py:6193
+msgid "Stop active downloads before deleting Groovia data"
+msgstr ""
+"Arrêtez les téléchargements actifs avant de supprimer les données Groovia"
+
+#: src/window.py:6200
+msgid "Delete all Groovia data?"
+msgstr "Supprimer toutes les données de Groovia ?"
+
+#: src/window.py:6202
+#, python-format
+msgid ""
+"This permanently deletes Groovia's library database, downloaded music, "
+"lyrics, playlists, artwork, synchronization files, cache and managed "
+"download tools. The music folder to delete is %(directory)s. Music imported "
+"from other folders will not be touched. Groovia will close after deletion."
+msgstr ""
+"Cela supprime définitivement la base de données de la bibliothèque de "
+"Groovia, la musique téléchargée, les paroles, les playlists, les "
+"illustrations, les fichiers de synchronisation, le cache et les outils de "
+"téléchargement gérés. Le dossier musical à supprimer est %(directory)s. La "
+"musique importée d’autres dossiers ne sera pas touchée. Groovia se fermera "
+"après la suppression."
+
+#: src/window.py:6240
+msgid "Could not delete Groovia data"
+msgstr "Impossible de supprimer les données Groovia"
+
+#: src/window.py:6250
+msgid "Could not delete all Groovia data"
+msgstr "Impossible de supprimer toutes les données Groovia"
+
+#: src/window.py:6265
+msgid "Scanning your music…"
+msgstr "Analyse de votre musique…"
+
+#: src/window.py:6275
+#, python-format
+msgid "Imported %(count)d track"
+msgid_plural "Imported %(count)d tracks"
+msgstr[0] "%(count)d morceau importé"
+msgstr[1] "%(count)d morceaux importés"

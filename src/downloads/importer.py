@@ -28,6 +28,7 @@ import urllib.request
 from pathlib import Path
 from typing import Callable
 
+from ..i18n import _
 from ..lyrics import LyricsService
 from ..models import Track
 from .spotdl import AUDIO_SUFFIXES, read_sync_metadata
@@ -65,7 +66,7 @@ class DownloadedTrackImporter:
         total = max(len(audio_paths), len(metadata))
         processed = 0
         if progress_callback:
-            progress_callback(0, total, "Preparing library import", "Preparing")
+            progress_callback(0, total, _("Preparing library import"), "Preparing")
         for path in audio_paths:
             # A safe playlist sync may report no new files because spotDL
             # skipped every download as a duplicate.  Those existing files

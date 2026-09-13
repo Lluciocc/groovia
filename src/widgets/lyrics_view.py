@@ -30,6 +30,7 @@ gi.require_version("PangoCairo", "1.0")
 
 from gi.repository import Adw, Gio, GLib, GObject, Gtk, Pango, PangoCairo
 
+from ..i18n import _
 from ..platform_compat import iter_gtk_children
 
 
@@ -1247,7 +1248,7 @@ class LyricsView(Gtk.ScrolledWindow):
                     renderer.set_glow_enabled(self._animations_enabled and self._glow_preference)
                     button.set_child(renderer)
                     self._word_renderers[index] = renderer
-                    button.set_tooltip_text("Seek to this lyric line")
+                    button.set_tooltip_text(_("Seek to this lyric line"))
                     button.connect(
                         "clicked",
                         lambda _button, line=line: self.emit(
@@ -1269,7 +1270,7 @@ class LyricsView(Gtk.ScrolledWindow):
                         button.add_css_class("lyrics-alt-speaker")
                     if line.background_vocals:
                         button.add_css_class("lyrics-group-vocal")
-                    button.set_tooltip_text("Seek to this lyric line")
+                    button.set_tooltip_text(_("Seek to this lyric line"))
                     button.connect(
                         "clicked",
                         lambda _button, line=line: self.emit(

@@ -1,9 +1,15 @@
 # List of source files containing translatable strings.
 # Please keep this file sorted alphabetically.
 data/io.github.Lluciocc.Groovia.desktop.in
-data/io.github.Lluciocc.Groovia.metainfo.xml.in
 data/io.github.Lluciocc.Groovia.gschema.xml
+data/io.github.Lluciocc.Groovia.metainfo.xml.in
+src/audio/player.py
+src/downloads/importer.py
+src/downloads/manager.py
+src/downloads/service.py
+src/downloads/spotdl.py
 src/main.py
+src/preferences.py
 src/shortcuts-dialog.ui
+src/widgets/lyrics_view.py
 src/window.py
-src/window.ui

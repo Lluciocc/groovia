@@ -51,6 +51,7 @@ tests/*
 !tests/test_artist_info.py
 !tests/test_autodj_session.py
 !tests/test_database.py
+!tests/test_i18n.py
 !tests/test_recommender.py
 build-check
 .mypycache/

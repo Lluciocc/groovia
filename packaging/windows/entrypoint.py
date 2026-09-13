@@ -131,6 +131,8 @@ def main() -> int:
         _configure_frozen_environment()
 
         if "--smoke-test" in sys.argv[1:]:
+            import gettext
+
             import gi
             import numpy
             import scipy
@@ -154,6 +156,11 @@ def main() -> int:
             transformed = signal.savgol_filter(numpy.arange(9, dtype=float), 5, 2)
             if transformed.shape != (9,):
                 raise RuntimeError("SciPy DSP smoke test failed")
+            catalog = gettext.translation(
+                "groovia", localedir=_bundle_root() / "locale", languages=["fr"]
+            )
+            if catalog.gettext("Library") != "Bibliothèque":
+                raise RuntimeError("Bundled French gettext catalog smoke test failed")
             plugin = tempo_factory.get_plugin()
             print(
                 f"Groovia Auto DJ smoke test: numpy={numpy.__version__} scipy={scipy.__version__} "

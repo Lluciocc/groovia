@@ -43,6 +43,7 @@ jobs:
             libadwaita-1-dev \
             python3-gi \
             python3-gi-cairo \
+            python3-pytest \
             gir1.2-gtk-4.0 \
             gir1.2-adw-1 \
             python3-numpy \
@@ -55,3 +56,40 @@ jobs:
       - name: Build
         run: |
           meson compile -C build
+
+  check-translations:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+
+          sudo apt install -y \
+            meson \
+            ninja-build \
+            gettext \
+            desktop-file-utils \
+            appstream \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            python3-pytest \
+            python3-numpy \
+            python3-scipy
+
+      - name: Configure
+        run: |
+          meson setup build
+
+      - name: Check translations and tests
+        run: |
+          meson compile -C build groovia-pot
+          meson compile -C build groovia-gmo
+
+          msgfmt --check --check-format po/fr.po
+
+          meson test -C build --print-errorlogs
+
+          test -f build/po/fr/LC_MESSAGES/groovia.mo

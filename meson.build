@@ -25,6 +25,16 @@ subdir('data')
 subdir('src')
 subdir('po')
 
+pytest = find_program('pytest', required: false)
+if pytest.found()
+  test(
+    'Python tests',
+    pytest,
+    args: ['-q'],
+    workdir: meson.project_source_root(),
+  )
+endif
+
 gnome.post_install(
      glib_compile_schemas: true,
     gtk_update_icon_cache: true,

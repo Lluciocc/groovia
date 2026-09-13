@@ -19,20 +19,45 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import sys
+import os
 import signal
+import sys
+from pathlib import Path
 
 VERSION = '@VERSION@'
+datadir = '@datadir@'
 pkgdatadir = '@pkgdatadir@'
 localedir = '@localedir@'
+source_root = '@sourceroot@'
+build_srcdir = '@buildsrcdir@'
+build_datadir = '@builddatadir@'
+build_localedir = '@buildlocaledir@'
 
-sys.path.insert(1, pkgdatadir)
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-from groovia.runtime import initialize_runtime
+if Path(__file__).resolve().parent == Path(build_srcdir).resolve():
+    os.environ.setdefault('GSETTINGS_SCHEMA_DIR', build_datadir)
+    sys.path.insert(1, source_root)
+    from src.runtime import initialize_runtime
 
-initialize_runtime(pkgdatadir, localedir)
+    initialize_runtime(build_srcdir, build_localedir)
+    from src import main
+else:
+    data_dirs = [
+        entry
+        for entry in os.environ.get(
+            'XDG_DATA_DIRS',
+            os.pathsep.join(['/usr/local/share', '/usr/share']),
+        ).split(os.pathsep)
+        if entry
+    ]
+    if datadir not in data_dirs:
+        os.environ['XDG_DATA_DIRS'] = os.pathsep.join([datadir, *data_dirs])
+    sys.path.insert(1, pkgdatadir)
+    from groovia.runtime import initialize_runtime
+
+    initialize_runtime(pkgdatadir, localedir)
+    from groovia import main
 
 if __name__ == '__main__':
-    from groovia import main
     sys.exit(main.main(VERSION))

@@ -101,6 +101,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Require-Command "glib-compile-resources" "Install mingw-w64-ucrt-x86_64-glib2."
 Require-Command "glib-compile-schemas" "Install mingw-w64-ucrt-x86_64-glib2."
+Require-Command "msgfmt" "Install gettext in the MSYS2 UCRT64 environment."
 Require-Command "gtk4-update-icon-cache" "Install mingw-w64-ucrt-x86_64-gtk4."
 if (-not $SkipInstaller) {
     Require-Command "iscc" "Install Inno Setup and make iscc.exe available on PATH."
@@ -121,6 +122,7 @@ foreach ($Target in @($AppRoot, $InstallerRoot, (Join-Path $RepoRoot "build\pyin
     }
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $BuildRoot "schemas") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $BuildRoot "locale\fr\LC_MESSAGES") | Out-Null
 New-Item -ItemType Directory -Force -Path $PackageRoot | Out-Null
 Copy-Item -Path (Join-Path $RepoRoot "src\*.py") -Destination $PackageRoot -Force
 Get-ChildItem -LiteralPath (Join-Path $RepoRoot "src") -Directory | Where-Object Name -ne "__pycache__" | ForEach-Object {
@@ -140,6 +142,11 @@ Invoke-NativeLogged { & glib-compile-schemas `
     --targetdir (Join-Path $BuildRoot "schemas") `
     (Join-Path $RepoRoot "data") }
 if ($LASTEXITCODE -ne 0) { throw "glib-compile-schemas failed" }
+
+Invoke-NativeLogged { & msgfmt --check --check-format `
+    --output-file (Join-Path $BuildRoot "locale\fr\LC_MESSAGES\groovia.mo") `
+    (Join-Path $RepoRoot "po\fr.po") }
+if ($LASTEXITCODE -ne 0) { throw "French gettext catalog compilation failed" }
 
 Invoke-NativeLogged { & (Join-Path $PSScriptRoot "stage-dependencies.ps1") `
     -ManifestPath (Join-Path $PSScriptRoot "dependencies.json") `
@@ -178,6 +185,11 @@ Write-Instruction "VALIDATE" "Standalone application: $Exe"
 
 Invoke-NativeLogged { & $Exe --smoke-test }
 if ($LASTEXITCODE -ne 0) { throw "Packaged Auto DJ NumPy/SciPy/GStreamer smoke test failed" }
+
+$PackagedCatalog = Join-Path $AppRoot "_internal\locale\fr\LC_MESSAGES\groovia.mo"
+if (-not (Test-Path -LiteralPath $PackagedCatalog -PathType Leaf)) {
+    throw "Packaged French gettext catalog is missing: $PackagedCatalog"
+}
 
 $IconRoot = Join-Path $AppRoot "_internal\share\icons"
 $AdwaitaIconRoot = Join-Path $IconRoot "Adwaita"

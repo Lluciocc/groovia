@@ -32,6 +32,7 @@ from typing import Callable
 
 from gi.repository import GLib
 
+from ..i18n import _
 from ..logging_utils import configure_logger
 from ..platform_compat import IS_WINDOWS, subprocess_window_kwargs
 from ..runtime import bundled_tool_path
@@ -510,7 +511,7 @@ class DownloadManager:
             returncode = process.wait()
             self._dependency_process = None
             if self._dependency_cancel_requested:
-                raise InterruptedError("Dependency installation cancelled")
+                raise InterruptedError(_("Dependency installation cancelled"))
             if returncode != 0:
                 raise subprocess.CalledProcessError(returncode, command)
 
@@ -531,14 +532,16 @@ class DownloadManager:
                     ]
                     if missing:
                         raise SpotDLUnavailable(
-                            "Bundled Windows downloader tools are missing: "
-                            + ", ".join(missing)
-                            + ". Reinstall Groovia or rebuild the package."
+                            _(
+                                "Bundled Windows downloader tools are missing: %(tools)s. "
+                                "Reinstall Groovia or rebuild the package."
+                            )
+                            % {"tools": ", ".join(missing)}
                         )
                     emit(
                         "dependency-output",
                         {
-                            "line": (
+                            "line": _(
                                 "Bundled Windows downloader tools are installed. "
                                 "They are managed by the Groovia installer."
                             )
@@ -559,35 +562,39 @@ class DownloadManager:
                     venv.parent.mkdir(parents=True, exist_ok=True)
                     run_command(
                         self.resolver.installation_command(),
-                        "Creating private Python environment",
+                        _("Creating private Python environment"),
                     )
                     python = venv / "bin" / "python"
                     run_command(
                         [str(python), "-m", "pip", "install", "--upgrade", "spotdl"],
-                        "Installing spotDL",
+                        _("Installing spotDL"),
                     )
                     self.resolver.invalidate()
                     status = self.resolver.dependency_status()
                 elif install_spotdl:
                     emit(
                         "dependency-output",
-                        {"line": "spotDL is already available; keeping the existing installation."},
+                        {
+                            "line": _(
+                                "spotDL is already available; keeping the existing installation."
+                            )
+                        },
                     )
                 command = list(self.resolver.resolve())
                 if install_ffmpeg and status.ffmpeg:
                     emit(
                         "dependency-output",
-                        {"line": "FFmpeg is already available; skipping overwrite."},
+                        {"line": _("FFmpeg is already available; skipping overwrite.")},
                     )
                 elif install_ffmpeg:
-                    run_command([*command, "--download-ffmpeg"], "Installing FFmpeg")
+                    run_command([*command, "--download-ffmpeg"], _("Installing FFmpeg"))
                 if install_deno and status.deno:
                     emit(
                         "dependency-output",
-                        {"line": "Deno is already available; skipping overwrite."},
+                        {"line": _("Deno is already available; skipping overwrite.")},
                     )
                 elif install_deno:
-                    run_command([*command, "--download-deno"], "Installing Deno")
+                    run_command([*command, "--download-deno"], _("Installing Deno"))
                 emit(
                     "dependency-installed",
                     {"ffmpeg": install_ffmpeg, "deno": install_deno, "spotdl": True},

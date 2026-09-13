@@ -26,6 +26,7 @@ import os
 import sys
 from pathlib import Path
 
+from .i18n import DOMAIN
 from .logging_utils import configure_logger
 from .platform_compat import IS_WINDOWS, get_cache_dir, get_config_dir, get_managed_executable_name
 
@@ -203,13 +204,62 @@ def _register_gresource(resource_dir=None) -> None:
         LOGGER.exception("Could not register Groovia resource bundle: %s", path)
 
 
-def _configure_translations(localedir=None) -> None:
-    directory = Path(localedir) if localedir else bundled_resource_path("locale")
+def _translation_directory(localedir=None, resource_dir=None) -> Path:
+    """Choose an installed, development, or frozen Groovia locale tree."""
+    candidates: list[Path] = []
+    if localedir:
+        candidates.append(Path(localedir))
+    elif resource_dir is None:
+        try:
+            bound_directory = gettext.bindtextdomain(DOMAIN)
+        except (AttributeError, OSError):
+            bound_directory = None
+        if bound_directory:
+            candidates.append(Path(bound_directory))
+    for root in _resource_roots(resource_dir):
+        candidates.extend((root / "locale", root / "share" / "locale"))
+
+    unique: list[Path] = []
+    for candidate in candidates:
+        candidate = candidate.resolve()
+        if candidate not in unique:
+            unique.append(candidate)
+    for candidate in unique:
+        if any(candidate.glob(f"*/LC_MESSAGES/{DOMAIN}.mo")):
+            return candidate
+    return unique[0] if unique else bundled_resource_path("locale", resource_dir)
+
+
+def _ensure_language_environment() -> None:
+    """Expose the OS locale to Python gettext on platforms without LANG."""
+    if any(os.environ.get(name) for name in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG")):
+        return
+    categories = [getattr(locale, "LC_MESSAGES", None), locale.LC_CTYPE]
+    for category in categories:
+        if category is None:
+            continue
+        try:
+            language = locale.getlocale(category)[0]
+        except (TypeError, ValueError):
+            continue
+        if language:
+            normalized = locale.normalize(language).split(".", 1)[0]
+            os.environ["LANGUAGE"] = normalized or language
+            return
+
+
+def _configure_translations(localedir=None, resource_dir=None) -> Path:
+    directory = _translation_directory(localedir, resource_dir)
+    try:
+        locale.setlocale(locale.LC_ALL, "")
+    except (locale.Error, OSError):
+        LOGGER.info("System locale is unavailable; continuing with gettext fallback")
+    _ensure_language_environment()
     # Keep the Linux locale setup order used by the original launcher.  The
     # locale module's POSIX helpers are not guaranteed to exist on Windows.
     for name, args in (
-        ("bindtextdomain", ("groovia", str(directory))),
-        ("textdomain", ("groovia",)),
+        ("bindtextdomain", (DOMAIN, str(directory))),
+        ("textdomain", (DOMAIN,)),
     ):
         function = getattr(locale, name, None)
         if function:
@@ -218,14 +268,15 @@ def _configure_translations(localedir=None) -> None:
             except (OSError, RuntimeError):
                 LOGGER.info("locale.%s is unavailable", name)
     try:
-        gettext.bindtextdomain("groovia", str(directory))
-        gettext.textdomain("groovia")
+        gettext.bindtextdomain(DOMAIN, str(directory))
+        gettext.textdomain(DOMAIN)
     except (AttributeError, OSError):
         LOGGER.info("gettext domain setup is unavailable; using untranslated strings")
+    return directory
 
 
 def initialize_runtime(resource_dir=None, localedir=None) -> None:
     """Configure data discovery before GTK widgets or GSettings are created."""
     _configure_bundle_environment(resource_dir)
-    _configure_translations(localedir)
+    _configure_translations(localedir, resource_dir)
     _register_gresource(resource_dir)

@@ -27,6 +27,7 @@ gi.require_version("Gst", "1.0")
 from gi.repository import GLib, GObject, Gst
 
 from ..autodj.planner import TransitionPlan
+from ..i18n import _
 from ..logging_utils import configure_logger
 
 LOGGER = logging.getLogger("groovia.audio")
@@ -129,7 +130,7 @@ class AudioPlayer(GObject.Object):
     def _new_pipeline(self, track, volume, auto_dj=False):
         pipeline = Gst.ElementFactory.make("playbin", None)
         if not pipeline:
-            self.emit("error", "GStreamer playback is unavailable on this system.")
+            self.emit("error", _("GStreamer playback is unavailable on this system."))
             return None
         pipeline.props.uri = (
             track.path
