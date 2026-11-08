@@ -1,21 +1,21 @@
 {
   "spotdl": {
-    "version": "4.5.2",
-    "url": "https://github.com/spotDL/spotify-downloader/releases/download/v4.5.2/spotdl-4.5.2-win32.exe",
-    "sha256": "4490AE3B38C4321173E17975A9990A130CF9A9AEA8132EE2978AFECEFBEEB477",
+    "version": "4.6.0",
+    "url": "https://github.com/spotDL/spotify-downloader/releases/download/v4.6.0/spotdl-4.6.0-win32.exe",
+    "sha256": "E674030C3337CD74120A3A086887CE1A5195765CFC17E1971A2807E0A398B505",
     "kind": "file",
-    "cache_name": "spotdl-4.5.2-win32.exe",
+    "cache_name": "spotdl-4.6.0-win32.exe",
     "output": "spotdl.exe",
-    "license_url": "https://raw.githubusercontent.com/spotDL/spotify-downloader/v4.5.2/LICENSE",
+    "license_url": "https://raw.githubusercontent.com/spotDL/spotify-downloader/v4.6.0/LICENSE",
     "license_sha256": "194110D442EBDF82593EA2151EB439E94C269A0BAD38EEDE7D1AE68531BC6A60",
     "license_name": "spotDL-LICENSE.txt"
   },
   "ffmpeg": {
-    "version": "autobuild-2026-09-26-13-03 / N-126889-gb139ba11d8",
-    "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-26-13-03/ffmpeg-N-126889-gb139ba11d8-win64-gpl.zip",
-    "sha256": "4730304E8B10C47CCADE890A2A224F54ED0316D1206532B47BD5175B5631BD0D",
+    "version": "autobuild-2026-11-07-12-47 / N-128560-g967f0ffb10",
+    "url": "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-07-12-47/ffmpeg-N-128560-g967f0ffb10-win64-gpl.zip",
+    "sha256": "A0DFABEDA2B42971E40F8DEB9C47E006BA1CF68C31FF7827A542A2062C815DA1",
     "kind": "archive",
-    "cache_name": "ffmpeg-N-126889-gb139ba11d8-win64-gpl.zip",
+    "cache_name": "ffmpeg-N-128560-g967f0ffb10-win64-gpl.zip",
     "files": {
       "ffmpeg.exe": "ffmpeg.exe",
       "ffprobe.exe": "ffprobe.exe"
@@ -26,15 +26,15 @@
     ]
   },
   "deno": {
-    "version": "2.9.7",
-    "url": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-pc-windows-msvc.zip",
-    "sha256": "A0C3101B4158D1DFB7D6A78A7BF0F3DE80C96BB423C152BEEC8BEB22786F2238",
+    "version": "2.9.8",
+    "url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip",
+    "sha256": "CBA84B26E0DF5AE7F74FC66B86A95B866872A86292EBD84FA1E959927EDD93BF",
     "kind": "archive",
     "cache_name": "deno-x86_64-pc-windows-msvc.zip",
     "files": {
       "deno.exe": "deno.exe"
     },
-    "license_url": "https://raw.githubusercontent.com/denoland/deno/v2.9.7/LICENSE.md",
+    "license_url": "https://raw.githubusercontent.com/denoland/deno/v2.9.8/LICENSE.md",
     "license_sha256": "F62497FFFECC0852960C8D3E6934B9DB86D16396E9B604072E923892CAE3A588",
     "license_name": "Deno-LICENSE.md"
   }
